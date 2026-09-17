@@ -14,7 +14,7 @@ Student clubs and project teams take meeting notes but rarely follow up on them 
 
 Stakeholder analysis, requirements elicitation, the product backlog, epics, sprints, and team coordination are tracked in our Notion hub:
 
-**[AI-Powered Meeting-to-Action Converter — IT314 Team Hub](https://app.notion.com/p/3da77790356881248d53c75f1a00dc06)**
+**[AI-Powered Meeting-to-Action Converter — IT314 Team Hub](https://app.notion.com/p/AI-Powered-Meeting-to-Action-Converter-IT314-Team-Hub-1666e879513483b0be7881b1b3ccff07?source=copy_link)**
 
 ## Status
 
