@@ -6,7 +6,7 @@
 ---
 
 > [!NOTE]
-> The findings and requirements documented herein stem from the broad stakeholder survey conducted during the initial requirements elicitation phase. They serve as primary user-level inputs and are validated alongside semi-structured interviews, observational workflow analyses, and throw-away prototyping.
+> The findings and requirements documented herein stem from the broad stakeholder survey conducted during the initial requirements elicitation phase (Google Form, 30+ responses). They serve as primary user-level inputs and are validated alongside semi-structured interviews, observational workflow analyses, and throw-away prototyping.
 
 ---
 
@@ -35,38 +35,41 @@ This document formalizes the survey raw data into a complete Software Requiremen
 | **Chasers / Meeting Note-Takers** | **Qualitative Open-Ended Form** | Gauge the burden of manual follow-ups and lost context in group chat threads (WhatsApp/Slack). |
 | **Meeting Absentees** | **Feature Ranking Survey** | Evaluate demand for automated meeting summaries, key decision logs, and searchable discussion points. |
 
+> **Sample:** 30+ Google Form responses. **Action item:** replace the qualitative words below ("most", "majority", "clear top preference") with the exact counts/percentages from the form export before final submission.
+
 ---
 
 ## 3. Detailed Survey Findings & Analysis
 
 ### 3.1 Current Task Management Fragmentation
 Survey respondents reported managing meeting outcomes across a fragmented ecosystem: **WhatsApp, Notion, Slack, Google Docs, Google Sheets, and physical notebooks**. 
-* **Insight:** There is zero single-source-of-truth. Tasks generated in meetings are manually transcribed into disparate tools, causing data loss and friction.
-* **Requirement Need:** A centralized task management repository linked directly to meeting audio/transcripts.
+* **Insight:** There is no single source of truth. Tasks generated in meetings are manually transcribed into disparate tools, causing data loss and friction.
+* **Requirement Need:** A centralized task management repository linked directly to meeting transcripts.
 
 ### 3.2 Task Decay & Follow-up Failures
 A majority of respondents reported that action items are frequently **forgotten or buried in chat threads**.
 * **Insight:** Follow-ups currently rely on manual "chasing" by managers or note-takers.
-* **Requirement Need:** Centralized task status tracking combined with automated multi-channel reminders.
+* **Requirement Need:** Centralized task status tracking combined with automated reminders.
 
 ### 3.3 Mandatory Task Attributes
 Unclear task scope and vague deadlines were cited as the leading causes of project delay.
-* **Insight:** Survey participants unanimously agreed that every valid task must explicitly contain five attributes:
+* **Insight:** Most respondents agreed that every valid task should contain five attributes:
   1. **Task Description** (Clear actionable verb-noun phrase)
   2. **Owner / Assignee** (Single point of accountability)
   3. **Deadline** (Normalized date/time target)
   4. **Priority** (High, Medium, Low)
-  5. **Status** (To Do, In Progress, Blocked, Completed)
+  5. **Status** (To Do, In Progress, Blocked, Done)
 
 ### 3.4 AI Task Extraction & Human-in-the-Loop Review
-Respondents overwhelmingly welcomed GenAI task extraction, but strongly rejected full auto-pilot creation without human oversight.
+Respondents welcomed GenAI task extraction, but a large majority wanted to review AI-generated tasks before they are added (always, or at least when uncertain). "Ask the organiser to confirm" was the clear top preference when the owner or deadline is uncertain; "best guess" was the least wanted.
 * **Insight:** Users require a **Human-in-the-Loop (HITL)** safety net. When AI confidence is low or information is ambiguous, items must be flagged as **"Needs Review"** for manual verification.
 * **Requirement Need:** A dedicated review screen allowing users to **Approve, Edit, or Reject** AI suggestions.
 
 ### 3.5 Reminder Channel Preferences
-Survey feedback highlighted distinct notification preferences depending on role urgency:
+**WhatsApp was the dominant preferred reminder channel**, well ahead of email, Slack, and Teams.
 * **High Urgency / Overdue:** WhatsApp & In-App Notifications
 * **Standard Reminders:** Email, Slack, Microsoft Teams
+* **Implementation constraint:** The WhatsApp Business API requires business verification and per-message fees, which the zero-budget MVP cannot meet. The MVP therefore delivers free In-App, Email, and Web Push alerts plus a one-tap **"Share on WhatsApp" (`wa.me`) link** on every task; real WhatsApp delivery is limited to a Twilio Sandbox demo.
 
 ---
 
@@ -74,28 +77,28 @@ Survey feedback highlighted distinct notification preferences depending on role 
 
 ### 4.1 Functional Requirements (FR)
 
-* **FR-01 – Meeting Transcript Input:** The system shall accept recorded or live meeting transcripts (plain text, JSON, or transcript file upload).
-* **FR-02 – Meeting Record Creation:** The system shall create a unique meeting record containing metadata (title, date, participants) and link it to the uploaded transcript.
+* **FR-01 – Meeting Transcript Input:** The system shall accept post-meeting transcripts as pasted plain text or uploaded files (.txt, .vtt, .srt, .docx). Live/real-time transcripts are out of MVP scope.
+* **FR-02 – Meeting Record Creation:** The system shall create a unique meeting record containing metadata (title, date, timezone, participants) and link it to the uploaded transcript.
 * **FR-03 – AI Action-Item Extraction:** The system shall automatically scan transcripts to extract actionable task items separate from general conversation.
-* **FR-04 – Task Owner Identification:** The system shall parse transcripts to identify and link the designated task owner to a registered user.
+* **FR-04 – Task Owner Identification:** The system shall parse transcripts to identify the designated task owner and link it to a registered workspace member; if no confident match exists, the owner is set to null and flagged.
 * **FR-05 – Deadline Identification:** The system shall detect explicit and relative date/time statements in the transcript and normalize them into calendar deadlines.
-* **FR-06 – Priority Identification:** The system shall detect priority statements or infer task priority based on urgency keywords in the discussion.
+* **FR-06 – Priority Identification:** The system shall detect priority statements or infer task priority based on urgency keywords in the discussion (default `normal`).
 * **FR-07 – Decision Extraction:** The system shall identify key organizational decisions made during the meeting and store them separately from action items.
 * **FR-08 – Pending Question Identification:** The system shall extract unresolved questions or open topics requiring post-meeting clarification.
 * **FR-09 – Discussion Point Summarization:** The system shall extract key discussion topics to provide context for extracted tasks.
-* **FR-10 – AI Confidence & Uncertainty Detection:** The system shall compute extraction confidence and mark items falling below a configurable threshold as **"Needs Review"**.
+* **FR-10 – AI Confidence & Uncertainty Detection:** The system shall mark items as **"Needs Review"** when the owner or deadline is missing, the owner cannot be matched to a member, the source excerpt is not found verbatim, or model confidence is below 0.70. The flag controls a badge only; every item still requires approval.
 * **FR-11 – Human Review Interface:** The system shall provide an interactive review UI where organizers/users can inspect AI-generated suggestions.
 * **FR-12 – Task Approval & Confirmation:** The system shall allow users to explicitly approve an extracted suggestion, converting it into a confirmed task.
 * **FR-13 – Task Owner Modification:** The system shall allow authorized users to edit or reassign the owner of any task during or post-review.
 * **FR-14 – Deadline Modification:** The system shall allow users to edit or confirm task deadlines.
 * **FR-15 – Priority Modification:** The system shall allow users to manually override AI-assigned priority levels.
 * **FR-16 – Shared Task Board:** The system shall maintain a centralized Kanban/list task board displaying all confirmed meeting tasks.
-* **FR-17 – Task Status Management:** The system shall support status transitions: `To Do`, `In Progress`, `Blocked`, `Completed`.
+* **FR-17 – Task Status Management:** The system shall support status transitions: `To Do`, `In Progress`, `Blocked`, `Done`.
 * **FR-18 – Progress Tracking Dashboard:** The system shall provide visual metrics on team task completion, pending items, and overdue tasks.
 * **FR-19 – Multi-Criteria Search & Filter:** The system shall enable users to filter tasks by meeting, assignee, priority, deadline range, and status.
-* **FR-20 – Upcoming Deadline Reminders:** The system shall automatically issue notifications X hours/days prior to task due dates.
-* **FR-21 – Overdue Task Escalation:** The system shall trigger overdue notifications to assignees and organizers when deadlines pass without completion.
-* **FR-22 – Multi-Channel Notification Dispatch:** The system shall dispatch reminders via in-app alerts, email, and configured webhooks (Slack, WhatsApp, Teams).
+* **FR-20 – Upcoming Deadline Reminders:** The system shall automatically issue notifications X hours/days prior to task due dates, subject to the daily nudge cap (NFR-11).
+* **FR-21 – Overdue Task Escalation:** The system shall trigger overdue notifications to assignees and organizers when deadlines pass without completion; these count toward the daily nudge cap and overflow into the daily digest.
+* **FR-22 – Multi-Channel Notification Dispatch:** The system shall dispatch reminders via in-app alerts, email (SMTP), and browser push (Web Push), and provide a "Share on WhatsApp" (`wa.me`) link per task. A Slack incoming webhook is optional. Real WhatsApp API delivery is limited to Twilio Sandbox demo mode.
 * **FR-23 – Automated Meeting Summary Generation:** The system shall generate a structured meeting summary combining decisions, key discussions, and action items.
 * **FR-24 – Transcript Context Viewing:** The system shall allow users to view the original transcript text associated with any meeting record.
 * **FR-25 – Source-Text Explainability:** The system shall display the exact transcript snippet that triggered a specific AI task extraction.
@@ -105,35 +108,37 @@ Survey feedback highlighted distinct notification preferences depending on role 
 
 ### 4.2 Non-Functional Requirements (NFR)
 
-* **NFR-01 – Performance Latency:** The AI processing engine shall process a standard 30-minute transcript (approx. 5,000 words) and generate actionable suggestions within 15 seconds.
+* **NFR-01 – Performance Latency:** The AI processing engine shall process a standard 30-minute transcript (approx. 4,500 words) and generate actionable suggestions within 45 seconds (p95) on a warm backend instance.
 * **NFR-02 – Extraction Accuracy:** The AI model shall achieve a minimum 85% precision rate in distinguishing actionable tasks from general discussion points.
-* **NFR-03 – System Availability:** The task board and notification engine shall maintain 99.5% uptime during operational hours.
+* **NFR-03 – System Availability:** Best-effort availability during 9 am–7 pm IST with no SLA (free hosting tiers); availability is tracked by the keep-alive uptime monitor.
 * **NFR-04 – Data Integrity:** The system shall enforce referential integrity between meeting records, transcript snippets, and generated tasks, preventing orphan tasks.
-* **NFR-05 – Human-in-the-Loop Safety:** The system shall strictly prevent unconfirmed AI task suggestions with confidence < 0.70 from appearing on the public workspace board.
-* **NFR-06 – Data Privacy & Encryption:** Transcripts, meeting summaries, and task descriptions must be encrypted at rest (AES-256) and in transit (TLS 1.3).
+* **NFR-05 – Human-in-the-Loop Safety:** No AI task suggestion shall appear on the shared workspace board until an organiser approves it; suggestions with confidence < 0.70 are additionally badged "Low Confidence".
+* **NFR-06 – Data Privacy & Encryption:** Transcripts, meeting summaries, and task descriptions are protected by HTTPS (TLS 1.2+, platform-managed) in transit and platform disk encryption (AES-256, Supabase) at rest.
 * **NFR-07 – Usability & Efficiency:** A meeting organizer shall be able to review, edit, and approve a batch of 10 AI-generated tasks in under 2 minutes.
-* **NFR-08 – Scalability:** The backend task database shall support concurrent indexing and rendering for up to 50,000 active workspace tasks.
-* **NFR-09 – Explainability:** Every AI-extracted task must store and expose its source text offset mapping for auditability.
+* **NFR-08 – Scalability:** The task board shall support 100 concurrent users with p95 read latency <= 800 ms and up to 5,000 tasks per workspace, verified by a load test with seeded data.
+* **NFR-09 – Explainability:** Every AI-extracted task must store and expose its source excerpt (and source time offsets when the transcript has timestamps) for auditability.
 * **NFR-10 – Interoperability:** External integration endpoints must adhere to RESTful standards and JSON payloads.
+* **NFR-11 – Notification Fatigue Limit:** A user shall receive at most 3 reminder/overdue nudges per day; further reminders are merged into one daily digest.
 
 ---
 
 ### 4.3 Data Requirements (DR)
 
-* **DR-01 – Meeting Record Schema:** `MeetingID`, `Title`, `ScheduledTime`, `OrganizerID`, `TranscriptURL`, `Status`, `CreatedAt`.
-* **DR-02 – Action Item Schema:** `TaskID`, `MeetingID`, `Description`, `AssigneeID`, `Deadline`, `Priority`, `Status`, `ConfidenceScore`, `SourceSnippet`, `ApprovedBy`, `ApprovedAt`.
+* **DR-01 – Meeting Record Schema:** `MeetingID`, `Title`, `ScheduledTime`, `Timezone`, `OrganizerID`, `TranscriptURL`, `Status`, `CreatedAt`.
+* **DR-02 – Action Item Schema:** `TaskID`, `MeetingID`, `Description`, `PrimaryAssigneeID` (nullable), `Deadline` (UTC), `Priority`, `ReviewStatus` (needs_review / approved / rejected), `Status` (To Do / In Progress / Blocked / Done), `ConfidenceScore`, `SourceSnippet`, `ApprovedBy`, `ApprovedAt`.
 * **DR-03 – Decision Record Schema:** `DecisionID`, `MeetingID`, `DecisionText`, `ImpactArea`, `SourceSnippet`.
 * **DR-04 – Unresolved Question Schema:** `QuestionID`, `MeetingID`, `QuestionText`, `AssignedTo`, `ResolutionStatus`.
 * **DR-05 – Audit Trail Log:** `LogID`, `TaskID`, `ModifiedBy`, `OldState`, `NewState`, `Timestamp`.
+* **DR-06 – Task Assignee Schema:** `TaskID`, `UserID`, `IsPrimary` — one primary owner (single point of accountability) plus optional collaborators.
 
 ---
 
 ### 4.4 Domain Requirements
 
-* **Domain Req-01 – Mandatory Ownership Rule:** A task cannot transition to `Confirmed` or `To Do` status without an assigned owner. Unassigned items must remain in `Needs Review`.
-* **Domain Req-02 – Ambiguous Date Resolution:** Relative date terms (e.g., "by next Friday") must be computed using the meeting's recorded timestamp and time zone.
+* **Domain Req-01 – Ownership Rule:** A task may be approved without an owner only as "Unassigned": it is shown with an "Assignee Required" badge under the Unassigned filter, and no notifications are sent until an owner is set.
+* **Domain Req-02 – Ambiguous Date Resolution:** Relative date terms (e.g., "by next Friday") must be computed using the meeting's recorded timestamp and time zone, stored in UTC, and displayed in each viewer's local time zone.
 * **Domain Req-03 – Non-Actionable Exclusions:** Statements expressing intent without commitment (e.g., "We might look into this next year") shall not be classified as action items.
-* **Domain Req-04 – Traceable Lineage:** Every confirmed task must retain an unbroken cryptographic reference link to its originating meeting ID.
+* **Domain Req-04 – Traceable Lineage:** Every confirmed task must keep a non-null foreign key to its originating meeting and its verbatim source excerpt.
 
 ---
 
@@ -189,11 +194,12 @@ Survey feedback highlighted distinct notification preferences depending on role 
   ```gherkin
   Scenario: AI identifies task with owner and deadline
     Given a transcript containing "John will prepare the Q3 financial report by Friday 5 PM"
+    And the meeting timezone is "Asia/Kolkata"
     When the AI extraction pipeline executes
     Then the system extracts Task: "Prepare Q3 financial report"
     And identifies Assignee: "John"
-    And normalizes Deadline: "Coming Friday at 17:00"
-    And tags the item status as "Needs Review"
+    And normalizes Deadline to the ISO 8601 datetime of the coming Friday 17:00 (e.g., 2026-10-02T17:00:00+05:30)
+    And sets the review status to "needs_review"
   ```
 
 #### US-04 – Extract Decisions & Unresolved Questions
@@ -224,8 +230,8 @@ Survey feedback highlighted distinct notification preferences depending on role 
   Scenario: Approving an extracted task
     Given the organizer is on the Task Review screen
     When the organizer clicks "Approve" on an AI task suggestion
-    Then the task status changes from "Needs Review" to "Confirmed"
-    And the task is published to the Shared Task Board
+    Then the review status changes from "needs_review" to "approved"
+    And the task is published to the Shared Task Board in "To Do"
 
   Scenario: Editing an extracted task before approval
     Given the organizer notices an incorrect deadline in an AI suggestion
@@ -242,10 +248,10 @@ Survey feedback highlighted distinct notification preferences depending on role 
 * **Back of Card (Acceptance Criteria):**
   ```gherkin
   Scenario: Highlighting low confidence items
-    Given an AI extraction with a confidence score below 0.70
+    Given an AI extraction with a confidence score below 0.70 or a missing owner/deadline
     When rendered in the review UI
     Then the system displays a warning icon and "Low Confidence" badge
-    And requires explicit manual confirmation before publishing
+    And the item is excluded from "Approve all unflagged" and must be approved individually
   ```
 
 ---
@@ -262,7 +268,7 @@ Survey feedback highlighted distinct notification preferences depending on role 
   Scenario: Moving task status across columns
     Given a confirmed task in the "To Do" column on the Kanban board
     When the assignee drags the card to "In Progress"
-    Then the task status updates in real-time for all workspace members
+    Then the task status updates in real-time for all workspace members (Supabase Realtime)
     And an audit log entry is recorded
   ```
 
@@ -292,9 +298,14 @@ Survey feedback highlighted distinct notification preferences depending on role 
   ```gherkin
   Scenario: Triggering upcoming deadline reminder
     Given a task due in 24 hours
-    When the system cron runner executes
-    Then a notification is dispatched to the assignee's preferred channel (In-App / Email / WhatsApp)
-    And contains the task name, deadline, and direct board link
+    When the Supabase pg_cron reminder job executes
+    Then a notification is dispatched to the assignee's preferred channel (In-App / Email / Web Push)
+    And contains the task name, deadline, direct board link, and a "Share on WhatsApp" link
+
+  Scenario: Nudge cap reached
+    Given the assignee has already received 3 nudges today
+    When another reminder is due
+    Then it is added to the next daily digest instead of being sent immediately
   ```
 
 #### US-10 – Overdue Task Escalation
@@ -308,7 +319,7 @@ Survey feedback highlighted distinct notification preferences depending on role 
     Given a task with status "In Progress" whose deadline has passed
     When the system updates task states
     Then the task is tagged with an "OVERDUE" badge
-    And an escalation alert is sent to both assignee and organizer
+    And an escalation alert is sent to both assignee and organizer, subject to the daily nudge cap
   ```
 
 ---
@@ -361,7 +372,7 @@ Every User Story in this backlog has been verified against the **INVEST** framew
 │ • US-01: Submit & Paste Transcript                                       │
 │ • US-03: AI Action-Item Extraction (Task, Owner, Deadline)               │
 │ • US-05: Human Review Interface (Approve / Edit / Reject)                │
-│ • US-07: Shared Task Board (Basic Kanban: To Do, In Progress, Done)        │
+│ • US-07: Shared Task Board (To Do, In Progress, Blocked, Done)           │
 └───────────────────────────────────────────────────────────────────────────┘
                                      │
                                      ▼
@@ -371,16 +382,16 @@ Every User Story in this backlog has been verified against the **INVEST** framew
 │ • US-04: Extract Decisions & Unresolved Questions                         │
 │ • US-06: Confidence Score Flagging & "Needs Review" Badging               │
 │ • US-08: Task Board Filtering & Searching                                 │
-│ • US-09: Automated In-App / Email Deadline Reminders                      │
+│ • US-09: Automated In-App / Email / Web Push Deadline Reminders           │
 └───────────────────────────────────────────────────────────────────────────┘
                                      │
                                      ▼
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                                COULD HAVE                                 │
 ├───────────────────────────────────────────────────────────────────────────┤
-│ • US-10: Overdue WhatsApp Escalation Dispatch                             │
+│ • US-10: Overdue Escalation (In-App / Email / Web Push)                  │
 │ • US-11: Source-Text Highlight & Transcript Context Modal                │
-│ • US-22: Export Tasks to Notion / Jira API                                │
+│ • FR-26: Export Tasks to Notion / Jira / Linear API                      │
 └───────────────────────────────────────────────────────────────────────────┘
                                      │
                                      ▼
@@ -388,7 +399,7 @@ Every User Story in this backlog has been verified against the **INVEST** framew
 │                                WISH LIST                                  │
 ├───────────────────────────────────────────────────────────────────────────┤
 │ • Live Streaming Audio Transcription Engine Integration                    │
-│ • Voice-Based Reminder Bot (WhatsApp Audio Notes)                         │
+│ • WhatsApp Business API Delivery (needs business verification + fees)     │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -418,8 +429,8 @@ graph TD
 
 | Conflict ID | Stakeholder A (Stance) | Stakeholder B (Stance) | Underlying Tension | Agreed Resolution & Trade-off |
 | :--- | :--- | :--- | :--- | :--- |
-| **CR-01** | **Team Members:** Want 100% automated task creation directly from meetings without extra review steps. | **Project Managers / Security:** Require mandatory human approval to avoid spam or incorrect task assignments. | Speed vs. Accuracy & Data Quality | **HITL Workflow:** AI suggestions with high confidence (>0.85) auto-queue for 1-click bulk approval; low confidence items require manual edit. |
-| **CR-02** | **End Users:** Prefer instant WhatsApp reminders for all task updates. | **IT / Admin:** WhatsApp Business API incurs per-message costs and verification overhead. | User Convenience vs. Cost & API Limits | **Phased Dispatch:** Free channels (In-App & Email) used for standard reminders; WhatsApp reserved for critical overdue alerts in MVP. |
+| **CR-01** | **Team Members:** Want 100% automated task creation directly from meetings without extra review steps. | **Project Managers / Security:** Require mandatory human approval to avoid spam or incorrect task assignments. | Speed vs. Accuracy & Data Quality | **HITL Workflow:** Every suggestion requires organiser approval. Unflagged items (owner matched, deadline found, excerpt verified, confidence ≥ 0.70) can be approved in one click via "Approve all unflagged"; flagged items must be reviewed individually. |
+| **CR-02** | **End Users:** Prefer instant WhatsApp reminders for all task updates (top survey preference). | **IT / Admin:** WhatsApp Business API needs business verification and incurs per-message costs. | User Convenience vs. Cost & API Limits | **Zero-Cost Channels:** In-App, Email, and Web Push for all reminders, plus a "Share on WhatsApp" (`wa.me`) link on every task. Real WhatsApp API delivery is limited to a Twilio Sandbox demo. |
 | **CR-03** | **Meeting Participants:** Often state relative deadlines ("finish by early next week"). | **System Engine:** Requires strict ISO date-time timestamps for database calendar sorting. | Natural Language Ambiguity vs. System Determinism | **Relative Date Parser + Review Confirmation:** System computes probable date (e.g. next Monday 09:00) and displays an editable date picker in the Review UI. |
 
 ---
@@ -427,16 +438,25 @@ graph TD
 ## 9. Open Questions for Prototype Validation
 
 1. **Review Layout Preference:** Do meeting organizers prefer reviewing extracted tasks in a **side-by-side split screen** (Transcript on Left, Task Cards on Right) or a **stepped modal wizard**?
-2. **Bulk vs. Individual Approval:** Is 1-click "Approve All High-Confidence Items" preferred over approving task-by-task?
-3. **Unassigned Task Handling:** Should unassigned tasks be placed in an "Unassigned Pool" on the board or held in "Needs Review" until an owner is named?
+2. **Bulk vs. Individual Approval:** Is 1-click "Approve all unflagged" preferred over approving task-by-task?
+3. **Unassigned Task Handling:** *Decided (Domain Req-01):* unassigned tasks can be approved into an "Unassigned" filter with an "Assignee Required" badge; validate this with organisers during the prototype walkthrough.
 
 ---
 
 ## 10. System Value Stream & Lifecycle Formula
 
-The survey elicitation proves that value is realized only when raw unstructured conversational audio transforms into verified, executed deliverables:
+The survey elicitation proves that value is realized only when raw unstructured conversation transforms into verified, executed deliverables:
 
 $$\text{Raw Transcript} \xrightarrow{\text{GenAI Extraction}} \text{AI Suggestions} \xrightarrow{\text{Human Review UI}} \text{Confirmed Task} \xrightarrow{\text{Kanban Sync}} \text{Automated Reminders} \xrightarrow{\text{Execution}}$$
 
 ---
-*This document provides the refined Survey Form Elicitation Requirements for integration into the SE Project Backlog and Sprint 1 Planning.*
+
+## Revision Notes (refinement pass, 28 Sep 2026)
+- NFR-01 aligned to the master SRS (45 s p95 for ~4,500 words); NFR-05 no longer lets any suggestion bypass human approval.
+- WhatsApp: top preference recorded; delivered through free `wa.me` share links + Web Push, with the WhatsApp API limited to a sandbox demo. Teams webhooks removed (Microsoft is retiring O365 connector webhooks).
+- Removed "live transcripts" from FR-01; added .docx input.
+- NFR-03 (99.5%) and NFR-06 (TLS 1.3/AES-256 mandate) replaced with free-tier-realistic wording; NFR-08 replaced with a load-testable target.
+- Added NFR-11 notification fatigue cap and digest; reminders now run on Supabase pg_cron.
+- Statuses unified to To Do / In Progress / Blocked / Done; review states needs_review / approved / rejected; single primary owner + optional collaborators (DR-06).
+- Fixed the non-existent "US-22" reference (now FR-26) and the non-ISO deadline example in US-03.
+- Added the survey sample size and a reminder to replace qualitative wording with exact counts.
