@@ -2,10 +2,140 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  background-color: #0f172a;
-  color: #f8fafc;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    --background: 0 0% 0%;             /* 100% Pitch Black #000000 */
+    --foreground: 0 0% 100%;           /* 100% Pure White #ffffff */
+    --card: 0 0% 3%;                  /* Deep Black Card #080808 */
+    --card-foreground: 0 0% 100%;      /* Pure White #ffffff */
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;             /* Pure White button #ffffff */
+    --primary-foreground: 0 0% 0%;    /* Jet Black text #000000 */
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 62%;     /* Crisp neutral light grey #9e9e9e */
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 14%;               /* Sharp 1px neutral border #242424 */
+    --input: 0 0% 18%;
+    --ring: 0 0% 100%;
+    --surface: 0 0% 2%;               /* #050505 */
+    --overlay: 0 0% 6%;
+    --subtle: 0 0% 45%;               /* Neutral grey #737373 */
+    --verified: 152 76% 50%;          /* Emerald green status */
+    --review: 38 92% 50%;             /* Amber status */
+    --intelligence: 0 0% 90%;         /* Silver/White highlight #e5e5e5 */
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    background-color: #000000;
+    color: #ffffff;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+}
+
+html {
+  background-color: #000000;
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: #ffffff;
+  color: #000000;
+}
+
+/* Linear-style Minimal Atmosphere (subtle micro-grid + studio pedestal glow) */
+.hero-atmosphere {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 64px 64px, 64px 64px;
+  background-position: center top, center top;
+  mask-image: linear-gradient(to bottom, transparent, black 15%, black 80%, transparent);
+}
+
+.hero-horizon {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22) 50%, transparent);
+  box-shadow: 0 0 35px 2px rgba(255, 255, 255, 0.06);
+}
+
+/* Linear-style 3D Stage & Floating Perspective */
+.linear-stage-container {
+  perspective: 1400px;
+  perspective-origin: 50% 15%;
+}
+
+.linear-pedestal-glow {
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1050px;
+  height: 480px;
+  background: radial-gradient(ellipse 65% 55% at 50% 50%, rgba(255, 255, 255, 0.06), transparent 70%);
+  filter: blur(50px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.linear-3d-card {
+  transform: rotateX(4deg) translateY(-6px);
+  transform-style: preserve-3d;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.2) inset,
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 30px 100px -25px rgba(0, 0, 0, 0.98),
+    0 60px 140px -40px rgba(0, 0, 0, 0.95);
+}
+
+.linear-3d-card:hover {
+  transform: rotateX(1deg) translateY(-2px);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.28) inset,
+    0 0 0 1px rgba(255, 255, 255, 0.14),
+    0 40px 120px -25px rgba(0, 0, 0, 0.98),
+    0 70px 160px -40px rgba(0, 0, 0, 0.95);
+}
+
+@media (max-width: 1024px) {
+  .linear-3d-card {
+    transform: none !important;
+  }
+}
+
+.linear-rim-light {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0.03) 100%);
+  height: 1px;
+  width: 100%;
+}
+
+.product-panel {
+  background-color: #060606;
+  transition: border-color .25s ease, background-color .25s ease, transform .25s ease, box-shadow .25s ease;
+}
+
+.product-panel:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background-color: #090909;
+  transform: translateY(-2px);
+  box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-panel, .linear-3d-card {
+    transition: none;
+    transform: none !important;
+  }
 }
