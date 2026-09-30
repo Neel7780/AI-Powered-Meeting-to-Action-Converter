@@ -21,8 +21,17 @@ class Settings:
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
     SMTP_USER: str = os.getenv("SMTP_USER", "")
-    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
-    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "noreply@actionpulse.app")
+    SMTP_PASS: str = os.getenv("SMTP_PASS", os.getenv("SMTP_PASSWORD", ""))
+    MAIL_FROM: str = os.getenv("MAIL_FROM", os.getenv("EMAIL_FROM", "ActionPulse <noreply@actionpulse.app>"))
+    # Backwards compatibility aliases
+    SMTP_PASSWORD: str = SMTP_PASS
+    EMAIL_FROM: str = MAIL_FROM
+
+    # Application Frontend URL (for email links and redirects)
+    APP_URL: str = os.getenv("APP_URL", "http://localhost:5173")
+
+    # Internal tick keep-alive secret
+    INTERNAL_TICK_SECRET: str = os.getenv("INTERNAL_TICK_SECRET", "")
 
     # CORS
     CORS_ORIGINS: List[str] = [
