@@ -5,6 +5,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
+import CreateMeeting from "./pages/CreateMeeting";
 
 function App() {
   return (
@@ -48,6 +49,15 @@ function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/create-meeting"
+          element={
+            <ProtectedRoute>
+              <CreateMeeting />
             </ProtectedRoute>
           }
         />
