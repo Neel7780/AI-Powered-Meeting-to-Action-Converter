@@ -13,10 +13,3 @@ async def health_check():
         "environment": settings.ENVIRONMENT
     }
 
-@router.get("/internal/tick")
-async def internal_tick():
-    """Keep-alive ping endpoint to prevent Render free tier from sleeping."""
-    return {
-        "status": "active",
-        "tick": "ok"
-    }

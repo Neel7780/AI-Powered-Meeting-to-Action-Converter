@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.router import api_router
 from app.api.health import router as health_router
+from app.api.internal import router as internal_router
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -26,6 +27,9 @@ app.add_middleware(
 
 # Mount direct top-level health check (for Render ping & frontend indicator)
 app.include_router(health_router)
+
+# Mount secured internal maintenance endpoints (tick keep-alive)
+app.include_router(internal_router)
 
 # Mount main API routes under /api
 app.include_router(api_router, prefix=settings.API_V1_STR)
