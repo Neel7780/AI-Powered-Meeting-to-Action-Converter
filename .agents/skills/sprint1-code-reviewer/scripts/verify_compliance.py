@@ -13,7 +13,8 @@ VALID_TABLES = {
     'profiles', 'workspaces', 'workspace_members', 'meetings',
     'meeting_participants', 'transcripts', 'transcript_segments',
     'extracted_items', 'tasks', 'task_assignees', 'consents',
-    'notifications', 'push_subscriptions', 'llm_runs', 'audit_log'
+    'notifications', 'push_subscriptions', 'llm_runs', 'audit_log',
+    'workspace_invites'
 }
 
 HALLUCINATED_TABLE_MAP = {

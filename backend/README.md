@@ -74,3 +74,14 @@ uvicorn main:app --reload --port 8000
 
 3. **Check Constraint Gotcha:**
    When updating `extracted_items`, remember the `extracted_review_chk` constraint: `review_status = 'approved'` **requires** `reviewed_by` and `reviewed_at` to be non-null in the same update!
+
+---
+
+## 3. Supabase Auth Configuration (Required)
+When setting up a new Supabase project for this backend, you must manually configure the following in the dashboard:
+- Providers: **Email (password + magic link)** and **Google**.
+- **"Confirm email" MUST BE ON** (invites rely on this).
+- **Custom SMTP MUST BE CONFIGURED** using the credentials from BE-2 (Supabase built-in is heavily rate-limited).
+- JWT Expiry: **900s (15 min)**.
+- Refresh-Token Rotation: **ON**.
+- Site URL & Redirect URLs: `http://localhost:5173` and the deployed Vercel URL.

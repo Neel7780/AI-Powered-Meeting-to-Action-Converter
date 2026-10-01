@@ -29,7 +29,7 @@ Always align your code with the canonical [`schema.sql`](schema.sql):
 
 1. **Table Names (Exact Matches Required):**
    - User Profiles: `profiles` (references `auth.users(id)`). Do NOT create or query a custom `users` table.
-   - Workspaces: `workspaces`, `workspace_members`.
+   - Workspaces: `workspaces`, `workspace_members`, `workspace_invites`.
    - Meetings: `meetings`, `meeting_participants`.
    - Transcripts: `transcripts`, `transcript_segments`. Do NOT use `meeting_notes`.
    - Candidate AI Items: `extracted_items`. Do NOT use `action_items`.
