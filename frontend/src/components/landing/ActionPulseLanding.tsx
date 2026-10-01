@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, LockKeyhole, Menu, Pencil, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, Kanban, LockKeyhole, Menu, Pencil, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const repo = "https://github.com/Neel7780/AI-Powered-Meeting-to-Action-Converter";
@@ -302,10 +303,16 @@ export default function ActionPulseLanding() {
                 {item.label}
               </a>
             ))}
+            <Link to="/kanban" className="text-[13px] text-neutral-300 hover:text-white flex items-center gap-1.5 transition-colors font-medium">
+              <Kanban size={13} className="text-emerald-400" />
+              Kanban
+            </Link>
           </nav>
           <div className="hidden items-center gap-3 md:flex">
             <Button variant="ghost" size="sm" onClick={access}>Sign in</Button>
-            <Button size="sm" onClick={access}>Get started <ArrowRight/></Button>
+            <Button size="sm" asChild>
+              <Link to="/kanban">Open Kanban <ArrowRight/></Link>
+            </Button>
           </div>
           <Button variant="ghost" size="icon" className="md:hidden text-white" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X/> : <Menu/>}
@@ -318,9 +325,19 @@ export default function ActionPulseLanding() {
                 {item.label}
               </a>
             ))}
+            <Link
+              to="/kanban"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-2 py-2.5 text-sm text-emerald-400 font-medium hover:text-emerald-300"
+            >
+              <Kanban size={15} />
+              Open Kanban Board
+            </Link>
             <div className="mt-2 flex gap-2 border-t border-white/10 pt-3">
               <Button variant="outline" onClick={() => {setMenuOpen(false); access();}}>Sign in</Button>
-              <Button onClick={() => {setMenuOpen(false); access();}}>Get started</Button>
+              <Button asChild onClick={() => setMenuOpen(false)}>
+                <Link to="/kanban">Get started</Link>
+              </Button>
             </div>
           </nav>
         )}
