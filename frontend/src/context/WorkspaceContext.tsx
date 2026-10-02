@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -28,6 +29,7 @@ interface WorkspaceContextType {
   loading: boolean;
   switchWorkspace: (workspaceId: string) => void;
   refreshWorkspaces: () => Promise<void>;
+  createWorkspace: (name: string) => Promise<void>;
 }
 
 const WorkspaceContext = createContext<
@@ -52,7 +54,7 @@ export function WorkspaceProvider({
 
   const [loading, setLoading] = useState(true);
 
-  const refreshWorkspaces = async () => {
+  const refreshWorkspaces = useCallback(async () => {
     if (!user) {
       setWorkspaces([]);
       setCurrentWorkspace(null);
@@ -153,13 +155,43 @@ export function WorkspaceProvider({
     } finally {
       setLoading(false);
     }
+  }, [user]);
+
+  const createWorkspace = async (name: string) => {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      throw new Error("Workspace name is required.");
+    }
+
+    if (!user) {
+      throw new Error("You must be logged in to create a workspace.");
+    }
+
+    const { data: workspaceId, error } = await supabase.rpc(
+      "create_workspace",
+      {
+        p_name: trimmedName,
+      }
+    );
+
+    if (error) {
+      console.error("Error creating workspace:", error);
+      throw error;
+    }
+
+    if (!workspaceId) {
+      throw new Error("Workspace was not created.");
+    }
+
+    await refreshWorkspaces();
   };
 
   useEffect(() => {
     if (!authLoading) {
       refreshWorkspaces();
     }
-  }, [user, authLoading]);
+  }, [authLoading, refreshWorkspaces]);
 
   const switchWorkspace = (workspaceId: string) => {
     const workspace = workspaces.find(
@@ -177,7 +209,6 @@ export function WorkspaceProvider({
       workspace.id
     );
 
-    // Find the user's role in this workspace.
     const loadRole = async () => {
       if (!user) {
         return;
@@ -213,6 +244,7 @@ export function WorkspaceProvider({
         loading,
         switchWorkspace,
         refreshWorkspaces,
+        createWorkspace,
       }}
     >
       {children}
