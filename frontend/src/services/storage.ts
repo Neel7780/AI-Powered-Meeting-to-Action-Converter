@@ -1,16 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-// Replace with your actual Supabase URL and anon key from environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from '../lib/supabase';
 
 /**
  * Uploads a transcript file to the Supabase Storage bucket.
  * The file is saved following the strict path convention:
- * meeting-transcripts/{workspace_id}/{meeting_id}/{filename}
+ * {workspace_id}/{meeting_id}/{filename}
  */
 export async function uploadTranscriptFile(
   workspaceId: string,
@@ -18,10 +11,10 @@ export async function uploadTranscriptFile(
   file: File
 ): Promise<{ path: string | null; error: Error | null }> {
   try {
-    const filePath = `meeting-transcripts/${workspaceId}/${meetingId}/${file.name}`;
+    const filePath = `${workspaceId}/${meetingId}/${file.name}`;
     
     const { data, error } = await supabase.storage
-      .from('transcripts') // Make sure this bucket exists in your Supabase project
+      .from('meeting-transcripts')
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: true

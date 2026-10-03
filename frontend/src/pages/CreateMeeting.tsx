@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { TimezoneSelector } from '../components/meetings/TimezoneSelector';
 import { TranscriptUploadModal } from '../components/meetings/TranscriptUploadModal';
 
@@ -10,7 +10,7 @@ export function CreateMeeting() {
   
   // For demo purposes, simulating workspace/meeting IDs
   const workspaceId = 'default-workspace';
-  const meetingId = `mtg_${Date.now()}`;
+  const [meetingId] = useState(() => `mtg_${Date.now()}`);
 
   const handleUploadSuccess = (path: string) => {
     console.log('Transcript uploaded to:', path);

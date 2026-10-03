@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { uploadTranscriptFile, uploadTranscriptText } from '../../services/storage';
 import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 
