@@ -1,12 +1,17 @@
 import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import Navbar from "../components/layout/Navbar";
 import Sidebar from "../components/layout/Sidebar";
 import AddMemberModal from "../components/workspace/AddMemberModal";
 import CreateWorkspaceModal from "../components/workspace/CreateWorkspaceModal";
 import { useWorkspace } from "../context/WorkspaceContext";
+import CreateMeeting from "../pages/CreateMeeting";
 
 export default function Dashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const {
     workspaces,
     currentWorkspace,
@@ -286,7 +291,12 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Main Grid */}
+              {/* Main Grid or Meetings View */}
+              {location.pathname === '/meetings' ? (
+                <div className="mt-8">
+                  <CreateMeeting />
+                </div>
+              ) : (
               <div className="mt-8 grid gap-6 lg:grid-cols-3">
                 {/* Workspace Overview */}
                 <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -332,6 +342,7 @@ export default function Dashboard() {
                   <div className="mt-5 space-y-3">
                     <button
                       type="button"
+                      onClick={() => navigate('/meetings')}
                       className="flex w-full items-center rounded-xl border border-slate-200 p-4 text-left transition hover:border-indigo-200 hover:bg-indigo-50"
                     >
                       <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100">
@@ -394,9 +405,10 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Workspace List */}
-              {workspaces.length > 1 && (
+              {workspaces.length > 1 && location.pathname !== '/meetings' && (
                 <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <h2 className="text-lg font-bold text-slate-900">
                     Your Workspaces

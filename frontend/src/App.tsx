@@ -5,6 +5,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
+import CreateMeeting from "./pages/CreateMeeting";
 
 function App() {
   return (
@@ -13,8 +14,8 @@ function App() {
         <Route path="/" element={<ActionPulseLanding />} />
 
         <Route path="/login" element={<Login />} />
-
         <Route path="/signup" element={<Signup />} />
+        <Route path="/create-meeting" element={<CreateMeeting />} />
 
         <Route
           path="/dashboard"

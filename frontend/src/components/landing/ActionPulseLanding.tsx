@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, LockKeyhole, Menu, Pencil, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -304,8 +305,12 @@ export default function ActionPulseLanding() {
             ))}
           </nav>
           <div className="hidden items-center gap-3 md:flex">
-            <Button variant="ghost" size="sm" onClick={access}>Sign in</Button>
-            <Button size="sm" onClick={access}>Get started <ArrowRight/></Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/login">Sign in</Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link to="/signup">Get started <ArrowRight/></Link>
+            </Button>
           </div>
           <Button variant="ghost" size="icon" className="md:hidden text-white" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X/> : <Menu/>}
@@ -319,8 +324,12 @@ export default function ActionPulseLanding() {
               </a>
             ))}
             <div className="mt-2 flex gap-2 border-t border-white/10 pt-3">
-              <Button variant="outline" onClick={() => {setMenuOpen(false); access();}}>Sign in</Button>
-              <Button onClick={() => {setMenuOpen(false); access();}}>Get started</Button>
+              <Button variant="outline" asChild>
+                <Link to="/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
+              </Button>
+              <Button asChild>
+                <Link to="/signup" onClick={() => setMenuOpen(false)}>Get started</Link>
+              </Button>
             </div>
           </nav>
         )}
