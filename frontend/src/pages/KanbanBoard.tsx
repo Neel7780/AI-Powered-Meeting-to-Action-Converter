@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { useWorkspace } from '@/context/WorkspaceContext';
 import { KanbanColumn } from '@/components/kanban/KanbanColumn';
 import type { KanbanTaskItem, TaskStatus } from '@/components/kanban/KanbanCard';
 import {
@@ -139,7 +140,21 @@ const DEMO_TASKS: KanbanTaskItem[] = [
   },
 ];
 
-export function KanbanBoard() {
+export interface KanbanBoardProps {
+  workspaceId?: string;
+}
+
+export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps = {}) {
+  let ctxWorkspaceId: string | undefined;
+  try {
+    const wsCtx = useWorkspace();
+    ctxWorkspaceId = wsCtx.currentWorkspace?.id;
+  } catch {
+    ctxWorkspaceId = undefined;
+  }
+
+  const activeWorkspaceId = propWorkspaceId || ctxWorkspaceId;
+
   const [tasks, setTasks] = useState<KanbanTaskItem[]>([]);
   const [meetings, setMeetings] = useState<MeetingOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -181,8 +196,8 @@ export function KanbanBoard() {
     setErrorMsg(null);
 
     try {
-      // Query tasks with meetings & assignees
-      const { data: taskData, error: taskError } = await supabase
+      // Query tasks with meetings & assignees scoped to activeWorkspaceId
+      let taskQuery = supabase
         .from('tasks')
         .select(`
           id,
@@ -217,11 +232,23 @@ export function KanbanBoard() {
         `)
         .order('created_at', { ascending: false });
 
-      // Fetch distinct meetings for the filter dropdown
-      const { data: meetingData } = await supabase
+      if (activeWorkspaceId) {
+        taskQuery = taskQuery.eq('workspace_id', activeWorkspaceId);
+      }
+
+      const { data: taskData, error: taskError } = await taskQuery;
+
+      // Fetch distinct meetings for the filter dropdown scoped to activeWorkspaceId
+      let meetingQuery = supabase
         .from('meetings')
         .select('id, title, meeting_date')
         .order('meeting_date', { ascending: false });
+
+      if (activeWorkspaceId) {
+        meetingQuery = meetingQuery.eq('workspace_id', activeWorkspaceId);
+      }
+
+      const { data: meetingData } = await meetingQuery;
 
       if (meetingData && meetingData.length > 0) {
         setMeetings(meetingData as MeetingOption[]);
@@ -252,19 +279,24 @@ export function KanbanBoard() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // 3. Supabase Realtime Subscription
+  // 3. Supabase Realtime Subscription scoped to activeWorkspaceId
   useEffect(() => {
     const channel = supabase
-      .channel('kanban-tasks-channel')
+      .channel(`kanban-tasks-${activeWorkspaceId || 'all'}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'tasks' },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+          ...(activeWorkspaceId ? { filter: `workspace_id=eq.${activeWorkspaceId}` } : {}),
+        },
         (payload) => {
           if (payload.eventType === 'UPDATE') {
             const updatedRow = payload.new as { id: string; status: TaskStatus; updated_at?: string };
@@ -288,7 +320,7 @@ export function KanbanBoard() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchData]);
+  }, [fetchData, activeWorkspaceId]);
 
   // 4. Handle Status Change (both Drag-and-Drop and Status Selector Dropdown)
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
@@ -373,36 +405,36 @@ export function KanbanBoard() {
   const blockedCount = blockedTasks.length;
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-white selection:text-black">
+    <div className="min-h-full bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-black dark:text-white selection:bg-indigo-500 selection:text-white dark:selection:bg-white dark:selection:text-black">
       {/* Top Banner / Navigation */}
-      <header className="sticky top-0 z-30 border-b border-[#1c1c1c] bg-black/80 backdrop-blur-md">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-md dark:border-[#1c1c1c] dark:bg-black/80">
         <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between gap-4">
             {/* Left: Branding & Back link */}
             <div className="flex items-center gap-4">
               <Link
-                to="/"
-                className="inline-flex items-center gap-2 text-xs text-neutral-400 hover:text-white transition-colors"
-                title="Return to Landing Page"
+                to="/dashboard"
+                className="inline-flex items-center gap-2 text-xs text-slate-500 hover:text-slate-900 transition-colors dark:text-neutral-400 dark:hover:text-white"
+                title="Return to Dashboard"
               >
                 <ArrowLeft className="size-4" />
-                <span className="hidden sm:inline">Back</span>
+                <span className="hidden sm:inline">Dashboard</span>
               </Link>
 
-              <div className="h-4 w-px bg-[#262626]" />
+              <div className="h-4 w-px bg-slate-200 dark:bg-[#262626]" />
 
               <div className="flex items-center gap-2.5">
-                <div className="grid size-8 place-items-center rounded-lg border border-white/20 bg-white text-black font-bold shadow-sm">
-                  <Kanban className="size-4 text-black" />
+                <div className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-slate-900 text-white font-bold shadow-sm dark:border-white/20 dark:bg-white dark:text-black">
+                  <Kanban className="size-4 text-white dark:text-black" />
                 </div>
                 <div>
-                  <h1 className="text-sm font-semibold tracking-tight text-white flex items-center gap-2">
+                  <h1 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
                     ActionPulse Kanban
-                    <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
+                    <span className="inline-flex items-center gap-1 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 px-1.5 py-0.5 text-[10px] font-medium border border-emerald-200 dark:border-emerald-500/20">
                       <Sparkles className="size-3" /> Live
                     </span>
                   </h1>
-                  <p className="text-[11px] text-neutral-400">Workspace Action Items</p>
+                  <p className="text-[11px] text-slate-500 dark:text-neutral-400">Workspace Action Items</p>
                 </div>
               </div>
             </div>
@@ -414,7 +446,7 @@ export function KanbanBoard() {
                 size="sm"
                 onClick={() => fetchData(true)}
                 disabled={isRefreshing}
-                className="text-neutral-400 hover:text-white"
+                className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-white/5"
                 title="Refresh tasks"
               >
                 <RefreshCw className={`size-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -424,7 +456,7 @@ export function KanbanBoard() {
               <Button
                 asChild
                 size="sm"
-                className="bg-white text-black font-semibold hover:bg-neutral-200 transition-colors"
+                className="bg-indigo-600 text-white font-semibold hover:bg-indigo-700 dark:bg-white dark:text-black dark:hover:bg-neutral-200 transition-colors shadow-sm"
               >
                 <Link to="/create-meeting">
                   <Plus className="size-3.5 mr-1" />
@@ -437,20 +469,20 @@ export function KanbanBoard() {
       </header>
 
       {/* Filter Toolbar & Statistics */}
-      <section className="border-b border-[#181818] bg-[#070707] py-3.5">
+      <section className="border-b border-slate-200 bg-white py-3.5 dark:border-[#181818] dark:bg-[#070707]">
         <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5">
             {/* Left Filter Controls */}
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Filter 1: All Workspace Tasks vs. Assigned to Me */}
-              <div className="inline-flex rounded-lg border border-[#222222] bg-[#0d0d0d] p-0.5">
+              <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-[#222222] dark:bg-[#0d0d0d]">
                 <button
                   type="button"
                   onClick={() => setFilterType('all')}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                     filterType === 'all'
-                      ? 'bg-white text-black shadow-sm'
-                      : 'text-neutral-400 hover:text-white'
+                      ? 'bg-white text-slate-900 shadow-sm dark:bg-white dark:text-black'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-white'
                   }`}
                 >
                   <Users className="size-3.5" />
@@ -461,8 +493,8 @@ export function KanbanBoard() {
                   onClick={() => setFilterType('assigned')}
                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                     filterType === 'assigned'
-                      ? 'bg-white text-black shadow-sm'
-                      : 'text-neutral-400 hover:text-white'
+                      ? 'bg-white text-slate-900 shadow-sm dark:bg-white dark:text-black'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-white'
                   }`}
                 >
                   <UserCheck className="size-3.5" />
@@ -472,11 +504,11 @@ export function KanbanBoard() {
 
               {/* Filter 2: Filter by Meeting */}
               <div className="flex items-center gap-1.5">
-                <Calendar className="size-3.5 text-neutral-500" />
+                <Calendar className="size-3.5 text-slate-400 dark:text-neutral-500" />
                 <select
                   value={selectedMeetingId}
                   onChange={(e) => setSelectedMeetingId(e.target.value)}
-                  className="h-8 rounded-md border border-[#222222] bg-[#0d0d0d] px-2.5 text-xs text-neutral-200 focus:border-white/40 focus:outline-none focus:ring-1 focus:ring-white/20 [color-scheme:dark]"
+                  className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-[#222222] dark:bg-[#0d0d0d] dark:text-neutral-200 dark:focus:border-white/40 dark:focus:ring-white/20 [color-scheme:light] dark:[color-scheme:dark]"
                 >
                   <option value="all">All Source Meetings</option>
                   {meetings.map((m) => (
@@ -489,32 +521,32 @@ export function KanbanBoard() {
 
               {/* Search Bar */}
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-neutral-500" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-slate-400 dark:text-neutral-500" />
                 <input
                   type="text"
                   placeholder="Search tasks or quotes..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-8 w-44 sm:w-60 rounded-md border border-[#222222] bg-[#0d0d0d] pl-8 pr-3 text-xs text-white placeholder:text-neutral-500 focus:border-white/40 focus:outline-none focus:ring-1 focus:ring-white/20"
+                  className="h-8 w-44 sm:w-60 rounded-md border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-[#222222] dark:bg-[#0d0d0d] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/40 dark:focus:ring-white/20"
                 />
               </div>
             </div>
 
             {/* Right Summary Badges */}
-            <div className="flex items-center gap-3 text-xs text-neutral-400">
+            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-neutral-400">
               <div className="flex items-center gap-1.5">
-                <span className="text-neutral-500">Total:</span>
-                <span className="font-semibold text-white">{totalCount}</span>
+                <span className="text-slate-400 dark:text-neutral-500">Total:</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{totalCount}</span>
               </div>
-              <div className="h-3 w-px bg-[#262626]" />
-              <div className="flex items-center gap-1.5 text-emerald-400">
+              <div className="h-3 w-px bg-slate-200 dark:bg-[#262626]" />
+              <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
                 <CheckCircle2 className="size-3.5" />
                 <span>Done: {doneCount}</span>
               </div>
               {blockedCount > 0 && (
                 <>
-                  <div className="h-3 w-px bg-[#262626]" />
-                  <div className="flex items-center gap-1.5 text-red-400">
+                  <div className="h-3 w-px bg-slate-200 dark:bg-[#262626]" />
+                  <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 font-medium">
                     <AlertTriangle className="size-3.5" />
                     <span>Blocked: {blockedCount}</span>
                   </div>
@@ -527,12 +559,12 @@ export function KanbanBoard() {
 
       {/* Error notification banner if any */}
       {errorMsg && (
-        <div className="border-b border-red-500/20 bg-red-950/40 px-4 py-2 text-center text-xs text-red-300">
+        <div className="border-b border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-950/40 px-4 py-2 text-center text-xs text-red-700 dark:text-red-300">
           {errorMsg}
           <button
             type="button"
             onClick={() => setErrorMsg(null)}
-            className="ml-3 underline hover:text-white"
+            className="ml-3 underline hover:text-red-900 dark:hover:text-white"
           >
             Dismiss
           </button>
@@ -546,11 +578,11 @@ export function KanbanBoard() {
             {[1, 2, 3, 4].map((i) => (
               <div
                 key={i}
-                className="h-[520px] rounded-xl border border-[#181818] bg-[#050505] p-4 animate-pulse flex flex-col gap-3"
+                className="h-[520px] rounded-xl border border-slate-200 bg-white p-4 animate-pulse flex flex-col gap-3 dark:border-[#181818] dark:bg-[#050505]"
               >
-                <div className="h-6 w-24 bg-white/5 rounded" />
-                <div className="h-28 w-full bg-white/5 rounded-lg" />
-                <div className="h-28 w-full bg-white/5 rounded-lg" />
+                <div className="h-6 w-24 bg-slate-200 dark:bg-white/5 rounded" />
+                <div className="h-28 w-full bg-slate-200 dark:bg-white/5 rounded-lg" />
+                <div className="h-28 w-full bg-slate-200 dark:bg-white/5 rounded-lg" />
               </div>
             ))}
           </div>

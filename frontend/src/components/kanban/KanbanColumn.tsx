@@ -22,27 +22,27 @@ const columnMeta: Record<
 > = {
   todo: {
     icon: CircleDot,
-    accentColor: 'text-neutral-400',
-    borderGlow: 'border-white/20 bg-neutral-900/30',
-    headerBadge: 'bg-neutral-800 text-neutral-300 border-neutral-700',
+    accentColor: 'text-slate-500 dark:text-neutral-400',
+    borderGlow: 'border-slate-300 bg-slate-200/50 dark:border-white/20 dark:bg-neutral-900/30',
+    headerBadge: 'bg-slate-200 text-slate-700 border-slate-300 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700',
   },
   in_progress: {
     icon: Clock,
-    accentColor: 'text-amber-400',
-    borderGlow: 'border-amber-500/40 bg-amber-500/5',
-    headerBadge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    accentColor: 'text-amber-600 dark:text-amber-400',
+    borderGlow: 'border-amber-400 bg-amber-50/50 dark:border-amber-500/40 dark:bg-amber-500/5',
+    headerBadge: 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',
   },
   blocked: {
     icon: AlertCircle,
-    accentColor: 'text-red-400',
-    borderGlow: 'border-red-500/40 bg-red-500/5',
-    headerBadge: 'bg-red-500/10 text-red-400 border-red-500/20',
+    accentColor: 'text-red-600 dark:text-red-400',
+    borderGlow: 'border-red-400 bg-red-50/50 dark:border-red-500/40 dark:bg-red-500/5',
+    headerBadge: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20',
   },
   done: {
     icon: CheckCircle2,
-    accentColor: 'text-emerald-400',
-    borderGlow: 'border-emerald-500/40 bg-emerald-500/5',
-    headerBadge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    accentColor: 'text-emerald-600 dark:text-emerald-400',
+    borderGlow: 'border-emerald-400 bg-emerald-50/50 dark:border-emerald-500/40 dark:bg-emerald-500/5',
+    headerBadge: 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20',
   },
 };
 
@@ -88,15 +88,15 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`flex flex-col rounded-xl border bg-[#040404] p-3 transition-all duration-200 min-h-[500px] h-full
-        ${isDragOver ? `${meta.borderGlow} ring-1 ring-white/10 shadow-lg` : 'border-[#181818]'}
+      className={`flex flex-col rounded-xl border bg-slate-100/70 p-3 transition-all duration-200 min-h-[500px] h-full dark:bg-[#040404]
+        ${isDragOver ? `${meta.borderGlow} ring-1 ring-indigo-500/20 dark:ring-white/10 shadow-lg` : 'border-slate-200 dark:border-[#181818]'}
       `}
     >
       {/* Column Header */}
-      <div className="flex items-center justify-between pb-3 mb-2 border-b border-[#181818]">
+      <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-200/80 dark:border-[#181818]">
         <div className="flex items-center gap-2">
           <Icon className={`size-4 ${meta.accentColor}`} />
-          <h2 className="text-sm font-semibold tracking-tight text-white">{title}</h2>
+          <h2 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h2>
         </div>
 
         {/* Task Counter */}
@@ -124,12 +124,12 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             className={`flex flex-1 items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition-colors
               ${
                 isDragOver
-                  ? 'border-white/30 bg-white/5 text-white'
-                  : 'border-[#1c1c1c] text-neutral-600'
+                  ? 'border-indigo-400 bg-indigo-50/50 text-indigo-700 dark:border-white/30 dark:bg-white/5 dark:text-white'
+                  : 'border-slate-300 text-slate-400 dark:border-[#1c1c1c] dark:text-neutral-600'
               }
             `}
           >
-            <p className="text-xs">
+            <p className="text-xs font-medium">
               {isDragOver ? 'Release to drop here' : `No tasks in ${title}`}
             </p>
           </div>
@@ -137,7 +137,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
         {/* Drag over indicator at the bottom if column is not empty */}
         {isDragOver && tasks.length > 0 && (
-          <div className="h-10 rounded-lg border-2 border-dashed border-white/20 bg-white/5 flex items-center justify-center text-xs text-neutral-400">
+          <div className="h-10 rounded-lg border-2 border-dashed border-indigo-300 bg-indigo-50/40 text-indigo-600 dark:border-white/20 dark:bg-white/5 flex items-center justify-center text-xs dark:text-neutral-400">
             Drop here
           </div>
         )}

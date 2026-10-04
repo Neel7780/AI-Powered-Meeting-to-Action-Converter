@@ -78,7 +78,8 @@ export const WhatsAppShareButton: React.FC<WhatsAppShareButtonProps> = ({
       title="1-Tap WhatsApp Share"
       aria-label={`Share ${taskTitle} on WhatsApp`}
       className={`group/wa inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all duration-200 
-        bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/25 hover:border-emerald-500/40 
+        bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 border border-emerald-200 hover:border-emerald-300 
+        dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 dark:text-emerald-400 dark:hover:text-emerald-300 dark:border-emerald-500/25 dark:hover:border-emerald-500/40 
         focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 shadow-sm ${className}`}
     >
       {/* WhatsApp standard branded icon SVG */}
