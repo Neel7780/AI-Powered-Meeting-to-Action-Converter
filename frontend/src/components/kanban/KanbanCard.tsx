@@ -55,23 +55,23 @@ const priorityConfig: Record<
 > = {
   urgent: {
     label: 'Urgent',
-    badgeClass: 'bg-red-500/15 text-red-400 border-red-500/30',
+    badgeClass: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30',
     dotClass: 'bg-red-500',
   },
   high: {
     label: 'High',
-    badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30',
     dotClass: 'bg-amber-500',
   },
   normal: {
     label: 'Normal',
-    badgeClass: 'bg-neutral-800 text-neutral-300 border-neutral-700',
-    dotClass: 'bg-neutral-400',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-700',
+    dotClass: 'bg-slate-400 dark:bg-neutral-400',
   },
   low: {
     label: 'Low',
-    badgeClass: 'bg-neutral-900 text-neutral-500 border-neutral-800',
-    dotClass: 'bg-neutral-600',
+    badgeClass: 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-neutral-900 dark:text-neutral-500 dark:border-neutral-800',
+    dotClass: 'bg-slate-300 dark:bg-neutral-600',
   },
 };
 
@@ -149,8 +149,8 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
       draggable={!isUpdating}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={`group relative rounded-lg border bg-[#080808] p-4 text-white shadow-md transition-all duration-200 select-none
-        ${isDragging ? 'opacity-40 scale-[0.98] border-white/40 ring-2 ring-white/20' : 'hover:border-white/25 hover:bg-[#0c0c0c] border-[#202020]'}
+      className={`group relative rounded-lg border bg-white p-4 text-slate-900 shadow-sm transition-all duration-200 select-none dark:bg-[#080808] dark:text-white dark:shadow-md
+        ${isDragging ? 'opacity-40 scale-[0.98] border-indigo-400 dark:border-white/40 ring-2 ring-indigo-400/20 dark:ring-white/20' : 'border-slate-200 hover:border-slate-300 hover:shadow dark:border-[#202020] dark:hover:border-white/25 dark:hover:bg-[#0c0c0c]'}
         ${isUpdating ? 'pointer-events-none opacity-60' : 'cursor-grab active:cursor-grabbing'}
       `}
     >
@@ -169,7 +169,7 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
           {task.blocked_by && (
             <span
               title="This task is blocked by another task"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-red-900/30 text-red-400 border border-red-800/40"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/40"
             >
               <AlertCircle className="size-3" />
               Blocked
@@ -189,13 +189,13 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
       </div>
 
       {/* Task Title */}
-      <h3 className="text-sm font-semibold tracking-tight text-white mb-1.5 line-clamp-2 group-hover:text-neutral-100">
+      <h3 className="text-sm font-semibold tracking-tight text-slate-900 mb-1.5 line-clamp-2 group-hover:text-indigo-600 dark:text-white dark:group-hover:text-neutral-100">
         {task.title}
       </h3>
 
       {/* Optional Description */}
       {task.description && (
-        <p className="text-xs text-neutral-400 line-clamp-2 mb-3 leading-relaxed">
+        <p className="text-xs text-slate-500 line-clamp-2 mb-3 leading-relaxed dark:text-neutral-400">
           {task.description}
         </p>
       )}
@@ -209,17 +209,17 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
               e.stopPropagation();
               setShowExcerpt(!showExcerpt);
             }}
-            className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-white transition-colors"
+            className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 transition-colors dark:text-neutral-400 dark:hover:text-white"
           >
-            <Quote className="size-3 text-neutral-500" />
+            <Quote className="size-3 text-slate-400 dark:text-neutral-500" />
             <span>{showExcerpt ? 'Hide transcript quote' : 'View transcript quote'}</span>
           </button>
 
           {showExcerpt && (
-            <div className="mt-1.5 rounded bg-black/60 p-2.5 border border-white/10 text-[11px] text-neutral-300 italic leading-snug">
+            <div className="mt-1.5 rounded bg-slate-50 p-2.5 border border-slate-200 text-[11px] text-slate-700 italic leading-snug dark:bg-black/60 dark:border-white/10 dark:text-neutral-300">
               &ldquo;{task.source_excerpt}&rdquo;
               {task.meetings?.title && (
-                <div className="mt-1 text-[10px] not-italic text-neutral-500 flex items-center gap-1">
+                <div className="mt-1 text-[10px] not-italic text-slate-500 flex items-center gap-1 dark:text-neutral-500">
                   <LinkIcon className="size-2.5" />
                   <span>From meeting: {task.meetings.title}</span>
                 </div>
@@ -230,7 +230,7 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
       )}
 
       {/* Card Footer: Assignee, Deadline & Status Dropdown */}
-      <div className="pt-2 border-t border-[#1a1a1a] flex items-center justify-between gap-2 text-xs">
+      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-xs dark:border-[#1a1a1a]">
         {/* Assignee Badge */}
         <div
           className="flex items-center gap-1.5 min-w-0"
@@ -240,14 +240,14 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
             <img
               src={primaryAssignee.avatar_url}
               alt={assigneeDisplayName}
-              className="size-5 rounded-full object-cover ring-1 ring-white/20 shrink-0"
+              className="size-5 rounded-full object-cover ring-1 ring-slate-200 shrink-0 dark:ring-white/20"
             />
           ) : (
-            <div className="size-5 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[10px] text-neutral-300 shrink-0 font-medium">
+            <div className="size-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] text-slate-700 shrink-0 font-medium dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-300">
               {assigneeDisplayName.charAt(0).toUpperCase()}
             </div>
           )}
-          <span className="truncate text-neutral-300 text-[11px]">
+          <span className="truncate text-slate-600 text-[11px] dark:text-neutral-300">
             {assigneeDisplayName}
           </span>
         </div>
@@ -258,8 +258,8 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
             <div
               className={`inline-flex items-center gap-1 text-[11px] ${
                 isOverdue
-                  ? 'text-red-400 font-medium'
-                  : 'text-neutral-400'
+                  ? 'text-red-600 font-semibold dark:text-red-400'
+                  : 'text-slate-500 dark:text-neutral-400'
               }`}
               title={isOverdue ? 'Task is overdue!' : `Due: ${deadlineFormatted}`}
             >
@@ -278,7 +278,7 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
               }}
               title="Change task status"
               aria-label="Change status"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-neutral-900 hover:bg-neutral-800 text-neutral-300 border border-neutral-800 hover:border-neutral-700 transition-colors"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 hover:border-slate-300 transition-colors dark:bg-neutral-900 dark:hover:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
             >
               <span>Move</span>
               <ChevronDown className="size-3 opacity-60" />
@@ -295,9 +295,9 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
                 />
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute right-0 bottom-full mb-1 z-50 w-36 rounded-md border border-neutral-800 bg-[#121212] py-1 shadow-xl"
+                  className="absolute right-0 bottom-full mb-1 z-50 w-36 rounded-md border border-slate-200 bg-white py-1 shadow-xl text-xs dark:border-neutral-800 dark:bg-[#121212]"
                 >
-                  <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                  <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-neutral-500">
                     Move status
                   </div>
                   {statusOptions.map((opt) => (
@@ -306,12 +306,12 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
                       type="button"
                       onClick={() => handleStatusSelect(opt.value)}
                       className={`flex w-full items-center justify-between px-2.5 py-1.5 text-xs text-left transition-colors
-                        ${opt.value === task.status ? 'bg-white/10 text-white font-medium' : 'text-neutral-400 hover:bg-white/5 hover:text-white'}
+                        ${opt.value === task.status ? 'bg-indigo-50 text-indigo-700 font-medium dark:bg-white/10 dark:text-white' : 'text-slate-700 hover:bg-slate-100 dark:text-neutral-400 dark:hover:bg-white/5 dark:hover:text-white'}
                       `}
                     >
                       <span>{opt.label}</span>
                       {opt.value === task.status && (
-                        <CheckCircle2 className="size-3.5 text-emerald-400" />
+                        <CheckCircle2 className="size-3.5 text-indigo-600 dark:text-emerald-400" />
                       )}
                     </button>
                   ))}

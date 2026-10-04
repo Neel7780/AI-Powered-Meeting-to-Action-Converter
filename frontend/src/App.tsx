@@ -6,7 +6,6 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import CreateMeeting from "./pages/CreateMeeting";
-import KanbanBoard from "./pages/KanbanBoard";
 
 function App() {
   return (
@@ -36,12 +35,21 @@ function App() {
           }
         />
 
-        {/* /tasks mounts KanbanBoard inside Dashboard shell, wrapped by ProtectedRoute */}
+        {/* /tasks and /kanban mount KanbanBoard inside Dashboard shell, wrapped by ProtectedRoute */}
         <Route
           path="/tasks"
           element={
             <ProtectedRoute>
-              <KanbanBoard />
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/kanban"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
             </ProtectedRoute>
           }
         />

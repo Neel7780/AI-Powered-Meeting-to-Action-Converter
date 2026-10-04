@@ -5,13 +5,16 @@ import "./index.css";
 import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { WorkspaceProvider } from "./context/WorkspaceContext";
+import { DarkModeProvider } from "./context/DarkModeContext";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AuthProvider>
-      <WorkspaceProvider>
-        <App />
-      </WorkspaceProvider>
-    </AuthProvider>
+    <DarkModeProvider>
+      <AuthProvider>
+        <WorkspaceProvider>
+          <App />
+        </WorkspaceProvider>
+      </AuthProvider>
+    </DarkModeProvider>
   </StrictMode>
 );
