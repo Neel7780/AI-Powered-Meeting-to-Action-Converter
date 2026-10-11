@@ -30,7 +30,7 @@
       "destination": "https://actionpulse-backend.onrender.com/health"
     },
     {
-      "source": "/:path*",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

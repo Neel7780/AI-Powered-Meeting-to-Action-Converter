@@ -5,13 +5,16 @@ import "./index.css";
 import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { WorkspaceProvider } from "./context/WorkspaceContext";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AuthProvider>
-      <WorkspaceProvider>
-        <App />
-      </WorkspaceProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <WorkspaceProvider>
+          <App />
+        </WorkspaceProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   </StrictMode>
 );
