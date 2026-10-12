@@ -1,475 +1,652 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
 import {
-  Quote,
-  UserRound,
-  FileText,
-  GitBranch,
-  ArrowRight,
-  CheckCircle2,
-  AlertTriangle,
   Sparkles,
-  MoveRight,
+  AlertTriangle,
+  Check,
+  Mail,
+  MessageSquare,
+  Terminal,
+  RefreshCw,
 } from "lucide-react";
-import { CardSpotlight } from "@/components/landing/CardSpotlight";
 import { cn } from "@/lib/utils";
 
-// --- Tile 1: Grounded Quote Samples ---
-interface QuoteSample {
-  id: string;
-  label: string;
-  speaker: string;
-  quote: string;
-  highlightWords: string;
-  actionTitle: string;
-  owner: string;
-  due: string;
-  confidence: string;
+// =========================================================================
+// 1. SUB-COMPONENT: Animated SVG Waves Background for Card 1
+// =========================================================================
+function AnimatedWavesBackground() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
+      {/* Soft atmospheric gradient glow behind the waves */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[220px] bg-gradient-to-r from-blue-500/10 via-emerald-500/10 to-purple-500/10 blur-3xl opacity-70" />
+
+      {/* Layered Smooth Moving SVG Waves */}
+      <svg
+        className="absolute inset-0 size-full"
+        viewBox="0 0 800 280"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <linearGradient id="bentoWave1" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.05" />
+            <stop offset="35%" stopColor="#38bdf8" stopOpacity="0.45" />
+            <stop offset="70%" stopColor="#818cf8" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="#c084fc" stopOpacity="0.05" />
+          </linearGradient>
+
+          <linearGradient id="bentoWave2" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#34d399" stopOpacity="0.05" />
+            <stop offset="45%" stopColor="#10b981" stopOpacity="0.4" />
+            <stop offset="80%" stopColor="#06b6d4" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.05" />
+          </linearGradient>
+
+          <linearGradient id="beamGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.2" />
+            <stop offset="50%" stopColor="#34d399" stopOpacity="0.8" />
+            <stop offset="100%" stopColor="#818cf8" stopOpacity="0.2" />
+          </linearGradient>
+        </defs>
+
+        {/* Wave 1: Flowing cyan/indigo spline */}
+        <motion.path
+          d="M0 140 C 140 80, 240 190, 390 130 C 540 70, 660 180, 800 120"
+          stroke="url(#bentoWave1)"
+          strokeWidth="2"
+          fill="none"
+          animate={{
+            d: [
+              "M0 140 C 140 80, 240 190, 390 130 C 540 70, 660 180, 800 120",
+              "M0 120 C 140 180, 240 80, 390 150 C 540 200, 660 90, 800 150",
+              "M0 140 C 140 80, 240 190, 390 130 C 540 70, 660 180, 800 120",
+            ],
+          }}
+          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+        />
+
+        {/* Wave 2: Flowing emerald/cyan spline */}
+        <motion.path
+          d="M0 170 C 160 210, 290 110, 460 160 C 600 200, 690 120, 800 150"
+          stroke="url(#bentoWave2)"
+          strokeWidth="1.5"
+          fill="none"
+          animate={{
+            d: [
+              "M0 170 C 160 210, 290 110, 460 160 C 600 200, 690 120, 800 150",
+              "M0 150 C 160 100, 290 200, 460 140 C 600 90, 690 190, 800 160",
+              "M0 170 C 160 210, 290 110, 460 160 C 600 200, 690 120, 800 150",
+            ],
+          }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        />
+
+        {/* Harmonic dotted guiding wave */}
+        <motion.path
+          d="M0 110 C 200 60, 330 160, 500 110 C 640 70, 710 150, 800 110"
+          stroke="rgba(255,255,255,0.1)"
+          strokeWidth="1"
+          strokeDasharray="4 6"
+          fill="none"
+          animate={{
+            d: [
+              "M0 110 C 200 60, 330 160, 500 110 C 640 70, 710 150, 800 110",
+              "M0 125 C 200 150, 330 80, 500 135 C 640 170, 710 80, 800 120",
+              "M0 110 C 200 60, 330 160, 500 110 C 640 70, 710 150, 800 110",
+            ],
+          }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+        />
+      </svg>
+    </div>
+  );
 }
 
-const quoteSamples: QuoteSample[] = [
-  {
-    id: "safari",
-    label: "Safari Auth",
-    speaker: "Rahul",
-    quote: "I will fix the login bug on Safari by Wednesday before the sprint demo.",
-    highlightWords: "fix the login bug on Safari by Wednesday",
-    actionTitle: "Fix login bug on Safari",
-    owner: "Rahul Verma",
-    due: "Wednesday",
-    confidence: "99.4%",
-  },
-  {
-    id: "prompt",
-    label: "Security Guard",
-    speaker: "Priya",
-    quote: "I can wrap the transcript parser in XML delimiter guards by tomorrow afternoon.",
-    highlightWords: "wrap the transcript parser in XML delimiter guards",
-    actionTitle: "Wrap transcript parser in XML guards",
-    owner: "Priya Patel",
-    due: "Tomorrow, 2:00 PM",
-    confidence: "98.8%",
-  },
-  {
-    id: "smtp",
-    label: "Email SMTP",
-    speaker: "Aman",
-    quote: "I'll configure the Gmail App Password SMTP digest sender by Friday morning.",
-    highlightWords: "configure the Gmail App Password SMTP digest sender",
-    actionTitle: "Configure Gmail App Password SMTP digest",
-    owner: "Aman Shah",
-    due: "Friday morning",
-    confidence: "99.1%",
-  },
-];
+// =========================================================================
+// 2. SUB-COMPONENT: 3D Rotating Dot Globe on HTML5 Canvas for Card 3
+// =========================================================================
+function AnimatedDotGlobe() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-// --- Tile 3: Transcript Format Samples ---
-interface FormatSample {
-  format: string;
-  extension: string;
-  name: string;
-  preview: string;
-  parsedCues: number;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    let rotation = 0;
+
+    // Generate ~720 points distributed evenly on the sphere using golden spiral
+    const count = 750;
+    const points: { x: number; y: number; z: number }[] = [];
+    for (let i = 0; i < count; i++) {
+      const phi = Math.acos(1 - (2 * (i + 0.5)) / count);
+      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+      points.push({
+        x: Math.cos(theta) * Math.sin(phi),
+        y: Math.sin(theta) * Math.sin(phi),
+        z: Math.cos(phi),
+      });
+    }
+
+    const render = () => {
+      const width = canvas.width;
+      const height = canvas.height;
+      ctx.clearRect(0, 0, width, height);
+
+      // Globe sphere radius and center (peeking from bottom-right as in reference)
+      const radius = Math.min(width, height) * 0.92;
+      const cx = width * 0.74;
+      const cy = height * 0.88;
+
+      rotation += 0.0035;
+      const cosR = Math.cos(rotation);
+      const sinR = Math.sin(rotation);
+      const tilt = 0.36; // ~20.6 degree axis tilt
+      const cosT = Math.cos(tilt);
+      const sinT = Math.sin(tilt);
+
+      for (let i = 0; i < points.length; i++) {
+        const pt = points[i];
+        // Rotate around Y axis
+        const x1 = pt.x * cosR - pt.y * sinR;
+        const y1 = pt.x * sinR + pt.y * cosR;
+        const z1 = pt.z;
+
+        // Tilt around X axis
+        const y2 = y1 * cosT - z1 * sinT;
+        const z2 = y1 * sinT + z1 * cosT;
+        const x2 = x1;
+
+        // Front hemisphere visibility (depth threshold)
+        if (z2 > -0.18) {
+          const depth = (z2 + 0.18) / 1.18; // 0 to 1
+          const screenX = cx + x2 * radius;
+          const screenY = cy - y2 * radius;
+
+          if (screenX >= -10 && screenX <= width + 10 && screenY >= -10 && screenY <= height + 10) {
+            const size = 0.75 + depth * 1.9;
+            const alpha = 0.12 + depth * 0.88;
+
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
+            // Cyan/sky-blue glowing tone matching reference screenshot
+            ctx.fillStyle = `rgba(56, 189, 248, ${alpha})`;
+            ctx.fill();
+
+            // Luminous white core on nearest foreground dots
+            if (depth > 0.85 && i % 14 === 0) {
+              ctx.beginPath();
+              ctx.arc(screenX, screenY, size * 1.35, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.95})`;
+              ctx.fill();
+            }
+          }
+        }
+      }
+
+      animId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animId);
+    };
+  }, []);
+
+  return (
+    <div className="relative size-full overflow-hidden select-none pointer-events-none">
+      {/* Outer Atmosphere Glow Aura */}
+      <div
+        aria-hidden="true"
+        className="absolute right-0 bottom-0 w-[420px] h-[420px] rounded-full bg-blue-500/15 blur-[90px] translate-x-1/4 translate-y-1/4 pointer-events-none"
+      />
+      {/* Crescent Rim Highlight (as in reference image) */}
+      <div
+        aria-hidden="true"
+        className="absolute right-3 bottom-3 w-[360px] h-[360px] rounded-full pointer-events-none"
+        style={{
+          background:
+            "radial-gradient(circle at 35% 35%, transparent 62%, rgba(56,189,248,0.35) 74%, rgba(147,197,253,0.7) 81%, transparent 88%)",
+          filter: "blur(2px)",
+        }}
+      />
+      <canvas
+        ref={canvasRef}
+        width={480}
+        height={360}
+        className="w-full h-full block"
+      />
+    </div>
+  );
 }
 
-const formatSamples: FormatSample[] = [
-  {
-    format: "VTT",
-    extension: ".vtt",
-    name: "WebVTT Caption",
-    preview: "WEBVTT\n\n00:01:14.200 --> 00:01:18.900\n<v Rahul>I will patch the Safari auth cookies by Wednesday.",
-    parsedCues: 38,
-  },
-  {
-    format: "SRT",
-    extension: ".srt",
-    name: "SubRip Subtitle",
-    preview: "1\n00:02:10,000 --> 00:02:14,500\nPriya: Wrap the LLM prompt in XML tags to stop prompt injection.",
-    parsedCues: 42,
-  },
-  {
-    format: "TXT",
-    extension: ".txt",
-    name: "Plain Text Notes",
-    preview: "Meeting: Sprint 1 Sync\nRahul: I'll finish the auth task.\nAman: I will take the SMTP integration.",
-    parsedCues: 18,
-  },
-  {
-    format: "DOCX",
-    extension: ".docx",
-    name: "Word Document",
-    preview: "[Word Document stream]\nExtracting text paragraphs...\nFound 3 action candidate discussions.",
-    parsedCues: 26,
-  },
-];
-
-// --- Tile 4: Mini Kanban State ---
-interface MiniTask {
-  id: string;
-  title: string;
-  owner: string;
-  priority: "High" | "Med" | "Low";
-  column: "todo" | "in_progress" | "blocked" | "done";
-}
-
-const initialTasks: MiniTask[] = [
-  { id: "1", title: "Patch Safari login bug", owner: "Rahul", priority: "High", column: "in_progress" },
-  { id: "2", title: "Wrap LLM in XML delimiters", owner: "Priya", priority: "High", column: "todo" },
-  { id: "3", title: "Setup Brevo SMTP credentials", owner: "Aman", priority: "Med", column: "blocked" },
-  { id: "4", title: "Draft Sprint 1 demo agenda", owner: "Karan", priority: "Low", column: "done" },
-];
-
+// =========================================================================
+// 3. MAIN COMPONENT: InteractiveBentoFeatures
+// =========================================================================
 export default function InteractiveBentoFeatures() {
-  // Tile 1 state
-  const [selectedQuoteId, setSelectedQuoteId] = useState("safari");
-  const activeQuote = quoteSamples.find((q) => q.id === selectedQuoteId) || quoteSamples[0];
+  // Card 2 Review Gate state
+  const [reviewStatus, setReviewStatus] = useState<"pending" | "approved">("pending");
+  const [reviewedItems, setReviewedItems] = useState<{ [id: string]: boolean }>({
+    "item-1": true,
+    "item-2": false,
+  });
 
-  // Tile 2 state (Uncertainty toggle)
-  const [uncertaintyMode, setUncertaintyMode] = useState<"clear" | "ambiguous">("ambiguous");
+  // Card 4 Kanban quick state
+  const [kanbanTasks, setKanbanTasks] = useState([
+    { id: "k-1", code: "ACT-2704", title: "Patch Safari auth session cookies", status: "todo", owner: "Rahul", tag: "Auth" },
+    { id: "k-2", code: "ACT-2703", title: "Wrap transcript parser in XML delimiter guards", status: "in_progress", owner: "Priya", tag: "Security" },
+    { id: "k-3", code: "ACT-1487", title: "Generate 1-tap WhatsApp wa.me action links", status: "review", owner: "Ananya", tag: "WhatsApp" },
+    { id: "k-4", code: "ACT-2074", title: "Deploy FastAPI backend on Render Free tier", status: "done", owner: "Rahul", tag: "Backend" },
+  ]);
 
-  // Tile 3 state (Format tab)
-  const [activeFormat, setActiveFormat] = useState("VTT");
-  const currentFormat = formatSamples.find((f) => f.format === activeFormat) || formatSamples[0];
-
-  // Tile 4 state (Kanban board)
-  const [kanbanTasks, setKanbanTasks] = useState<MiniTask[]>(initialTasks);
-
-  const moveTaskNext = (taskId: string) => {
-    const sequence: MiniTask["column"][] = ["todo", "in_progress", "blocked", "done"];
+  const advanceKanbanTask = (taskId: string) => {
     setKanbanTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== taskId) return t;
-        const currentIdx = sequence.indexOf(t.column);
-        const nextCol = sequence[(currentIdx + 1) % sequence.length];
-        return { ...t, column: nextCol };
+      prev.map((task) => {
+        if (task.id !== taskId) return task;
+        const nextStatus =
+          task.status === "todo"
+            ? "in_progress"
+            : task.status === "in_progress"
+            ? "review"
+            : task.status === "review"
+            ? "done"
+            : "todo";
+        return { ...task, status: nextStatus };
       })
     );
   };
 
   return (
-    <div className="mt-12 grid gap-5 md:grid-cols-3">
-      {/* TILE 1: Grounded Action Extraction (2 cols on md/lg) */}
-      <CardSpotlight
-        spotlightColor="rgba(16, 185, 129, 0.12)"
-        spotlightSize={500}
-        className="p-6 md:col-span-2 border-white/10 bg-[#060608]"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-400">
-              <Quote size={18} />
-            </div>
-            <div>
-              <h3 className="text-base font-medium tracking-tight text-white sm:text-lg">Grounded Action Extraction</h3>
-              <p className="text-xs text-neutral-400">Verbatim quote anchoring with zero hallucination</p>
-            </div>
-          </div>
-          <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-mono text-[10px] text-emerald-400">
-            <Sparkles size={11} /> Grounded in quotes
-          </span>
-        </div>
+    <div className="mt-14 w-full select-none">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* =====================================================================
+            CARD 1 (TOP LEFT): 1-Tap Action Dispatch (Wave Background & 3 Sub-Cards)
+            Span 7 on desktop (wide card)
+            ===================================================================== */}
+        <div className="lg:col-span-7 flex flex-col justify-between rounded-3xl border border-white/10 bg-[#090a0f] p-7 sm:p-9 shadow-2xl relative overflow-hidden group hover:border-white/20 transition-all duration-300">
+          {/* Animated Background Waves */}
+          <AnimatedWavesBackground />
 
-        {/* Interactive Quote Switcher Tabs */}
-        <div className="mt-5 flex flex-wrap gap-2">
-          {quoteSamples.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setSelectedQuoteId(item.id)}
-              className={cn(
-                "rounded-md px-2.5 py-1 font-mono text-xs transition",
-                selectedQuoteId === item.id
-                  ? "border border-emerald-500/40 bg-emerald-500/15 text-white"
-                  : "border border-white/10 bg-white/5 text-neutral-400 hover:text-white"
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Dynamic Quote-to-Action Comparison */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeQuote.id}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2 }}
-            className="mt-4 grid gap-3 rounded-xl border border-white/10 bg-[#040406] p-4 sm:grid-cols-[1.1fr_auto_1fr] sm:items-center"
-          >
-            {/* Left: Verbatim Transcript Quote */}
-            <div>
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase text-neutral-400">Raw Transcript Snippet</span>
-                <span className="font-mono text-[10px] text-neutral-400">Speaker: {activeQuote.speaker}</span>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-neutral-300">
-                “{activeQuote.speaker}:{" "}
-                <mark className="rounded bg-emerald-500/25 px-1 py-0.5 text-emerald-300">
-                  {activeQuote.highlightWords}
-                </mark>
-                ”
-              </p>
+          {/* Top Visual: 3 Floating Sub-Cards connected with circuit beam */}
+          <div className="relative z-10 pt-4 pb-8 sm:py-6">
+            {/* Connecting Circuit Track line */}
+            <div className="absolute top-1/2 left-10 right-10 -translate-y-1/2 h-[2px] bg-gradient-to-r from-cyan-500/20 via-emerald-500/40 to-indigo-500/20 hidden sm:block">
+              {/* Traveling Pulse Particle */}
+              <motion.div
+                className="size-2 rounded-full bg-cyan-300 shadow-[0_0_12px_#38bdf8]"
+                animate={{
+                  x: [0, 480, 0],
+                  opacity: [0.3, 1, 0.3],
+                }}
+                transition={{
+                  duration: 4,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+              />
             </div>
 
-            <ArrowRight size={16} className="hidden text-emerald-400 sm:block mx-auto" />
-
-            {/* Right: Extracted Structured Item */}
-            <div className="border-t border-white/10 pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase text-emerald-400">Extracted Action</span>
-                <span className="font-mono text-[10px] text-emerald-400">{activeQuote.confidence} Match</span>
-              </div>
-              <p className="mt-1.5 text-xs font-semibold text-white">{activeQuote.actionTitle}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-neutral-400">
-                <span className="rounded bg-white/5 px-2 py-0.5 font-mono text-neutral-300">
-                  Owner: {activeQuote.owner}
-                </span>
-                <span className="rounded bg-white/5 px-2 py-0.5 font-mono text-neutral-300">
-                  Due: {activeQuote.due}
-                </span>
-              </div>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </CardSpotlight>
-
-      {/* TILE 2: Zero-Guess Ownership & Uncertainty Detection (1 col) */}
-      <CardSpotlight
-        spotlightColor="rgba(245, 158, 11, 0.12)"
-        spotlightSize={400}
-        className="p-6 border-white/10 bg-[#060608] flex flex-col justify-between"
-      >
-        <div>
-          <div className="flex items-center justify-between">
-            <div className="grid size-9 place-items-center rounded-lg border border-amber-500/25 bg-amber-500/10 text-amber-400">
-              <UserRound size={18} />
-            </div>
-            <span className="font-mono text-[10px] text-amber-400 uppercase tracking-wider">
-              Zero-Guess Policy
-            </span>
-          </div>
-
-          <h3 className="mt-4 text-base font-medium tracking-tight text-white sm:text-lg">Uncertainty Surfaced</h3>
-          <p className="mt-1.5 text-xs leading-5 text-neutral-400">
-            Never hallucinate an assignee. If a task has no clear owner, ActionPulse flags it for organiser review.
-          </p>
-
-          {/* Interactive Toggle */}
-          <div className="mt-4 flex rounded-lg border border-white/10 bg-black p-1 text-xs">
-            <button
-              type="button"
-              onClick={() => setUncertaintyMode("ambiguous")}
-              className={cn(
-                "flex-1 rounded-md py-1.5 font-mono text-[11px] transition",
-                uncertaintyMode === "ambiguous"
-                  ? "bg-amber-500/20 text-amber-300 font-semibold"
-                  : "text-neutral-400 hover:text-white"
-              )}
-            >
-              Ambiguous Owner
-            </button>
-            <button
-              type="button"
-              onClick={() => setUncertaintyMode("clear")}
-              className={cn(
-                "flex-1 rounded-md py-1.5 font-mono text-[11px] transition",
-                uncertaintyMode === "clear"
-                  ? "bg-emerald-500/20 text-emerald-300 font-semibold"
-                  : "text-neutral-400 hover:text-white"
-              )}
-            >
-              Explicit Owner
-            </button>
-          </div>
-
-          {/* Dynamic Payload preview */}
-          <div className="mt-4 rounded-lg border border-white/10 bg-[#040406] p-3 text-xs font-mono">
-            {uncertaintyMode === "ambiguous" ? (
-              <div className="space-y-1.5 text-amber-300/90">
-                <div className="flex items-center gap-1.5 text-amber-400 font-semibold">
-                  <AlertTriangle size={13} />
-                  <span>uncertainty_flag: true</span>
-                </div>
-                <p className="text-neutral-400 text-[11px]">“Someone needs to run the smoke tests”</p>
-                <p className="text-[11px] text-neutral-300">owner_user_id: <span className="text-amber-400">null</span></p>
-                <p className="text-[10px] text-neutral-500">→ Blocked from board until assigned</p>
-              </div>
-            ) : (
-              <div className="space-y-1.5 text-emerald-300/90">
-                <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                  <CheckCircle2 size={13} />
-                  <span>uncertainty_flag: false</span>
-                </div>
-                <p className="text-neutral-400 text-[11px]">“Rahul: I will patch the bug”</p>
-                <p className="text-[11px] text-neutral-300">owner_user_id: <span className="text-emerald-400">uuid-4912</span></p>
-                <p className="text-[10px] text-neutral-500">→ Ready for 1-click organiser approval</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <p className="mt-4 text-[11px] text-neutral-500 font-mono">
-          Strict FR-08 Grounding standard enforced
-        </p>
-      </CardSpotlight>
-
-      {/* TILE 3: Flexible Multi-Format Input (1 col) */}
-      <CardSpotlight
-        spotlightColor="rgba(59, 130, 246, 0.12)"
-        spotlightSize={400}
-        className="p-6 border-white/10 bg-[#060608] flex flex-col justify-between"
-      >
-        <div>
-          <div className="flex items-center justify-between">
-            <div className="grid size-9 place-items-center rounded-lg border border-blue-500/25 bg-blue-500/10 text-blue-400">
-              <FileText size={18} />
-            </div>
-            <span className="font-mono text-[10px] text-blue-400 uppercase tracking-wider">
-              Universal Ingestion
-            </span>
-          </div>
-
-          <h3 className="mt-4 text-base font-medium tracking-tight text-white sm:text-lg">Flexible Input Formats</h3>
-          <p className="mt-1.5 text-xs leading-5 text-neutral-400">
-            Bring transcripts from Google Meet, Teams, Zoom, or voice memos. No browser extension required.
-          </p>
-
-          {/* Format Tabs */}
-          <div className="mt-4 flex flex-wrap gap-1.5">
-            {formatSamples.map((fmt) => (
-              <button
-                key={fmt.format}
-                type="button"
-                onClick={() => setActiveFormat(fmt.format)}
-                className={cn(
-                  "rounded px-2 py-1 font-mono text-[11px] transition",
-                  activeFormat === fmt.format
-                    ? "border border-blue-500/40 bg-blue-500/20 text-white"
-                    : "border border-white/10 bg-white/5 text-neutral-400 hover:text-white"
-                )}
+            {/* 3 Floating Sub-Cards */}
+            <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 items-center">
+              {/* Sub-Card 1: Terminal Meeting Script */}
+              <motion.div
+                whileHover={{ y: -3 }}
+                className="rounded-2xl border border-white/10 bg-[#121319] p-4 text-xs font-mono shadow-xl relative backdrop-blur-sm"
               >
-                {fmt.extension}
-              </button>
-            ))}
+                <div className="flex items-center gap-1.5 pb-2.5 mb-2.5 border-b border-white/5 text-neutral-500 text-[10px]">
+                  <Terminal size={11} className="text-cyan-400" />
+                  <span>transcript.vtt</span>
+                </div>
+                <div className="space-y-1 text-[11px] text-neutral-400 leading-snug">
+                  <p className="text-neutral-500">$ actionpulse ingest</p>
+                  <p className="text-cyan-300">✓ 4 speakers diarized</p>
+                  <p className="text-white font-medium truncate">"Patch Safari cookies"</p>
+                </div>
+              </motion.div>
+
+              {/* Sub-Card 2: Gemini 3.1 Flash-Lite AI Engine */}
+              <motion.div
+                whileHover={{ y: -3 }}
+                className="rounded-2xl border border-white/10 bg-[#121319] p-4 text-center shadow-xl relative backdrop-blur-sm flex flex-col items-center justify-center min-h-[110px]"
+              >
+                <div className="relative mb-2">
+                  <div className="size-9 rounded-xl border border-emerald-500/30 bg-emerald-500/15 grid place-items-center text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                    <Sparkles size={18} />
+                  </div>
+                  <span className="absolute -top-1 -right-1 size-2 rounded-full bg-emerald-400 animate-ping" />
+                </div>
+                <span className="text-xs font-medium text-white">Gemini 3.1</span>
+                <span className="text-[10px] font-mono text-emerald-400">Flash-Lite AI</span>
+              </motion.div>
+
+              {/* Sub-Card 3: 1-Tap Multi-Channel Dispatch */}
+              <motion.div
+                whileHover={{ y: -3 }}
+                className="rounded-2xl border border-white/10 bg-[#121319] p-4 text-center shadow-xl relative backdrop-blur-sm flex flex-col items-center justify-center min-h-[110px]"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="size-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 grid place-items-center text-emerald-400">
+                    <MessageSquare size={13} />
+                  </div>
+                  <div className="size-7 rounded-lg bg-blue-500/20 border border-blue-500/30 grid place-items-center text-blue-400">
+                    <Mail size={13} />
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-white">wa.me & SMTP</span>
+                <span className="text-[10px] text-emerald-300 font-mono flex items-center gap-1 justify-center">
+                  <span>dispatched in 1-tap</span>
+                  <span className="text-amber-300">✨</span>
+                </span>
+              </motion.div>
+            </div>
           </div>
 
-          {/* Format syntax preview box */}
-          <div className="mt-4 rounded-lg border border-white/10 bg-[#040406] p-3 text-xs font-mono">
-            <div className="flex items-center justify-between text-[10px] text-neutral-400 mb-2">
-              <span>{currentFormat.name}</span>
-              <span className="text-emerald-400">✓ Parsed {currentFormat.parsedCues} cues</span>
-            </div>
-            <pre className="text-[11px] leading-5 text-neutral-300 font-mono whitespace-pre-wrap overflow-x-auto max-h-24">
-              {currentFormat.preview}
-            </pre>
+          {/* Bottom Text Description (Matching Reference Layout) */}
+          <div className="relative z-10 pt-6 mt-4 border-t border-white/5">
+            <h3 className="text-xl sm:text-2xl font-medium tracking-tight text-white">
+              One-click action dispatch
+            </h3>
+            <p className="mt-2 text-sm sm:text-base text-neutral-400 leading-relaxed font-normal">
+              Turn 60-minute meeting transcripts into grounded tasks, assigned owners, and zero-cost WhatsApp & email dispatches in seconds.
+            </p>
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-between text-[11px] text-neutral-500 font-mono">
-          <span>Client-side chunking</span>
-          <span>Zero-loss timestamps</span>
-        </div>
-      </CardSpotlight>
-
-      {/* TILE 4: Shared Interactive Kanban Board (2 cols on md/lg) */}
-      <CardSpotlight
-        spotlightColor="rgba(16, 185, 129, 0.12)"
-        spotlightSize={500}
-        className="p-6 md:col-span-2 border-white/10 bg-[#060608]"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-400">
-              <GitBranch size={18} />
-            </div>
-            <div>
-              <h3 className="text-base font-medium tracking-tight text-white sm:text-lg">Interactive Kanban Board</h3>
-              <p className="text-xs text-neutral-400">Click any card to advance its state across the lifecycle</p>
-            </div>
+        {/* =====================================================================
+            CARD 2 (TOP RIGHT): Intuitive Review Gate (Interactive Workflow Mockup)
+            Span 5 on desktop (regular card)
+            ===================================================================== */}
+        <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-white/10 bg-[#090a0f] p-7 sm:p-9 shadow-2xl relative overflow-hidden group hover:border-white/20 transition-all duration-300">
+          {/* Top Text Description (Matching Reference Layout) */}
+          <div className="relative z-10">
+            <h3 className="text-xl sm:text-2xl font-medium tracking-tight text-white">
+              Intuitive review gate
+            </h3>
+            <p className="mt-2 text-sm sm:text-base text-neutral-400 leading-relaxed font-normal">
+              With our human review workflow, easily verify owners, due dates, and evidence quotes before syncing without complex steps.
+            </p>
           </div>
 
-          <span className="inline-flex items-center gap-1 text-[11px] font-mono text-neutral-400">
-            <MoveRight size={13} className="text-emerald-400" />
-            Click card to advance status
-          </span>
-        </div>
-
-        {/* 4 Interactive Kanban Columns */}
-        <div className="mt-6 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          {(["todo", "in_progress", "blocked", "done"] as const).map((colKey) => {
-            const colLabels = {
-              todo: "To do",
-              in_progress: "In progress",
-              blocked: "Blocked",
-              done: "Done",
-            };
-            const colTasks = kanbanTasks.filter((t) => t.column === colKey);
-
-            return (
-              <div key={colKey} className="rounded-xl border border-white/10 bg-[#040406] p-2.5 flex flex-col min-h-44">
-                <div className="mb-2.5 flex items-center justify-between px-1">
-                  <span className="font-mono text-[10px] uppercase font-semibold text-neutral-400">
-                    {colLabels[colKey]}
+          {/* Bottom Visual: Interactive Dashboard Card Mockup */}
+          <div className="relative z-10 mt-6 pt-3">
+            <div className="rounded-2xl border border-white/10 bg-[#121319] p-4 shadow-xl">
+              {/* Header inside mockup */}
+              <div className="flex items-center justify-between pb-3 border-b border-white/5 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-medium text-white text-[13px]">Review Queue</span>
+                  <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9px] text-neutral-300">
+                    Meeting #ACT-DEMO
                   </span>
-                  <span className="rounded-full bg-white/10 px-1.5 font-mono text-[9px] text-neutral-300">
-                    {colTasks.length}
+                </div>
+                <span className="font-mono text-[10px] text-emerald-400">99.4% grounded</span>
+              </div>
+
+              {/* Action items in review */}
+              <div className="mt-3 space-y-2">
+                {/* Item 1 */}
+                <div
+                  onClick={() =>
+                    setReviewedItems((prev) => ({ ...prev, "item-1": !prev["item-1"] }))
+                  }
+                  className={cn(
+                    "rounded-xl border p-2.5 transition cursor-pointer flex items-center justify-between text-xs",
+                    reviewedItems["item-1"]
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                      : "border-white/10 bg-black/40 text-neutral-300 hover:border-white/20"
+                  )}
+                >
+                  <div className="min-w-0 pr-2">
+                    <p className="font-medium text-white truncate text-[11.5px]">
+                      Patch Safari auth session cookies
+                    </p>
+                    <div className="mt-0.5 flex items-center gap-2 text-[10px] text-neutral-400 font-mono">
+                      <span>Owner: Rahul</span>
+                      <span>·</span>
+                      <span>Due: Wednesday</span>
+                    </div>
+                  </div>
+                  <span className="size-5 rounded-md border border-emerald-500/40 bg-emerald-500/20 text-emerald-300 grid place-items-center shrink-0">
+                    <Check size={11} />
                   </span>
                 </div>
 
-                <div className="flex-1 space-y-2">
-                  {colTasks.map((task) => (
-                    <motion.button
-                      layout
-                      layoutId={task.id}
-                      key={task.id}
-                      type="button"
-                      onClick={() => moveTaskNext(task.id)}
-                      className="group w-full rounded-lg border border-white/10 bg-black p-2.5 text-left transition hover:border-emerald-500/40 hover:bg-white/[0.03]"
-                    >
-                      <p className="text-xs font-medium text-white group-hover:text-emerald-300 transition-colors line-clamp-2">
-                        {task.title}
-                      </p>
-                      <div className="mt-2 flex items-center justify-between text-[10px]">
-                        <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-neutral-400">
-                          {task.owner}
-                        </span>
-                        <span
-                          className={cn(
-                            "font-mono font-medium",
-                            task.priority === "High"
-                              ? "text-rose-400"
-                              : task.priority === "Med"
-                              ? "text-amber-400"
-                              : "text-neutral-400"
-                          )}
-                        >
-                          {task.priority}
-                        </span>
-                      </div>
-                    </motion.button>
-                  ))}
-
-                  {colTasks.length === 0 && (
-                    <div className="grid h-24 place-items-center rounded border border-dashed border-white/10 text-[11px] text-neutral-600">
-                      Empty
-                    </div>
+                {/* Item 2: Ambiguous item flagged */}
+                <div
+                  onClick={() =>
+                    setReviewedItems((prev) => ({ ...prev, "item-2": !prev["item-2"] }))
+                  }
+                  className={cn(
+                    "rounded-xl border p-2.5 transition cursor-pointer flex items-center justify-between text-xs",
+                    reviewedItems["item-2"]
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                      : "border-amber-500/30 bg-amber-500/5 text-amber-200 hover:border-amber-500/50"
                   )}
+                >
+                  <div className="min-w-0 pr-2">
+                    <p className="font-medium text-white truncate text-[11.5px]">
+                      Deploy staging Redis cluster
+                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-amber-300 font-mono">
+                      <AlertTriangle size={10} />
+                      <span>Uncertain owner flagged</span>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "size-5 rounded-md border grid place-items-center shrink-0",
+                      reviewedItems["item-2"]
+                        ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
+                        : "border-amber-500/30 bg-amber-500/20 text-amber-300"
+                    )}
+                  >
+                    {reviewedItems["item-2"] ? <Check size={11} /> : <span className="text-[9px] font-bold">?</span>}
+                  </span>
                 </div>
               </div>
-            );
-          })}
+
+              {/* Approval Bar */}
+              <div className="mt-3.5 pt-2.5 border-t border-white/5 flex items-center justify-between text-[11px]">
+                <span className="text-neutral-500 font-mono">Evidence linked: 2/2</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewStatus("approved");
+                    setReviewedItems({ "item-1": true, "item-2": true });
+                  }}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-xs font-medium transition flex items-center gap-1",
+                    reviewStatus === "approved"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : "bg-white text-black hover:bg-neutral-200"
+                  )}
+                >
+                  {reviewStatus === "approved" ? (
+                    <>
+                      <Check size={11} />
+                      <span>Approved</span>
+                    </>
+                  ) : (
+                    <span>Approve to Board</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4 text-xs text-neutral-400">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={13} className="text-emerald-400" />
-            <span>RLS Column Boundary: Assignees can update status column only.</span>
+        {/* =====================================================================
+            CARD 3 (BOTTOM LEFT): Global Edge Infrastructure (3D Animated Canvas Globe)
+            Span 5 on desktop (matching reference layout)
+            ===================================================================== */}
+        <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-white/10 bg-[#090a0f] p-7 sm:p-9 shadow-2xl relative overflow-hidden group hover:border-white/20 transition-all duration-300 min-h-[380px]">
+          {/* Top Text Description */}
+          <div className="relative z-10">
+            <h3 className="text-xl sm:text-2xl font-medium tracking-tight text-white">
+              Hosting over the edge
+            </h3>
+            <p className="mt-2 text-sm sm:text-base text-neutral-400 leading-relaxed font-normal">
+              With our zero-budget stack, we sync your workspaces via Supabase Postgres in Mumbai and client-side PWA edge cache.
+            </p>
           </div>
-          <span className="font-mono text-[11px] text-neutral-500">Live Postgres Sync</span>
+
+          {/* Bottom Visual: 3D Rotating Dot Globe */}
+          <div className="relative z-0 h-[220px] sm:h-[240px] -mx-7 -mb-7 sm:-mx-9 sm:-mb-9">
+            <AnimatedDotGlobe />
+          </div>
         </div>
-      </CardSpotlight>
+
+        {/* =====================================================================
+            CARD 4 (BOTTOM RIGHT): Real-Time Kanban Board (Wide Workspace Mockup)
+            Span 7 on desktop (wide card, matching reference layout)
+            ===================================================================== */}
+        <div className="lg:col-span-7 flex flex-col justify-between rounded-3xl border border-white/10 bg-[#090a0f] p-7 sm:p-9 shadow-2xl relative overflow-hidden group hover:border-white/20 transition-all duration-300 min-h-[380px]">
+          {/* Top Text Description */}
+          <div className="relative z-10">
+            <h3 className="text-xl sm:text-2xl font-medium tracking-tight text-white">
+              Real-time Kanban orchestration
+            </h3>
+            <p className="mt-2 text-sm sm:text-base text-neutral-400 leading-relaxed font-normal">
+              Move confirmed commitments into active sprint cycles with live Postgres sync, primary assignees, and Row-Level Security data policies.
+            </p>
+          </div>
+
+          {/* Bottom Visual: Mini Live Kanban Board Preview */}
+          <div className="relative z-10 mt-6 pt-2">
+            <div className="rounded-2xl border border-white/10 bg-[#121319] p-4 shadow-xl">
+              {/* Board mini navigation header */}
+              <div className="flex items-center justify-between pb-3 border-b border-white/5 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="size-2 rounded-full bg-emerald-400" />
+                  <span className="font-medium text-white">Sprint 1 Board</span>
+                  <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[9px] text-neutral-400">
+                    Live RLS
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-neutral-500 font-mono text-[10px]">
+                  <span>Click card to advance</span>
+                  <RefreshCw size={10} className="text-cyan-400 animate-spin" style={{ animationDuration: "8s" }} />
+                </div>
+              </div>
+
+              {/* 4 Interactive Kanban Columns */}
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {/* Column 1: To Do */}
+                <div className="rounded-xl border border-white/5 bg-black/40 p-2">
+                  <div className="flex items-center justify-between pb-1.5 text-[10px] text-neutral-400 border-b border-white/5">
+                    <span className="font-mono uppercase font-semibold">To Do</span>
+                    <span className="size-3.5 rounded-full bg-white/10 text-[9px] text-neutral-300 grid place-items-center">
+                      {kanbanTasks.filter((t) => t.status === "todo").length}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 space-y-1.5 min-h-[60px]">
+                    {kanbanTasks
+                      .filter((t) => t.status === "todo")
+                      .map((t) => (
+                        <motion.div
+                          key={t.id}
+                          layoutId={t.id}
+                          onClick={() => advanceKanbanTask(t.id)}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="rounded-lg border border-white/10 bg-[#16171e] p-1.5 cursor-pointer hover:border-cyan-500/40 transition shadow-sm"
+                        >
+                          <span className="font-mono text-[9px] text-cyan-400">{t.code}</span>
+                          <p className="text-[10px] font-normal text-white line-clamp-1">{t.title}</p>
+                        </motion.div>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Column 2: In Progress */}
+                <div className="rounded-xl border border-white/5 bg-black/40 p-2">
+                  <div className="flex items-center justify-between pb-1.5 text-[10px] text-amber-300 border-b border-white/5">
+                    <span className="font-mono uppercase font-semibold">In Prog</span>
+                    <span className="size-3.5 rounded-full bg-amber-500/20 text-[9px] text-amber-300 grid place-items-center">
+                      {kanbanTasks.filter((t) => t.status === "in_progress").length}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 space-y-1.5 min-h-[60px]">
+                    {kanbanTasks
+                      .filter((t) => t.status === "in_progress")
+                      .map((t) => (
+                        <motion.div
+                          key={t.id}
+                          layoutId={t.id}
+                          onClick={() => advanceKanbanTask(t.id)}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="rounded-lg border border-amber-500/30 bg-[#16171e] p-1.5 cursor-pointer hover:border-amber-400/50 transition shadow-sm"
+                        >
+                          <span className="font-mono text-[9px] text-amber-400">{t.code}</span>
+                          <p className="text-[10px] font-normal text-white line-clamp-1">{t.title}</p>
+                        </motion.div>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Column 3: Review */}
+                <div className="rounded-xl border border-white/5 bg-black/40 p-2">
+                  <div className="flex items-center justify-between pb-1.5 text-[10px] text-purple-300 border-b border-white/5">
+                    <span className="font-mono uppercase font-semibold">Review</span>
+                    <span className="size-3.5 rounded-full bg-purple-500/20 text-[9px] text-purple-300 grid place-items-center">
+                      {kanbanTasks.filter((t) => t.status === "review").length}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 space-y-1.5 min-h-[60px]">
+                    {kanbanTasks
+                      .filter((t) => t.status === "review")
+                      .map((t) => (
+                        <motion.div
+                          key={t.id}
+                          layoutId={t.id}
+                          onClick={() => advanceKanbanTask(t.id)}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="rounded-lg border border-purple-500/30 bg-[#16171e] p-1.5 cursor-pointer hover:border-purple-400/50 transition shadow-sm"
+                        >
+                          <span className="font-mono text-[9px] text-purple-400">{t.code}</span>
+                          <p className="text-[10px] font-normal text-white line-clamp-1">{t.title}</p>
+                        </motion.div>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Column 4: Done */}
+                <div className="rounded-xl border border-white/5 bg-black/40 p-2">
+                  <div className="flex items-center justify-between pb-1.5 text-[10px] text-emerald-300 border-b border-white/5">
+                    <span className="font-mono uppercase font-semibold">Done</span>
+                    <span className="size-3.5 rounded-full bg-emerald-500/20 text-[9px] text-emerald-300 grid place-items-center">
+                      {kanbanTasks.filter((t) => t.status === "done").length}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 space-y-1.5 min-h-[60px]">
+                    {kanbanTasks
+                      .filter((t) => t.status === "done")
+                      .map((t) => (
+                        <motion.div
+                          key={t.id}
+                          layoutId={t.id}
+                          onClick={() => advanceKanbanTask(t.id)}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="rounded-lg border border-emerald-500/30 bg-[#16171e] p-1.5 cursor-pointer hover:border-emerald-400/50 transition shadow-sm"
+                        >
+                          <span className="font-mono text-[9px] text-emerald-400">{t.code}</span>
+                          <p className="text-[10px] font-normal text-white line-clamp-1">{t.title}</p>
+                        </motion.div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
