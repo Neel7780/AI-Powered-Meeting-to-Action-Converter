@@ -13,8 +13,8 @@ function App() {
         <Route path="/" element={<ActionPulseLanding />} />
 
         <Route path="/login" element={<Login />} />
-
         <Route path="/signup" element={<Signup />} />
+        <Route path="/create-meeting" element={<Navigate to="/meetings" replace />} />
 
         <Route
           path="/dashboard"

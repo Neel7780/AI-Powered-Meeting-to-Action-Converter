@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, LockKeyhole, Mail, Menu, MessageSquare, Pencil, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SelectionList from "@/components/ui/SelectionList";
@@ -43,35 +44,6 @@ function SectionHeading({ eyebrow, title, description }: { eyebrow: string; titl
       <p className="mb-4 font-mono text-[11px] font-medium uppercase tracking-wider text-neutral-400">{eyebrow}</p>
       <h2 className="text-3xl font-semibold leading-tight text-white sm:text-4xl">{title}</h2>
       {description && <p className="mt-4 text-[15px] leading-7 text-neutral-400">{description}</p>}
-    </div>
-  );
-}
-
-function AccessDialog({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[100] grid place-items-center bg-black/85 px-4 backdrop-blur-md" onMouseDown={onClose} role="presentation">
-      <div role="dialog" aria-modal="true" aria-labelledby="access-title" onMouseDown={e => e.stopPropagation()} className="w-full max-w-md rounded-xl border border-white/15 bg-[#0a0a0c] p-6 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div className="grid size-10 place-items-center rounded-md border border-white/10 bg-neutral-900 text-white">
-            <LockKeyhole size={19}/>
-          </div>
-          <Button variant="ghost" size="icon" aria-label="Close dialog" onClick={onClose} className="text-neutral-400 hover:text-white">
-            <X/>
-          </Button>
-        </div>
-        <h2 id="access-title" className="mt-6 text-xl font-semibold text-white">Workspace access is coming later</h2>
-        <p className="mt-3 text-sm leading-6 text-neutral-400">
-          This is an interactive product preview. Sign in and workspace onboarding are not connected yet; you can explore the review flow below.
-        </p>
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Button onClick={() => { onClose(); document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" }); }}>
-            Explore the demo <ArrowRight/>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={repo} target="_blank" rel="noreferrer">View project <ArrowUpRight/></a>
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -289,8 +261,6 @@ function Demo() {
 
 export default function ActionPulseLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [accessOpen, setAccessOpen] = useState(false);
-  const access = () => setAccessOpen(true);
 
   return (
     <div id="top" className="min-h-screen bg-black text-white selection:bg-white selection:text-black">
@@ -306,8 +276,12 @@ export default function ActionPulseLanding() {
             ))}
           </nav>
           <div className="hidden items-center gap-3 md:flex">
-            <Button variant="ghost" size="sm" onClick={access}>Sign in</Button>
-            <Button size="sm" onClick={access}>Get started <ArrowRight/></Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/login">Sign in</Link>
+            </Button>
+            <Button size="sm" asChild>
+              <Link to="/signup">Get started <ArrowRight/></Link>
+            </Button>
           </div>
           <Button variant="ghost" size="icon" className="md:hidden text-white" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X/> : <Menu/>}
@@ -321,8 +295,12 @@ export default function ActionPulseLanding() {
               </a>
             ))}
             <div className="mt-2 flex gap-2 border-t border-white/10 pt-3">
-              <Button variant="outline" onClick={() => {setMenuOpen(false); access();}}>Sign in</Button>
-              <Button onClick={() => {setMenuOpen(false); access();}}>Get started</Button>
+              <Button variant="outline" asChild>
+                <Link to="/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
+              </Button>
+              <Button asChild>
+                <Link to="/signup" onClick={() => setMenuOpen(false)}>Get started</Link>
+              </Button>
             </div>
           </nav>
         )}
@@ -356,8 +334,8 @@ export default function ActionPulseLanding() {
               <Button size="lg" asChild>
                 <a href="#demo">Try the demo <ArrowDown/></a>
               </Button>
-              <Button variant="outline" size="lg" onClick={access}>
-                Get started <ArrowRight/>
+              <Button variant="outline" size="lg" asChild>
+                <Link to="/signup">Get started <ArrowRight/></Link>
               </Button>
             </div>
           </div>
@@ -725,7 +703,9 @@ export default function ActionPulseLanding() {
               Stop losing valuable commitments in meeting notes. Extract, review, and deliver with ActionPulse.
             </p>
             <div className="mt-7 flex flex-wrap justify-center gap-3">
-              <Button size="lg" onClick={access}>Get started <ArrowRight/></Button>
+              <Button size="lg" asChild>
+                <Link to="/signup">Get started <ArrowRight/></Link>
+              </Button>
               <Button variant="outline" size="lg" asChild>
                 <a href="#demo">Explore the demo <ArrowUpRight/></a>
               </Button>
@@ -753,8 +733,6 @@ export default function ActionPulseLanding() {
           </p>
         </div>
       </footer>
-
-      {accessOpen && <AccessDialog onClose={() => setAccessOpen(false)}/>}
     </div>
   );
 }
