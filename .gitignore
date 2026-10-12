@@ -22,6 +22,10 @@ dist/
 build/
 .next/
 out/
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
 
 # IDE & OS
 .DS_Store
