@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, LockKeyhole, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, CircleHelp, ClipboardCheck, Fingerprint, LockKeyhole, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SelectionList from "@/components/ui/SelectionList";
 import { Cover } from "@/components/ui/cover";
 import InteractiveProductWalkthrough from "@/components/landing/InteractiveProductWalkthrough";
+import InteractiveWorkflowPipeline from "@/components/landing/InteractiveWorkflowPipeline";
+import InteractiveBentoFeatures from "@/components/landing/InteractiveBentoFeatures";
+import InteractiveRoleMatrix from "@/components/landing/InteractiveRoleMatrix";
+import InteractiveArchitectureFlow from "@/components/landing/InteractiveArchitectureFlow";
 
 const repo = "https://github.com/Neel7780/AI-Powered-Meeting-to-Action-Converter";
 const nav = [
@@ -197,94 +201,14 @@ export default function ActionPulseLanding() {
         <section id="how-it-works" className="scroll-mt-20 border-b border-white/10 bg-black py-20 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <SectionHeading eyebrow="The workflow" title="From raw conversation to real progress." description="A clear handoff from AI-assisted extraction to human judgment and shared execution."/>
-            <div className="mt-12 grid gap-0 border-y border-white/10 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                {n:"01", title:"Capture", text:"Paste notes or upload .txt, .vtt, .srt, or .docx transcripts.", icon:Upload},
-                {n:"02", title:"Extract", text:"AI identifies tasks, deadlines, and potential owners from the transcript.", icon:Sparkles},
-                {n:"03", title:"Review", text:"Organisers verify, edit, approve, or reject every suggestion.", icon:ClipboardCheck},
-                {n:"04", title:"Execute", text:"Approved tasks move to the shared Kanban board and can notify assignees.", icon:ArrowRight}
-              ].map((step,i) => (
-                <div key={step.n} className={`relative px-5 py-7 bg-black ${i > 0 ? "border-t border-white/10 sm:border-t-0 sm:border-l" : ""} ${i === 2 ? "sm:border-t lg:border-t-0" : ""}`}>
-                  <div className="mb-8 flex items-center justify-between">
-                    <span className="font-mono text-xs text-neutral-400">{step.n} / 04</span>
-                    <step.icon size={17} className="text-neutral-500"/>
-                  </div>
-                  <h3 className="text-lg font-semibold text-white">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-neutral-400">{step.text}</p>
-                </div>
-              ))}
-            </div>
+            <InteractiveWorkflowPipeline />
           </div>
         </section>
 
         {/* Core Capabilities */}
         <section id="features" className="scroll-mt-20 mx-auto max-w-7xl bg-black px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
           <SectionHeading eyebrow="Core capabilities" title="Everything has a reason to be here." description="Keep the context, clarify the owner, and give your team a place to move the work forward."/>
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
-            <div className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6 md:col-span-2">
-              <div className="flex size-9 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white">
-                <Quote size={18}/>
-              </div>
-              <h3 className="mt-6 text-lg font-semibold text-white">Grounded action extraction</h3>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-neutral-400">Task, owner, and deadline are surfaced alongside the exact words that support the suggestion.</p>
-              <div className="mt-6 grid gap-2 rounded-md border border-white/10 bg-black p-4 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-                <div>
-                  <p className="font-mono text-[10px] uppercase text-neutral-500">Transcript</p>
-                  <p className="mt-2 text-xs leading-5 text-neutral-400">“I will fix the login bug on Safari by Wednesday.”</p>
-                </div>
-                <ArrowRight size={15} className="hidden text-white sm:block"/>
-                <div className="border-t border-white/10 pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-                  <p className="font-mono text-[10px] uppercase text-neutral-500">Structured action</p>
-                  <p className="mt-2 text-xs text-white">Fix Safari login bug <span className="text-neutral-500">· Rahul · Wednesday</span></p>
-                </div>
-              </div>
-            </div>
-
-            <div className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6">
-              <div className="flex size-9 items-center justify-center rounded-md border border-amber-500/20 bg-amber-500/10 text-amber-400">
-                <UserRound size={18}/>
-              </div>
-              <h3 className="mt-6 text-lg font-semibold text-white">Zero-guess ownership</h3>
-              <p className="mt-2 text-sm leading-6 text-neutral-400">Unclear or missing names stay unassigned until a person resolves them.</p>
-              <div className="mt-8 rounded-md border border-amber-500/25 bg-amber-500/5 p-3 font-mono text-xs text-amber-400">
-                owner: null <span className="ml-2 text-neutral-500">→ review required</span>
-              </div>
-            </div>
-
-            <div className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6">
-              <div className="flex size-9 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white">
-                <FileText size={18}/>
-              </div>
-              <h3 className="mt-6 text-lg font-semibold text-white">Flexible input</h3>
-              <p className="mt-2 text-sm leading-6 text-neutral-400">Bring the transcript you already have. No meeting bot required.</p>
-              <div className="mt-8 flex flex-wrap gap-2">
-                {["Paste", "TXT", "VTT", "SRT", "DOCX"].map(type => (
-                  <span key={type} className="rounded border border-white/15 bg-black px-2.5 py-1.5 font-mono text-[10px] text-neutral-300">{type}</span>
-                ))}
-              </div>
-            </div>
-
-            <div className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6 md:col-span-2">
-              <div className="flex size-9 items-center justify-center rounded-md border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
-                <GitBranch size={18}/>
-              </div>
-              <h3 className="mt-6 text-lg font-semibold text-white">Shared Kanban workspace</h3>
-              <p className="mt-2 text-sm leading-6 text-neutral-400">After approval, work has a visible place to live, with task sharing and notifications.</p>
-              <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {[
-                  {name:"To do",task:"Prepare onboarding flow"},
-                  {name:"In progress",task:"Fix Safari login bug"},
-                  {name:"Blocked",task:"Review vendor invoice"},
-                  {name:"Done",task:"Draft demo agenda"}
-                ].map(col => (
-                  <div key={col.name} className="min-w-0 rounded border border-white/10 bg-black p-2.5">
-                    <p className="mb-3 font-mono text-[10px] uppercase text-neutral-500">{col.name}</p>
-                    <div className="min-h-12 rounded border border-white/10 bg-[#0c0c0e] p-2 text-[11px] leading-4 text-neutral-400">{col.task}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <InteractiveBentoFeatures />
         </section>
 
         {/* Direct Notifications & Assignee Dispatch */}
@@ -392,22 +316,7 @@ export default function ActionPulseLanding() {
         {/* Workspace access */}
         <section className="mx-auto max-w-7xl bg-black px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
           <SectionHeading eyebrow="Workspace access" title="The right controls for every role." description="A shared space with clear responsibilities, not a one-size-fits-all permission model."/>
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
-            {[
-              {name:"Admin", icon:ShieldCheck, text:"Manage the workspace, members, permissions, and policies."},
-              {name:"Organiser", icon:ClipboardCheck, text:"Create meetings, process transcripts, review suggestions, and approve tasks."},
-              {name:"Member", icon:Users, text:"View relevant meetings, manage assigned work, and update task status."}
-            ].map(role => (
-              <div key={role.name} className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6">
-                <role.icon size={19} className="text-white"/>
-                <h3 className="mt-7 text-lg font-semibold text-white">{role.name}</h3>
-                <p className="mt-2 text-sm leading-6 text-neutral-400">{role.text}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-5 flex items-center gap-2 text-xs text-neutral-500">
-            <Fingerprint size={14}/> Workspace permissions are designed around Postgres Row-Level Security.
-          </p>
+          <InteractiveRoleMatrix />
         </section>
 
         {/* Security & privacy */}
@@ -448,27 +357,9 @@ export default function ActionPulseLanding() {
               </Button>
             </div>
           </div>
-          <div id="architecture-diagram" className="mt-12 grid gap-4 border border-white/10 bg-[#060608] p-4 sm:p-6 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-stretch">
-            {[
-              {step:"01 / INTERFACE", name:"Browser", detail:"React frontend", icon:Code2},
-              {step:"02 / API", name:"Application", detail:"FastAPI backend", icon:GitBranch},
-              {step:"03 / DATA", name:"Workspace data", detail:"Postgres · Auth · Storage · RLS", icon:LockKeyhole},
-              {step:"04 / AI", name:"Provider adapter", detail:"Gemini / Sarvam", icon:Sparkles}
-            ].map((item,i) => (
-              <div key={item.name} className="contents">
-                <div className="rounded-md border border-white/10 bg-black p-5">
-                  <item.icon size={18} className="text-white"/>
-                  <p className="mt-6 font-mono text-[10px] text-neutral-500">{item.step}</p>
-                  <h3 className="mt-2 text-sm font-semibold text-white">{item.name}</h3>
-                  <p className="mt-1 text-xs leading-5 text-neutral-400">{item.detail}</p>
-                </div>
-                {i < 3 && <ChevronRight size={18} className="mx-auto hidden self-center text-neutral-600 lg:block"/>}
-              </div>
-            ))}
+          <div id="architecture-diagram">
+            <InteractiveArchitectureFlow />
           </div>
-          <p className="mt-4 text-xs text-neutral-500">
-            Planned supporting services: email notifications · web push · WhatsApp sharing · audit logging · retention rules
-          </p>
         </section>
 
         {/* Closing CTA */}
