@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, LockKeyhole, Mail, Menu, MessageSquare, Pencil, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, LockKeyhole, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SelectionList from "@/components/ui/SelectionList";
 import { Cover } from "@/components/ui/cover";
+import InteractiveProductWalkthrough from "@/components/landing/InteractiveProductWalkthrough";
 
 const repo = "https://github.com/Neel7780/AI-Powered-Meeting-to-Action-Converter";
 const nav = [
@@ -11,20 +12,6 @@ const nav = [
   { label: "How it works", href: "#how-it-works" },
   { label: "Security", href: "#security" },
   { label: "Architecture", href: "#architecture" },
-];
-const transcript = [
-  { speaker: "Priya", time: "00:08", text: "The client demo is next Thursday.", id: "context" },
-  { speaker: "Rahul", time: "00:24", text: "I will fix the login bug on Safari by Wednesday.", id: "safari" },
-  { speaker: "Priya", time: "00:41", text: "Aman, can you prepare the revised onboarding flow by Friday?", id: "request" },
-  { speaker: "Aman", time: "00:49", text: "Sure, I'll have the onboarding flow ready by Friday.", id: "onboarding" },
-  { speaker: "Priya", time: "01:12", text: "Someone should update the README at some point.", id: "readme" },
-  { speaker: "Rahul", time: "01:28", text: "The vendor will send the invoice by the 5th.", id: "invoice" },
-];
-type Action = { id: string; title: string; owner: string; due: string; source: string; status: "review" | "approved" | "rejected" };
-const initialActions: Action[] = [
-  { id: "onboarding", title: "Prepare revised onboarding flow", owner: "Aman Shah", due: "Friday", source: "Aman: Sure, I'll have the onboarding flow ready by Friday.", status: "review" },
-  { id: "safari", title: "Fix Safari login bug", owner: "Rahul Mehta", due: "Wednesday", source: "Rahul: I will fix the login bug on Safari by Wednesday.", status: "review" },
-  { id: "readme", title: "Update the README", owner: "", due: "", source: "Priya: Someone should update the README at some point.", status: "review" },
 ];
 
 function Brand() {
@@ -48,216 +35,6 @@ function SectionHeading({ eyebrow, title, description }: { eyebrow: string; titl
   );
 }
 
-function Demo() {
-  const [actions, setActions] = useState(initialActions);
-  const [active, setActive] = useState<string | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [tab, setTab] = useState<"transcript" | "actions">("actions");
-  const [error, setError] = useState<string | null>(null);
-  const update = (id: string, patch: Partial<Action>) => setActions(items => items.map(item => item.id === id ? { ...item, ...patch } : item));
-  const approve = (item: Action) => {
-    if (!item.owner.trim()) { setEditing(item.id); setError(item.id); return; }
-    update(item.id, { status: "approved" }); setEditing(null); setError(null);
-  };
-
-  return (
-    <div id="demo" className="scroll-mt-24 linear-3d-card relative overflow-hidden rounded-xl border border-white/15 border-t-white/30 bg-[#060608]">
-      <div className="linear-rim-light" />
-      <div className="flex min-h-12 items-center justify-between gap-3 border-b border-white/10 bg-[#0a0a0d] px-4 sm:px-5">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex shrink-0 gap-1.5">
-            <i className="size-2 rounded-full bg-neutral-700"/>
-            <i className="size-2 rounded-full bg-neutral-700"/>
-            <i className="size-2 rounded-full bg-neutral-700"/>
-          </span>
-          <span className="h-4 w-px shrink-0 bg-white/10"/>
-          <span className="truncate text-xs font-medium text-neutral-300">
-            Product walkthrough <span className="text-neutral-600">/</span> Sprint planning
-          </span>
-        </div>
-        <div className="hidden shrink-0 items-center gap-2.5 sm:inline-flex">
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/5 border border-white/10 text-neutral-300 font-mono text-[10px]">
-            <Zap size={10} className="fill-white text-white"/> ActionPulse Grounded v1.0
-          </span>
-          <span className="flex -space-x-1.5">
-            <span className="grid size-5 place-items-center rounded-full border border-black bg-neutral-800 text-[9px] text-white">P</span>
-            <span className="grid size-5 place-items-center rounded-full border border-black bg-neutral-700 text-[9px] text-white">R</span>
-            <span className="grid size-5 place-items-center rounded-full border border-black bg-neutral-600 text-[9px] text-white">A</span>
-          </span>
-        </div>
-        <span className="shrink-0 rounded border border-white/15 bg-white/5 px-2 py-1 font-mono text-[10px] uppercase text-white font-medium">
-          Interactive demo
-        </span>
-      </div>
-
-      <div className="flex border-b border-white/10 lg:hidden" role="tablist" aria-label="Demo panels">
-        <Button variant="ghost" role="tab" aria-selected={tab === "transcript"} onClick={() => setTab("transcript")} className={`h-11 w-1/2 rounded-none border-b-2 ${tab === "transcript" ? "border-white text-white" : "border-transparent text-neutral-400"}`}>
-          Transcript
-        </Button>
-        <Button variant="ghost" role="tab" aria-selected={tab === "actions"} onClick={() => setTab("actions")} className={`h-11 w-1/2 rounded-none border-b-2 ${tab === "actions" ? "border-white text-white" : "border-transparent text-neutral-400"}`}>
-          Extracted actions
-        </Button>
-      </div>
-
-      <div className="grid lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
-        {/* Transcript Panel */}
-        <div className={`${tab === "transcript" ? "block" : "hidden"} lg:block lg:border-r border-white/10 bg-black`} role="tabpanel">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 bg-[#08080a]">
-            <div>
-              <p className="font-mono text-[10px] uppercase text-neutral-500">01 / Input</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">Meeting transcript</h3>
-            </div>
-            <FileText size={17} className="text-neutral-500"/>
-          </div>
-          <div className="min-h-[440px] space-y-1 p-3 sm:p-4 lg:min-h-[515px]">
-            {transcript.map(line => (
-              <div key={line.id} className={`rounded-md border px-3 py-3 transition-colors ${active === line.id ? "border-white/30 bg-white/5" : "border-transparent"}`}>
-                <div className="mb-1.5 flex items-center gap-2">
-                  <span className="text-xs font-medium text-white">{line.speaker}</span>
-                  <span className="font-mono text-[10px] text-neutral-500">{line.time}</span>
-                  {active === line.id && <span className="ml-auto font-mono text-[9px] uppercase text-white font-medium">Source matched</span>}
-                </div>
-                <p className="text-[13px] leading-5 text-neutral-400">“{line.text}”</p>
-              </div>
-            ))}
-          </div>
-          <div className="border-t border-white/10 px-5 py-3 font-mono text-[10px] text-neutral-500 bg-[#08080a]">
-            6 SEGMENTS <span className="mx-2">·</span> SAMPLE TRANSCRIPT
-          </div>
-        </div>
-
-        {/* Extracted Actions Panel */}
-        <div className={`${tab === "actions" ? "block" : "hidden"} lg:block bg-[#08080a]`} role="tabpanel">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 bg-[#0a0a0d]">
-            <div>
-              <p className="font-mono text-[10px] uppercase text-neutral-500">02 / Human review</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">AI extracted actions</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-white/10 bg-white/5 font-mono text-[10px] text-neutral-300">
-                <Sparkles size={11} className="text-white"/> Grounded Triplet
-              </span>
-              <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 font-mono text-[10px] text-amber-400">
-                {actions.filter(a => a.status === "review").length} to review
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-3 p-3 sm:p-4 lg:min-h-[515px]">
-            {actions.map(item => (
-              <article
-                key={item.id}
-                onMouseEnter={() => setActive(item.id)}
-                onMouseLeave={() => setActive(null)}
-                onFocus={() => setActive(item.id)}
-                className={`relative rounded-lg border p-4 transition-all duration-300 ${
-                  active === item.id 
-                    ? "border-white/50 bg-[#0f0f14] shadow-2xl shadow-black -translate-y-1 ring-1 ring-white/15" 
-                    : item.status === "approved" 
-                    ? "border-emerald-500/40 bg-[#0a0c0a]" 
-                    : item.id === "readme" && item.status === "review" 
-                    ? "border-amber-500/35 bg-[#0c0a06]" 
-                    : "border-white/10 bg-[#0a0a0c] hover:border-white/25 hover:-translate-y-0.5"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    {editing === item.id ? (
-                      <input
-                        aria-label="Task title"
-                        value={item.title}
-                        onChange={e => update(item.id, { title: e.target.value })}
-                        className="w-full rounded border border-white/20 bg-black px-2 py-1 text-sm text-white outline-none focus:border-white"
-                      />
-                    ) : (
-                      <h4 className="text-[13px] font-semibold text-white sm:text-sm">{item.title}</h4>
-                    )}
-                  </div>
-                  <span className={`shrink-0 rounded px-2 py-1 font-mono text-[9px] uppercase ${
-                    item.status === "approved" 
-                      ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400" 
-                      : item.status === "rejected" 
-                      ? "bg-red-500/10 border border-red-500/30 text-red-400" 
-                      : "bg-amber-500/10 border border-amber-500/30 text-amber-400"
-                  }`}>
-                    {item.status === "review" ? "Needs review" : item.status}
-                  </span>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                  <label className="flex items-center gap-1.5 text-neutral-400">
-                    <UserRound size={12} className="text-neutral-500"/> Owner:{" "}
-                    {editing === item.id ? (
-                      <input
-                        aria-label="Owner"
-                        placeholder="Assign owner"
-                        value={item.owner}
-                        onChange={e => { update(item.id, { owner: e.target.value }); setError(null); }}
-                        className="w-28 rounded border border-white/20 bg-black px-1.5 py-1 text-white outline-none focus:border-white"
-                      />
-                    ) : (
-                      <span className={item.owner ? "text-white" : "text-amber-400 font-medium"}>{item.owner || "Unassigned"}</span>
-                    )}
-                  </label>
-                  <label className="flex items-center gap-1.5 text-neutral-400">
-                    <span className="font-mono text-[11px] text-neutral-500">↳</span> Due:{" "}
-                    {editing === item.id ? (
-                      <input
-                        aria-label="Deadline"
-                        placeholder="Set deadline"
-                        value={item.due}
-                        onChange={e => update(item.id, { due: e.target.value })}
-                        className="w-24 rounded border border-white/20 bg-black px-1.5 py-1 text-white outline-none focus:border-white"
-                      />
-                    ) : (
-                      <span className="text-white">{item.due || "Not specified"}</span>
-                    )}
-                  </label>
-                </div>
-
-                {!item.owner && item.status === "review" && (
-                  <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-400">
-                    <CircleHelp size={12}/> {error === item.id ? "Assign an owner before approving" : "Owner could not be determined from transcript"}
-                  </p>
-                )}
-
-                <div className="mt-3 border-l-2 border-emerald-500/40 pl-2.5 text-[11px] leading-5 text-neutral-400">
-                  <span className="mr-1 font-mono text-[10px] text-emerald-400">SOURCE</span> “{item.source}”
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
-                  {item.status === "review" ? (
-                    <>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-neutral-400 hover:text-red-400" onClick={() => { update(item.id, { status: "rejected" }); setEditing(null); }}>
-                          Reject
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-neutral-400 hover:text-white" onClick={() => { setEditing(editing === item.id ? null : item.id); setError(null); }}>
-                          <Pencil size={12}/> {editing === item.id ? "Cancel" : "Edit"}
-                        </Button>
-                      </div>
-                      <Button size="sm" className="h-7 px-3 bg-white text-black hover:bg-neutral-200" onClick={() => approve(item)}>
-                        <Check size={13}/>{!item.owner ? "Assign & approve" : "Approve"}
-                      </Button>
-                    </>
-                  ) : (
-                    <span className={`flex items-center gap-1.5 text-xs ${item.status === "approved" ? "text-emerald-400 font-medium" : "text-red-400 font-medium"}`}>
-                      {item.status === "approved" ? (
-                        <><CheckCircle2 size={14}/> Committed to Kanban <span className="text-neutral-500">· demo only</span></>
-                      ) : (
-                        <><X size={14}/> Suggestion rejected</>
-                      )}
-                    </span>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function ActionPulseLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -354,7 +131,7 @@ export default function ActionPulseLanding() {
               <p className="font-mono text-[10px] text-neutral-500">SAMPLE MEETING / NOT SAVED</p>
             </div>
 
-            <Demo/>
+            <InteractiveProductWalkthrough/>
 
             <div className="relative z-10 mt-6 flex flex-wrap items-center justify-center gap-x-7 gap-y-2 font-mono text-[10px] uppercase text-neutral-500">
               <span>01 Transcript</span>
