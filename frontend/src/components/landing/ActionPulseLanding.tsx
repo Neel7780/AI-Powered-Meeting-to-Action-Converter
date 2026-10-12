@@ -48,35 +48,6 @@ function SectionHeading({ eyebrow, title, description }: { eyebrow: string; titl
   );
 }
 
-function AccessDialog({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-[100] grid place-items-center bg-black/85 px-4 backdrop-blur-md" onMouseDown={onClose} role="presentation">
-      <div role="dialog" aria-modal="true" aria-labelledby="access-title" onMouseDown={e => e.stopPropagation()} className="w-full max-w-md rounded-xl border border-white/15 bg-[#0a0a0c] p-6 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div className="grid size-10 place-items-center rounded-md border border-white/10 bg-neutral-900 text-white">
-            <LockKeyhole size={19}/>
-          </div>
-          <Button variant="ghost" size="icon" aria-label="Close dialog" onClick={onClose} className="text-neutral-400 hover:text-white">
-            <X/>
-          </Button>
-        </div>
-        <h2 id="access-title" className="mt-6 text-xl font-semibold text-white">Workspace access is coming later</h2>
-        <p className="mt-3 text-sm leading-6 text-neutral-400">
-          This is an interactive product preview. Sign in and workspace onboarding are not connected yet; you can explore the review flow below.
-        </p>
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Button onClick={() => { onClose(); document.getElementById("demo")?.scrollIntoView({ behavior: "smooth" }); }}>
-            Explore the demo <ArrowRight/>
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={repo} target="_blank" rel="noreferrer">View project <ArrowUpRight/></a>
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Demo() {
   const [actions, setActions] = useState(initialActions);
   const [active, setActive] = useState<string | null>(null);
@@ -290,8 +261,6 @@ function Demo() {
 
 export default function ActionPulseLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [accessOpen, setAccessOpen] = useState(false);
-  const access = () => setAccessOpen(true);
 
   return (
     <div id="top" className="min-h-screen bg-black text-white selection:bg-white selection:text-black">
@@ -365,8 +334,8 @@ export default function ActionPulseLanding() {
               <Button size="lg" asChild>
                 <a href="#demo">Try the demo <ArrowDown/></a>
               </Button>
-              <Button variant="outline" size="lg" onClick={access}>
-                Get started <ArrowRight/>
+              <Button variant="outline" size="lg" asChild>
+                <Link to="/signup">Get started <ArrowRight/></Link>
               </Button>
             </div>
           </div>
@@ -734,7 +703,9 @@ export default function ActionPulseLanding() {
               Stop losing valuable commitments in meeting notes. Extract, review, and deliver with ActionPulse.
             </p>
             <div className="mt-7 flex flex-wrap justify-center gap-3">
-              <Button size="lg" onClick={access}>Get started <ArrowRight/></Button>
+              <Button size="lg" asChild>
+                <Link to="/signup">Get started <ArrowRight/></Link>
+              </Button>
               <Button variant="outline" size="lg" asChild>
                 <a href="#demo">Explore the demo <ArrowUpRight/></a>
               </Button>
@@ -762,8 +733,6 @@ export default function ActionPulseLanding() {
           </p>
         </div>
       </footer>
-
-      {accessOpen && <AccessDialog onClose={() => setAccessOpen(false)}/>}
     </div>
   );
 }

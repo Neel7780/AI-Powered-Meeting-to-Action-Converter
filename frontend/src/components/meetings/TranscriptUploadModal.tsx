@@ -3,7 +3,7 @@ import { uploadTranscriptFile, uploadTranscriptText } from '../../services/stora
 import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface TranscriptUploadModalProps {
-  workspaceId: string;
+  workspaceId?: string;
   meetingId: string;
   onUploadSuccess: (path: string) => void;
 }
@@ -48,6 +48,12 @@ export function TranscriptUploadModal({ workspaceId, meetingId, onUploadSuccess 
   };
 
   const handleSubmit = async () => {
+    if (!workspaceId) {
+      setStatus('error');
+      setErrorMessage('Please select or create a workspace before uploading.');
+      return;
+    }
+
     setIsUploading(true);
     setStatus('idle');
     setErrorMessage('');

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { TimezoneSelector } from '../components/meetings/TimezoneSelector';
 import { TranscriptUploadModal } from '../components/meetings/TranscriptUploadModal';
 
@@ -8,9 +9,9 @@ export function CreateMeeting() {
   const [timezone, setTimezone] = useState('');
   const [participants, setParticipants] = useState<string>('');
   
-  // For demo purposes, simulating workspace/meeting IDs
-  const workspaceId = 'default-workspace';
-  const [meetingId] = useState(() => `mtg_${Date.now()}`);
+  const { currentWorkspace } = useWorkspace();
+  const workspaceId = currentWorkspace?.id;
+  const [meetingId] = useState(() => crypto.randomUUID());
 
   const handleUploadSuccess = (path: string) => {
     console.log('Transcript uploaded to:', path);
@@ -18,75 +19,78 @@ export function CreateMeeting() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-8">
-      <div className="max-w-3xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Create Meeting</h1>
-          <p className="text-muted-foreground mt-2">
-            Schedule a new meeting and upload transcripts to generate actionable insights.
-          </p>
-        </div>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Create Meeting</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          Schedule a new meeting and upload transcripts to generate actionable insights.
+        </p>
+      </div>
 
-        <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-          <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="space-y-6">
+          <div className="space-y-1.5">
+            <label htmlFor="title" className="text-sm font-semibold text-slate-700">
+              Meeting Title
+            </label>
+            <input
+              id="title"
+              type="text"
+              placeholder="e.g. Q3 Roadmap Planning"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
-              <label htmlFor="title" className="text-sm font-medium">
-                Meeting Title
+              <label htmlFor="date" className="text-sm font-semibold text-slate-700">
+                Date & Time
               </label>
               <input
-                id="title"
-                type="text"
-                placeholder="e.g. Q3 Roadmap Planning"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-border bg-input px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                id="date"
+                type="datetime-local"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-1.5">
-                <label htmlFor="date" className="text-sm font-medium">
-                  Date & Time
-                </label>
-                <input
-                  id="date"
-                  type="datetime-local"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-border bg-input px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [color-scheme:dark]"
-                />
-              </div>
+            <TimezoneSelector 
+              value={timezone} 
+              onChange={setTimezone} 
+            />
+          </div>
 
-              <TimezoneSelector 
-                value={timezone} 
-                onChange={setTimezone} 
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label htmlFor="participants" className="text-sm font-medium">
-                Participants (comma-separated tags)
-              </label>
-              <input
-                id="participants"
-                type="text"
-                placeholder="e.g. alice@example.com, bob@example.com"
-                value={participants}
-                onChange={(e) => setParticipants(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-border bg-input px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <label htmlFor="participants" className="text-sm font-semibold text-slate-700">
+              Participants (comma-separated tags)
+            </label>
+            <input
+              id="participants"
+              type="text"
+              placeholder="e.g. alice@example.com, bob@example.com"
+              value={participants}
+              onChange={(e) => setParticipants(e.target.value)}
+              className="flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
           </div>
         </div>
+      </div>
 
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold tracking-tight">Ingest Transcript</h2>
-          <TranscriptUploadModal 
-            workspaceId={workspaceId}
-            meetingId={meetingId}
-            onUploadSuccess={handleUploadSuccess}
-          />
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">Ingest Transcript</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Upload meeting audio transcripts (.txt, .vtt, .srt, .docx) to extract action items.
+          </p>
         </div>
+        <TranscriptUploadModal 
+          workspaceId={workspaceId}
+          meetingId={meetingId}
+          onUploadSuccess={handleUploadSuccess}
+        />
       </div>
     </div>
   );
