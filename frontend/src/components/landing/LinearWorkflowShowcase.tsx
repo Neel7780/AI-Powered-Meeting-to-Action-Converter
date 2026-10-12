@@ -36,45 +36,45 @@ interface IssueCardData {
 }
 
 const allIssues: IssueCardData[] = [
-  // Far Left Backlog (peeking from the left tail as in Linear screenshot)
+  // Far Left Backlog (peeking from the left tail)
   {
     id: "act-910",
     code: "ACT-910",
-    title: "vehicle_state_sync every time...",
+    title: "Ingest raw Zoom & Meet audio transcripts",
     priority: "medium",
-    tag: "Sync",
+    tag: "Ingest",
     tagColor: "bg-blue-400",
-    assignee: "Andreas",
+    assignee: "Ananya",
     column: "backlog",
   },
   {
     id: "act-911",
     code: "ACT-911",
-    title: "Optimized socket streams",
+    title: "Parse WebVTT & SRT timestamp cues",
     priority: "medium",
-    tag: "Core",
+    tag: "Parser",
     tagColor: "bg-indigo-400",
-    assignee: "Karri",
+    assignee: "Rahul",
     column: "backlog",
   },
   {
     id: "act-912",
     code: "ACT-912",
-    title: "Realtime client telemetry sync",
+    title: "Realtime Supabase task board channel",
     priority: "medium",
-    tag: "Telemetry",
+    tag: "Sync",
     tagColor: "bg-cyan-400",
-    assignee: "Liam",
+    assignee: "Priya",
     column: "backlog",
   },
   {
     id: "act-913",
     code: "ACT-913",
-    title: "Dynamic websocket rerouting",
+    title: "Cache offline meeting queue in IndexedDB",
     priority: "medium",
-    tag: "Network",
+    tag: "Offline",
     tagColor: "bg-neutral-400",
-    assignee: "Elena",
+    assignee: "Aman",
     column: "backlog",
   },
 
@@ -82,51 +82,51 @@ const allIssues: IssueCardData[] = [
   {
     id: "act-2704",
     code: "ACT-2704",
-    title: "Track iOS startup performance",
+    title: "Patch Safari auth session cookies",
     priority: "urgent",
-    tag: "Analytics",
+    tag: "Auth",
     tagColor: "bg-blue-400",
-    assignee: "Andreas",
+    assignee: "Rahul",
     column: "todo",
   },
   {
     id: "act-2703",
     code: "ACT-2703",
-    title: "Faster app launch",
+    title: "Wrap transcript parser in XML delimiter guards",
     priority: "urgent",
-    tag: "Performance",
+    tag: "Security",
     tagColor: "bg-amber-400",
-    assignee: "Karri",
+    assignee: "Priya",
     column: "todo",
   },
   {
     id: "act-926",
     code: "ACT-926",
-    title: "Remove UI inconsistencies",
+    title: "Surface ambiguous owners for organiser review",
     priority: "medium",
-    tag: "Bug",
-    tagColor: "bg-rose-400",
-    assignee: "Priya",
-    column: "todo",
-  },
-  {
-    id: "act-2088",
-    code: "ACT-2088",
-    title: "TypeError: Cannot read properties",
-    priority: "medium",
-    tag: "Bug",
+    tag: "Triage",
     tagColor: "bg-rose-400",
     assignee: "Aman",
     column: "todo",
   },
   {
+    id: "act-2088",
+    code: "ACT-2088",
+    title: "Enforce Postgres RLS on task mutations",
+    priority: "medium",
+    tag: "Compliance",
+    tagColor: "bg-rose-400",
+    assignee: "Neha",
+    column: "todo",
+  },
+  {
     id: "act-924",
     code: "ACT-924",
-    title: "Upgrade to Claude Opus 5",
+    title: "Benchmark Gemini 3.1 Flash-Lite extraction",
     priority: "high",
-    tag: "AI",
+    tag: "AI Engine",
     tagColor: "bg-purple-400",
-    assignee: "Rahul",
+    assignee: "Rohan",
     column: "todo",
   },
 
@@ -134,53 +134,53 @@ const allIssues: IssueCardData[] = [
   {
     id: "act-1487",
     code: "ACT-1487",
-    title: "Remove contentData from GraphQL API",
+    title: "Generate 1-tap WhatsApp wa.me action links",
     priority: "high",
-    tag: "Backend",
+    tag: "WhatsApp",
     tagColor: "bg-purple-400",
-    assignee: "Elena",
+    assignee: "Ananya",
     column: "in_progress",
-    prNumber: "61039",
+    prNumber: "102",
   },
   {
     id: "act-1028",
     code: "ACT-1028",
-    title: "Launch page assets",
+    title: "Automated SMTP daily digest email template",
     priority: "medium",
-    tag: "Design",
+    tag: "Email",
     tagColor: "bg-cyan-400",
-    assignee: "Sora",
+    assignee: "Aman",
     column: "in_progress",
   },
   {
     id: "act-2187",
     code: "ACT-2187",
-    title: "Prevent duplicate ride requests on poor...",
+    title: "Enforce human organiser approval review gate",
     priority: "high",
-    tag: "Bug",
+    tag: "Review",
     tagColor: "bg-rose-400",
-    assignee: "Dev",
+    assignee: "Priya",
     column: "in_progress",
-    prNumber: "62048",
+    prNumber: "108",
   },
 
   // Done Column (Right Tail - fades smoothly)
   {
     id: "act-2074",
     code: "ACT-2074",
-    title: "Clean up deprecated endpoints",
+    title: "Deploy FastAPI backend on Render Free tier",
     priority: "medium",
-    tag: "API",
+    tag: "Backend",
     tagColor: "bg-neutral-400",
-    assignee: "Liam",
+    assignee: "Rahul",
     column: "done",
   },
   {
     id: "act-1912",
     code: "ACT-1912",
-    title: "Reduce latency on Gemini prompt",
+    title: "Ground task extraction with verbatim quotes",
     priority: "high",
-    tag: "AI",
+    tag: "AI Engine",
     tagColor: "bg-emerald-400",
     assignee: "Priya",
     column: "done",
@@ -188,21 +188,21 @@ const allIssues: IssueCardData[] = [
   {
     id: "act-1951",
     code: "ACT-1951",
-    title: "Reduce ETA calculation lag",
+    title: "Multi-tenant workspace isolation RPC",
     priority: "medium",
-    tag: "Performance",
+    tag: "Database",
     tagColor: "bg-amber-400",
-    assignee: "Andreas",
+    assignee: "Aman",
     column: "done",
   },
   {
     id: "act-1960",
     code: "ACT-1960",
-    title: "Improve fallback offline queue",
+    title: "Client-side transcript chunking & upload",
     priority: "medium",
-    tag: "Offline",
+    tag: "Ingest",
     tagColor: "bg-blue-400",
-    assignee: "Karri",
+    assignee: "Neha",
     column: "done",
   },
 ];
@@ -234,18 +234,18 @@ export default function LinearWorkflowShowcase() {
       <div className="grid gap-6 md:grid-cols-2 md:items-start lg:gap-16">
         <div>
           <h2 className="text-4xl sm:text-5xl lg:text-6xl font-medium tracking-tight text-white leading-[1.08]">
-            Intake and<br />integrations
+            Meeting intake &<br />action extraction
           </h2>
         </div>
         <div className="max-w-xl md:pt-2">
           <p className="text-base sm:text-lg text-neutral-400 leading-relaxed font-normal">
-            Automatically turn conversations and customer feedback into actionable issues that are instantly routed, labeled, and prioritized for the right team.
+            Automatically turn meeting transcripts and conversation notes into verified team tasks that are grounded in verbatim quotes, reviewed by organisers, and dispatched in one tap.
           </p>
           <a
             href="#demo"
             className="mt-4 inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-white transition-colors group font-normal"
           >
-            <span>Learn more</span>
+            <span>Explore live demo</span>
             <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
           </a>
         </div>
@@ -329,15 +329,15 @@ export default function LinearWorkflowShowcase() {
                 >
                   <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400">
                     <span>ACT-3105</span>
-                    <span className="size-4 rounded-full bg-indigo-500/30 text-[9px] text-indigo-300 grid place-items-center">
-                      R
+                    <span className="size-4 rounded-full bg-cyan-500/30 text-[9px] text-cyan-300 grid place-items-center">
+                      A
                     </span>
                   </div>
-                  <p className="mt-1 text-xs font-medium text-white">Optimize database RPC latency</p>
+                  <p className="mt-1 text-xs font-medium text-white">Configure Gmail SMTP digest alerts</p>
                   <div className="mt-2.5 flex items-center gap-1.5 text-[10px]">
-                    <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-rose-300 font-bold">!</span>
+                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-300 font-bold">!</span>
                     <span className="inline-flex items-center gap-1 rounded bg-white/5 px-2 py-0.5 text-neutral-300">
-                      <span className="size-1.5 rounded-full bg-emerald-400" /> Database
+                      <span className="size-1.5 rounded-full bg-cyan-400" /> Email
                     </span>
                   </div>
                 </motion.div>
@@ -486,8 +486,8 @@ export default function LinearWorkflowShowcase() {
           <div className="flex items-center justify-between border-b border-white/10 pb-3">
             <div className="flex items-center gap-2 text-xs font-medium text-white">
               <Hash size={14} className="text-neutral-400" />
-              <span className="font-semibold">Thread</span>
-              <span className="text-neutral-400 font-normal">#product</span>
+              <span className="font-semibold">Meeting Sync</span>
+              <span className="text-neutral-400 font-normal">#weekly-standup</span>
             </div>
             <button
               type="button"
@@ -500,57 +500,57 @@ export default function LinearWorkflowShowcase() {
 
           {/* Chat Messages Body */}
           <div className="mt-4 space-y-4 text-xs">
-            {/* Message 1: Andreas */}
+            {/* Message 1: Rahul */}
             <div className="flex items-start gap-3">
               <div className="size-7 shrink-0 rounded-full bg-neutral-700 overflow-hidden ring-1 ring-white/10">
-                <div className="size-full bg-gradient-to-tr from-amber-700 to-amber-500 text-black font-bold text-[10px] grid place-items-center">
-                  A
+                <div className="size-full bg-gradient-to-tr from-blue-700 to-indigo-500 text-white font-bold text-[10px] grid place-items-center">
+                  R
                 </div>
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <span className="font-semibold text-white">andreas</span>
+                  <span className="font-semibold text-white">rahul</span>
                   <span className="font-mono text-[10px] text-neutral-500">4:31 PM</span>
                 </div>
                 <p className="mt-1 leading-relaxed text-neutral-300 font-normal">
-                  Feels like we could render sooner and load the rest in the background. Probably also worth tracking startup timing so we know how often this happens!
+                  I will patch the Safari auth cookie refresh bug before Wednesday’s demo. Priya, let's wrap the transcript parser in XML delimiter guards so prompt injections can't hijack our Gemini model.
                 </p>
               </div>
             </div>
 
-            {/* Message 2: Karri */}
+            {/* Message 2: Priya */}
             <div className="flex items-start gap-3">
               <div className="size-7 shrink-0 rounded-full bg-neutral-700 overflow-hidden ring-1 ring-white/10">
-                <div className="size-full bg-gradient-to-tr from-blue-700 to-cyan-500 text-white font-bold text-[10px] grid place-items-center">
-                  K
+                <div className="size-full bg-gradient-to-tr from-purple-700 to-pink-500 text-white font-bold text-[10px] grid place-items-center">
+                  P
                 </div>
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <span className="font-semibold text-white">karri</span>
+                  <span className="font-semibold text-white">priya</span>
                   <span className="font-mono text-[10px] text-neutral-500">4:48 PM</span>
                 </div>
                 <p className="mt-1 text-neutral-200">
-                  <span className="text-blue-400 font-medium">@Linear</span> create issues and assign to me
+                  <span className="text-emerald-400 font-medium">@ActionPulse</span> extract action items with verbatim quotes
                 </p>
               </div>
             </div>
 
-            {/* Message 3: Linear Bot Reply */}
+            {/* Message 3: ActionPulse Bot Reply */}
             <div className="flex items-start gap-3">
               <div className="size-7 shrink-0 rounded-lg border border-white/20 bg-white text-black font-bold text-[10px] grid place-items-center shadow-md">
                 <Zap size={13} fill="currentColor" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-white">Linear</span>
-                  <span className="rounded bg-white/10 px-1 py-0.2 font-mono text-[9px] uppercase text-neutral-300 font-bold">
-                    APP
+                  <span className="font-semibold text-white">ActionPulse</span>
+                  <span className="rounded bg-emerald-500/20 px-1 py-0.2 font-mono text-[9px] uppercase text-emerald-300 font-bold">
+                    AI AGENT
                   </span>
                   <span className="font-mono text-[10px] text-neutral-500 ml-1">4:48 PM</span>
                 </div>
 
-                <p className="mt-1.5 text-neutral-300 font-normal">Created 2 issues:</p>
+                <p className="mt-1.5 text-neutral-300 font-normal">Extracted 2 candidate actions:</p>
 
                 <div className="mt-2 space-y-1.5">
                   <button
@@ -559,14 +559,14 @@ export default function LinearWorkflowShowcase() {
                     className={cn(
                       "flex w-full items-center justify-between rounded-md border p-2 text-left font-mono text-[11px] transition",
                       highlightedCode === "ACT-2703"
-                        ? "border-blue-500/50 bg-blue-500/15 text-blue-200"
+                        ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-200"
                         : "border-white/10 bg-black/40 text-neutral-300 hover:border-white/20 hover:text-white"
                     )}
                   >
                     <span className="truncate">
-                      • <strong className="text-white">ENG-2703</strong> Faster app launch
+                      • <strong className="text-white">ACT-2703</strong> Wrap transcript parser in XML guards
                     </span>
-                    <ArrowRight size={11} className="text-blue-400 shrink-0 ml-1" />
+                    <ArrowRight size={11} className="text-emerald-400 shrink-0 ml-1" />
                   </button>
 
                   <button
@@ -580,7 +580,7 @@ export default function LinearWorkflowShowcase() {
                     )}
                   >
                     <span className="truncate">
-                      • <strong className="text-white">ENG-2704</strong> Track iOS startup performance
+                      • <strong className="text-white">ACT-2704</strong> Patch Safari auth session cookies
                     </span>
                     <ArrowRight size={11} className="text-blue-400 shrink-0 ml-1" />
                   </button>
@@ -592,7 +592,7 @@ export default function LinearWorkflowShowcase() {
                       className="flex w-full items-center justify-between rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 font-mono text-[11px] text-emerald-300"
                     >
                       <span className="truncate">
-                        • <strong className="text-white">ENG-3105</strong> Optimize database RPC latency
+                        • <strong className="text-white">ACT-3105</strong> Configure Gmail SMTP digest alerts
                       </span>
                       <Check size={11} className="text-emerald-400 shrink-0 ml-1" />
                     </motion.div>
@@ -607,7 +607,7 @@ export default function LinearWorkflowShowcase() {
             <div className="flex items-center justify-between">
               <input
                 type="text"
-                placeholder="Reply..."
+                placeholder="Ask @ActionPulse or add meeting note..."
                 value={customInput}
                 onChange={(e) => setCustomInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -619,10 +619,10 @@ export default function LinearWorkflowShowcase() {
                 className="w-full bg-transparent text-xs text-white placeholder-neutral-500 outline-none"
               />
 
-              {/* Grammar/Assistant Indicator Badge as in Linear screenshot */}
+              {/* Grammar/Assistant Indicator Badge */}
               <div className="flex items-center gap-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 px-1.5 py-0.5 text-emerald-400 text-[9px] font-bold">
                 <span>✦</span>
-                <span>G</span>
+                <span>AI</span>
               </div>
             </div>
 
@@ -692,10 +692,10 @@ export default function LinearWorkflowShowcase() {
         </motion.div>
       </div>
 
-      {/* 3. Bottom Features Switcher Row (Directly matching Linear screenshot, unboxed on page canvas) */}
+      {/* 3. Bottom Features Switcher Row (Unboxed on page canvas) */}
       <div className="mt-8 flex flex-wrap items-center gap-x-12 gap-y-6 pt-4 text-xs font-normal">
         {/* Left 'Features' label */}
-        <span className="text-neutral-500 font-normal text-xs">Features</span>
+        <span className="text-neutral-500 font-normal text-xs">Capabilities</span>
 
         {/* Feature Groups separated with vertical divider */}
         <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
@@ -712,7 +712,7 @@ export default function LinearWorkflowShowcase() {
                 activeTab === "agent" ? "text-white font-medium" : "text-neutral-400 hover:text-neutral-200"
               )}
             >
-              <span>Linear Agent</span>
+              <span>ActionPulse AI</span>
               <span className="text-neutral-500 font-light text-[11px]">+</span>
             </button>
             <button
@@ -726,12 +726,12 @@ export default function LinearWorkflowShowcase() {
                 activeTab === "triage" ? "text-white font-medium" : "text-neutral-400 hover:text-neutral-200"
               )}
             >
-              <span>Triage</span>
+              <span>Organiser Triage</span>
               <span className="text-neutral-500 font-light text-[11px]">+</span>
             </button>
           </div>
 
-          {/* Thin Vertical Separator Line as in Linear screenshot */}
+          {/* Thin Vertical Separator Line */}
           <div className="h-10 w-px bg-white/10 hidden sm:block" />
 
           {/* Group 2 */}
@@ -747,7 +747,7 @@ export default function LinearWorkflowShowcase() {
                 activeTab === "intake" ? "text-white font-medium" : "text-neutral-400 hover:text-neutral-200"
               )}
             >
-              <span>Customer Requests</span>
+              <span>Universal Ingest</span>
               <span className="text-neutral-500 font-light text-[11px]">+</span>
             </button>
             <button
@@ -761,7 +761,7 @@ export default function LinearWorkflowShowcase() {
                 activeTab === "dispatch" ? "text-white font-medium" : "text-neutral-400 hover:text-neutral-200"
               )}
             >
-              <span>Linear Asks</span>
+              <span>Instant Dispatch</span>
               <span className="text-neutral-500 font-light text-[11px]">+</span>
             </button>
           </div>
@@ -776,12 +776,12 @@ export default function LinearWorkflowShowcase() {
             exit={{ opacity: 0, x: -5 }}
             className="ml-auto hidden xl:flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.03] px-3 py-1 text-[11px] text-neutral-400"
           >
-            <span className="size-1.5 rounded-full bg-blue-400" />
+            <span className="size-1.5 rounded-full bg-emerald-400" />
             <span>
-              {activeTab === "agent" && "Agent extracts tasks from conversational threads directly into issues."}
-              {activeTab === "triage" && "Triage review gate verifies assignees before moving into active sprint cycles."}
-              {activeTab === "intake" && "Universal intake converts client chats, transcripts, and tickets."}
-              {activeTab === "dispatch" && "Linear Asks connects team communication channels to product tracking."}
+              {activeTab === "agent" && "Gemini 3.1 Flash-Lite grounds extraction with verbatim quotes and zero hallucinated owners."}
+              {activeTab === "triage" && "Organiser human review gate verifies owner assignments and uncertainty flags before syncing."}
+              {activeTab === "intake" && "Universal intake parses Google Meet, Zoom, Teams, VTT, SRT, DOCX, and raw transcript audio."}
+              {activeTab === "dispatch" && "1-tap WhatsApp wa.me action links and automated SMTP email digests notify assignees instantly."}
             </span>
           </motion.div>
         </AnimatePresence>
