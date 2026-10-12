@@ -31,10 +31,10 @@ function Brand() {
 
 function SectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description?: string }) {
   return (
-    <div className="max-w-2xl">
-      <p className="mb-4 font-mono text-[11px] font-medium uppercase tracking-wider text-neutral-400">{eyebrow}</p>
-      <h2 className="text-3xl font-semibold leading-tight text-white sm:text-4xl">{title}</h2>
-      {description && <p className="mt-4 text-[15px] leading-7 text-neutral-400">{description}</p>}
+    <div className="max-w-3xl">
+      <p className="mb-3 font-mono text-[11px] font-medium uppercase tracking-wider text-neutral-400">{eyebrow}</p>
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-[1.08]">{title}</h2>
+      {description && <p className="mt-4 text-base sm:text-lg text-neutral-400 leading-relaxed font-normal">{description}</p>}
     </div>
   );
 }
@@ -97,7 +97,7 @@ export default function ActionPulseLanding() {
             <span className="inline-flex items-center gap-2 rounded border border-white/15 bg-white/5 px-3 py-1.5 font-mono text-[10px] font-medium uppercase text-neutral-300">
               <Sparkles size={12}/> AI-powered meeting intelligence
             </span>
-            <h1 className="mt-7 text-[42px] font-semibold leading-[1.12] tracking-tight text-white sm:text-6xl">
+            <h1 className="mt-7 text-[42px] font-medium leading-[1.08] tracking-tight text-white sm:text-6xl lg:text-7xl">
               Turn meeting conversations into <Cover>accountable actions.</Cover>
             </h1>
             <p className="mx-auto mt-6 max-w-[620px] text-[15px] leading-7 text-neutral-400 sm:text-base">
@@ -226,7 +226,7 @@ export default function ActionPulseLanding() {
                     <Mail size={17} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-white">Automated Email Task Digests</h4>
+                    <h4 className="text-sm font-medium tracking-tight text-white sm:text-base">Automated Email Task Digests</h4>
                     <p className="mt-1 text-xs leading-5 text-neutral-400">
                       Delivers clean HTML summaries with verbatim meeting excerpts, deadlines, and direct Kanban board links.
                     </p>
@@ -238,7 +238,7 @@ export default function ActionPulseLanding() {
                     <MessageSquare size={17} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-white">1-Tap WhatsApp Action Links</h4>
+                    <h4 className="text-sm font-medium tracking-tight text-white sm:text-base">1-Tap WhatsApp Action Links</h4>
                     <p className="mt-1 text-xs leading-5 text-neutral-400">
                       Instantly generates zero-cost pre-filled <span className="font-mono text-emerald-400">wa.me</span> links to share tasks and deadlines directly to team chats.
                     </p>
@@ -250,7 +250,7 @@ export default function ActionPulseLanding() {
                     <Bell size={17} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-white">Workspace Board Push & Bell</h4>
+                    <h4 className="text-sm font-medium tracking-tight text-white sm:text-base">Workspace Board Push & Bell</h4>
                     <p className="mt-1 text-xs leading-5 text-neutral-400">
                       Real-time updates notify primary task owners the moment an organiser confirms the review gate.
                     </p>
@@ -294,7 +294,7 @@ export default function ActionPulseLanding() {
                 <span className="font-mono text-[10px] uppercase text-neutral-500">Extracted action</span>
                 <Sparkles size={16} className="text-white"/>
               </div>
-              <h3 className="mt-5 text-xl font-semibold text-white">Prepare revised onboarding flow</h3>
+              <h3 className="mt-5 text-xl font-medium tracking-tight text-white sm:text-2xl">Prepare revised onboarding flow</h3>
               <p className="mt-3 text-sm text-neutral-400">Suggested owner <span className="text-white font-medium">Aman Shah</span> <span className="mx-2 text-neutral-600">·</span> Due <span className="text-white font-medium">Friday</span></p>
               <div className="mt-6 rounded-md border border-emerald-500/25 bg-emerald-500/5 p-4">
                 <p className="font-mono text-[10px] uppercase text-emerald-400">Verbatim source excerpt</p>
@@ -334,7 +334,7 @@ export default function ActionPulseLanding() {
                     <item.icon size={17}/>
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-white">{item.title}</h3>
+                    <h3 className="text-sm font-medium tracking-tight text-white sm:text-base">{item.title}</h3>
                     <p className="mt-2 text-sm leading-6 text-neutral-400">{item.text}</p>
                   </div>
                 </div>
@@ -365,7 +365,7 @@ export default function ActionPulseLanding() {
         <section className="border-t border-white/10 bg-black py-20 text-center sm:py-24">
           <div className="mx-auto max-w-2xl px-4">
             <span className="font-mono text-[10px] uppercase text-neutral-400 tracking-wider">Make the follow-through count</span>
-            <h2 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">Turn your next meeting into action.</h2>
+            <h2 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-[1.08]">Turn your next meeting into action.</h2>
             <p className="mt-4 text-sm leading-7 text-neutral-400 sm:text-base">
               Stop losing valuable commitments in meeting notes. Extract, review, and deliver with ActionPulse.
             </p>

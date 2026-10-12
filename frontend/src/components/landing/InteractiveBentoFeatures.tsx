@@ -160,7 +160,7 @@ export default function InteractiveBentoFeatures() {
               <Quote size={18} />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white sm:text-lg">Grounded Action Extraction</h3>
+              <h3 className="text-base font-medium tracking-tight text-white sm:text-lg">Grounded Action Extraction</h3>
               <p className="text-xs text-neutral-400">Verbatim quote anchoring with zero hallucination</p>
             </div>
           </div>
@@ -251,7 +251,7 @@ export default function InteractiveBentoFeatures() {
             </span>
           </div>
 
-          <h3 className="mt-4 text-base font-semibold text-white sm:text-lg">Uncertainty Surfaced</h3>
+          <h3 className="mt-4 text-base font-medium tracking-tight text-white sm:text-lg">Uncertainty Surfaced</h3>
           <p className="mt-1.5 text-xs leading-5 text-neutral-400">
             Never hallucinate an assignee. If a task has no clear owner, ActionPulse flags it for organiser review.
           </p>
@@ -331,7 +331,7 @@ export default function InteractiveBentoFeatures() {
             </span>
           </div>
 
-          <h3 className="mt-4 text-base font-semibold text-white sm:text-lg">Flexible Input Formats</h3>
+          <h3 className="mt-4 text-base font-medium tracking-tight text-white sm:text-lg">Flexible Input Formats</h3>
           <p className="mt-1.5 text-xs leading-5 text-neutral-400">
             Bring transcripts from Google Meet, Teams, Zoom, or voice memos. No browser extension required.
           </p>
@@ -385,7 +385,7 @@ export default function InteractiveBentoFeatures() {
               <GitBranch size={18} />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-white sm:text-lg">Interactive Kanban Board</h3>
+              <h3 className="text-base font-medium tracking-tight text-white sm:text-lg">Interactive Kanban Board</h3>
               <p className="text-xs text-neutral-400">Click any card to advance its state across the lifecycle</p>
             </div>
           </div>

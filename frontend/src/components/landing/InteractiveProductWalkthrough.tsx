@@ -590,7 +590,7 @@ export default function InteractiveProductWalkthrough() {
               <p className={`font-mono text-[10px] uppercase ${isLight ? "text-neutral-400" : "text-neutral-500"}`}>
                 01 / Input
               </p>
-              <h3 className={`mt-1 text-sm font-semibold ${isLight ? "text-neutral-900" : "text-white"}`}>
+              <h3 className={`mt-1 text-sm font-medium tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>
                 Meeting transcript
               </h3>
             </div>
@@ -678,7 +678,7 @@ export default function InteractiveProductWalkthrough() {
               <p className={`font-mono text-[10px] uppercase ${isLight ? "text-neutral-400" : "text-neutral-500"}`}>
                 02 / Human review
               </p>
-              <h3 className={`mt-1 text-sm font-semibold ${isLight ? "text-neutral-900" : "text-white"}`}>
+              <h3 className={`mt-1 text-sm font-medium tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>
                 AI extracted actions
               </h3>
             </div>

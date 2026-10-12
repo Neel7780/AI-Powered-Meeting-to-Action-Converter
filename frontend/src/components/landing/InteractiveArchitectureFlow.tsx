@@ -114,7 +114,7 @@ export default function InteractiveArchitectureFlow() {
           <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
             End-to-End System Topology
           </span>
-          <h3 className="mt-1 text-lg font-semibold text-white sm:text-xl">
+          <h3 className="mt-1 text-lg font-medium tracking-tight text-white sm:text-xl">
             Zero-Budget, Backend-First Architecture
           </h3>
         </div>
@@ -183,7 +183,7 @@ export default function InteractiveArchitectureFlow() {
               <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-emerald-400">
                 {node.category}
               </p>
-              <h4 className="mt-0.5 text-sm font-semibold text-white">{node.name}</h4>
+              <h4 className="mt-0.5 text-sm font-medium tracking-tight text-white">{node.name}</h4>
               <p className="mt-1 text-xs text-neutral-400 font-mono">{node.tech}</p>
 
               {/* Pulsing indicator if active in trace */}
@@ -218,7 +218,7 @@ export default function InteractiveArchitectureFlow() {
                 <span className="font-mono text-[11px] text-neutral-400">{selectedNode.tech}</span>
               </div>
 
-              <h4 className="mt-2 text-xl font-semibold text-white">{selectedNode.name}</h4>
+              <h4 className="mt-2 text-xl font-medium tracking-tight text-white">{selectedNode.name}</h4>
               <p className="mt-2 text-xs leading-6 text-neutral-300 sm:text-neutral-400">{selectedNode.description}</p>
 
               {/* Node Specs Table */}

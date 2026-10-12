@@ -129,7 +129,7 @@ export default function InteractiveRoleMatrix() {
           <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
             Interactive Role-Based Access Control
           </span>
-          <h3 className="mt-1 text-lg font-semibold text-white sm:text-xl">
+          <h3 className="mt-1 text-lg font-medium tracking-tight text-white sm:text-xl">
             Postgres Row-Level Security Enforced at Every Boundary
           </h3>
         </div>
@@ -181,7 +181,7 @@ export default function InteractiveRoleMatrix() {
                   <Icon size={20} />
                 </div>
                 <div>
-                  <h4 className="text-base font-semibold text-white sm:text-lg">{activeRoleData.title}</h4>
+                  <h4 className="text-base font-medium tracking-tight text-white sm:text-lg">{activeRoleData.title}</h4>
                   <span className="font-mono text-[10px] text-neutral-400">{activeRoleData.badge}</span>
                 </div>
               </div>

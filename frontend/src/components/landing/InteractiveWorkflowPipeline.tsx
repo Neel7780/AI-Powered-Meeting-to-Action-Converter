@@ -97,7 +97,7 @@ export default function InteractiveWorkflowPipeline() {
           <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
             Automated Lifecycle Visualizer
           </span>
-          <h3 className="mt-1 text-lg font-semibold text-white sm:text-xl">
+          <h3 className="mt-1 text-lg font-medium tracking-tight text-white sm:text-xl">
             Watch the handoff from conversation to execution
           </h3>
         </div>
@@ -232,7 +232,7 @@ export default function InteractiveWorkflowPipeline() {
                 </span>
               </div>
 
-              <h4 className="mt-3 text-xl font-semibold text-white sm:text-2xl">{activeStep.title}: {activeStep.tagline}</h4>
+              <h4 className="mt-3 text-xl font-medium tracking-tight text-white sm:text-2xl">{activeStep.title}: {activeStep.tagline}</h4>
               <p className="mt-3 text-sm leading-6 text-neutral-300 sm:text-neutral-400">{activeStep.description}</p>
 
               {/* Step Key Highlights */}
@@ -369,7 +369,7 @@ export default function InteractiveWorkflowPipeline() {
                         <span className="rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] text-emerald-400">
                           EXTRACTED #104
                         </span>
-                        <h5 className="mt-1.5 text-sm font-semibold text-white">Patch Safari auth cookies</h5>
+                        <h5 className="mt-1.5 text-sm font-medium tracking-tight text-white">Patch Safari auth cookies</h5>
                         <p className="text-xs text-neutral-400">Owner: Rahul Verma · Due: Wednesday</p>
                       </div>
                       <ShieldCheck size={18} className="text-emerald-400 shrink-0" />
