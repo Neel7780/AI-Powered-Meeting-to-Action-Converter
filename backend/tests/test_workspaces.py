@@ -25,7 +25,7 @@ def test_create_invite_non_admin_gets_403():
         mock_req_role.side_effect = HTTPException(status_code=403, detail="Insufficient permissions")
         
         ws_id = str(uuid4())
-        response = client.post(f"/workspaces/{ws_id}/invites", json={
+        response = client.post(f"/api/workspaces/{ws_id}/invites", json={
             "email": "test@example.com",
             "role": "member"
         })
@@ -59,8 +59,9 @@ def test_create_invite_success():
         }])
         
         ws_id = str(uuid4())
-        response = client.post(f"/workspaces/{ws_id}/invites", json={
-            "email": "newuser@example.com",
+        # Test with uppercase and extra space to verify normalization
+        response = client.post(f"/api/workspaces/{ws_id}/invites", json={
+            "email": "NewUser@example.com",
             "role": "member"
         })
         

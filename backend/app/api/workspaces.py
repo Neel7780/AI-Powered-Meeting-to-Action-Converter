@@ -22,12 +22,14 @@ def create_invite(
     # 1. Require Admin Role
     require_role(workspace_id, {"admin"}, user)
     
+    clean_email = str(invite_req.email).strip().lower()
+    
     db = get_supabase_client()
     
     # Check if the user is already a member of the workspace
     # We query the `profiles` table to find the user's ID by email, 
     # then check `workspace_members`
-    profile_res = db.table("profiles").select("id").eq("email", invite_req.email).execute()
+    profile_res = db.table("profiles").select("id").eq("email", clean_email).execute()
     if profile_res.data:
         member_id = profile_res.data[0]["id"]
         member_check = (
@@ -63,7 +65,7 @@ def create_invite(
         db.table("workspace_invites")
         .delete()
         .eq("workspace_id", str(workspace_id))
-        .eq("email", invite_req.email)
+        .eq("email", clean_email)
         .is_("accepted_at", "null")
         .execute()
     )
@@ -74,7 +76,7 @@ def create_invite(
     
     insert_res = db.table("workspace_invites").insert({
         "workspace_id": str(workspace_id),
-        "email": invite_req.email,
+        "email": clean_email,
         "role": invite_req.role,
         "token_hash": token_hash,
         "invited_by": str(user.id)
@@ -107,7 +109,7 @@ def create_invite(
     # 5. Send email
     try:
         send_invite_email(
-            to=invite_req.email,
+            to=clean_email,
             workspace_name=workspace_name,
             inviter_name=inviter_name,
             link=invite_link
@@ -122,7 +124,7 @@ def create_invite(
         
     return InviteCreateResponse(
         id=invite_id,
-        email=invite_req.email,
+        email=clean_email,
         role=new_invite["role"],
         expires_at=expires_at
     )
