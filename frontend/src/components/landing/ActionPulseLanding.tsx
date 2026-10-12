@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, LockKeyhole, Menu, Pencil, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, LockKeyhole, Mail, Menu, MessageSquare, Pencil, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SelectionList from "@/components/ui/SelectionList";
+import { Cover } from "@/components/ui/cover";
 
 const repo = "https://github.com/Neel7780/AI-Powered-Meeting-to-Action-Converter";
 const nav = [
@@ -346,7 +348,7 @@ export default function ActionPulseLanding() {
               <Sparkles size={12}/> AI-powered meeting intelligence
             </span>
             <h1 className="mt-7 text-[42px] font-semibold leading-[1.12] tracking-tight text-white sm:text-6xl">
-              Turn meeting conversations into <span className="text-neutral-500">accountable actions.</span>
+              Turn meeting conversations into <Cover>accountable actions.</Cover>
             </h1>
             <p className="mx-auto mt-6 max-w-[620px] text-[15px] leading-7 text-neutral-400 sm:text-base">
               Extract tasks, owners, and deadlines from meeting transcripts, review every AI suggestion, and move approved actions into your team’s workspace.
@@ -535,6 +537,74 @@ export default function ActionPulseLanding() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Direct Notifications & Assignee Dispatch */}
+        <section id="notifications" className="scroll-mt-20 border-b border-white/10 bg-[#040407] py-20 sm:py-24">
+          <div className="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-16 lg:px-8">
+            <div>
+              <SectionHeading
+                eyebrow="Instant notification dispatch"
+                title="Send notifications directly from the app."
+                description="No manual copying or lost action items. Once extracted tasks are confirmed, select assignees and dispatch multi-channel notifications directly from ActionPulse."
+              />
+
+              <div className="mt-8 space-y-4">
+                <div className="flex gap-4 rounded-lg border border-white/10 bg-[#08080c] p-4 transition hover:border-white/20">
+                  <div className="grid size-9 shrink-0 place-items-center rounded-md border border-indigo-500/25 bg-indigo-500/10 text-indigo-400">
+                    <Mail size={17} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">Automated Email Task Digests</h4>
+                    <p className="mt-1 text-xs leading-5 text-neutral-400">
+                      Delivers clean HTML summaries with verbatim meeting excerpts, deadlines, and direct Kanban board links.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 rounded-lg border border-white/10 bg-[#08080c] p-4 transition hover:border-white/20">
+                  <div className="grid size-9 shrink-0 place-items-center rounded-md border border-emerald-500/25 bg-emerald-500/10 text-emerald-400">
+                    <MessageSquare size={17} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">1-Tap WhatsApp Action Links</h4>
+                    <p className="mt-1 text-xs leading-5 text-neutral-400">
+                      Instantly generates zero-cost pre-filled <span className="font-mono text-emerald-400">wa.me</span> links to share tasks and deadlines directly to team chats.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 rounded-lg border border-white/10 bg-[#08080c] p-4 transition hover:border-white/20">
+                  <div className="grid size-9 shrink-0 place-items-center rounded-md border border-amber-500/25 bg-amber-500/10 text-amber-400">
+                    <Bell size={17} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">Workspace Board Push & Bell</h4>
+                    <p className="mt-1 text-xs leading-5 text-neutral-400">
+                      Real-time updates notify primary task owners the moment an organiser confirms the review gate.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Interactive Selection List Card */}
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-white/15 bg-gradient-to-b from-[#0a0a0f] to-[#040406] p-8 sm:p-10 shadow-2xl relative">
+              <div className="mb-6 flex items-center justify-between w-full max-w-[268px]">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-neutral-400">
+                  Try it: Assignee Notification Roster
+                </span>
+                <span className="flex size-2 rounded-full bg-emerald-400 animate-pulse" title="Live component" />
+              </div>
+
+              {/* Bencho Liquid Selection List */}
+              <SelectionList rows={4} />
+
+              <p className="mt-5 text-center text-[11px] text-neutral-500 max-w-[268px]">
+                Select teammates above to see liquid-gooey metaball feedback, then click <span className="text-neutral-300 font-medium">Send request</span>.
+              </p>
             </div>
           </div>
         </section>

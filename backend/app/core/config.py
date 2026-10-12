@@ -28,17 +28,22 @@ class Settings:
     EMAIL_FROM: str = MAIL_FROM
 
     # Application Frontend URL (for email links and redirects)
-    APP_URL: str = os.getenv("APP_URL", "http://localhost:5173")
+    # Supports FRONTEND_URL (e.g. Vercel deployment), falling back to APP_URL or localhost
+    APP_URL: str = os.getenv("FRONTEND_URL", os.getenv("APP_URL", "http://localhost:5173"))
 
     # Internal tick keep-alive secret
     INTERNAL_TICK_SECRET: str = os.getenv("INTERNAL_TICK_SECRET", "")
 
     # CORS
+    _default_cors = "http://localhost:5173,http://localhost:3000"
+    _frontend_url = os.getenv("FRONTEND_URL")
+    if _frontend_url:
+        _default_cors += f",{_frontend_url}"
     CORS_ORIGINS: List[str] = [
         origin.strip()
         for origin in os.getenv(
             "CORS_ORIGINS",
-            "http://localhost:5173,http://localhost:3000"
+            _default_cors
         ).split(",")
         if origin.strip()
     ]
