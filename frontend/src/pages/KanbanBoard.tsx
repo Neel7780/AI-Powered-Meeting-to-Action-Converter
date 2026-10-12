@@ -22,7 +22,7 @@ import { Button } from '@/components/ui/button';
 interface MeetingOption {
   id: string;
   title: string;
-  meeting_date?: string;
+  starts_at?: string;
 }
 
 // Fallback seed tasks for zero-configuration demo testing
@@ -43,7 +43,7 @@ const DEMO_TASKS: KanbanTaskItem[] = [
     meetings: {
       id: 'mtg-q3-planning',
       title: 'Q3 Infra Architecture Sync',
-      meeting_date: new Date().toISOString(),
+      starts_at: new Date().toISOString(),
     },
     task_assignees: [
       {
@@ -73,7 +73,7 @@ const DEMO_TASKS: KanbanTaskItem[] = [
     meetings: {
       id: 'mtg-q3-planning',
       title: 'Q3 Infra Architecture Sync',
-      meeting_date: new Date().toISOString(),
+      starts_at: new Date().toISOString(),
     },
     task_assignees: [
       {
@@ -103,7 +103,7 @@ const DEMO_TASKS: KanbanTaskItem[] = [
     meetings: {
       id: 'mtg-product-review',
       title: 'Weekly Sprint Review',
-      meeting_date: new Date().toISOString(),
+      starts_at: new Date().toISOString(),
     },
     task_assignees: [
       {
@@ -134,7 +134,7 @@ const DEMO_TASKS: KanbanTaskItem[] = [
     meetings: {
       id: 'mtg-product-review',
       title: 'Weekly Sprint Review',
-      meeting_date: new Date().toISOString(),
+      starts_at: new Date().toISOString(),
     },
     task_assignees: [],
   },
@@ -145,15 +145,8 @@ export interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps = {}) {
-  let ctxWorkspaceId: string | undefined;
-  try {
-    const wsCtx = useWorkspace();
-    ctxWorkspaceId = wsCtx.currentWorkspace?.id;
-  } catch {
-    ctxWorkspaceId = undefined;
-  }
-
-  const activeWorkspaceId = propWorkspaceId || ctxWorkspaceId;
+  const { currentWorkspace } = useWorkspace();
+  const activeWorkspaceId = propWorkspaceId || currentWorkspace?.id;
 
   const [tasks, setTasks] = useState<KanbanTaskItem[]>([]);
   const [meetings, setMeetings] = useState<MeetingOption[]>([]);
@@ -217,7 +210,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           meetings (
             id,
             title,
-            meeting_date
+            starts_at
           ),
           task_assignees (
             user_id,
@@ -241,8 +234,8 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       // Fetch distinct meetings for the filter dropdown scoped to activeWorkspaceId
       let meetingQuery = supabase
         .from('meetings')
-        .select('id, title, meeting_date')
-        .order('meeting_date', { ascending: false });
+        .select('id, title, starts_at')
+        .order('starts_at', { ascending: false });
 
       if (activeWorkspaceId) {
         meetingQuery = meetingQuery.eq('workspace_id', activeWorkspaceId);

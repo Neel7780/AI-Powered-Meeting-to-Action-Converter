@@ -37,7 +37,7 @@ export interface KanbanTaskItem {
   meetings?: {
     id: string;
     title: string;
-    meeting_date: string;
+    starts_at?: string;
   } | null;
 }
 
