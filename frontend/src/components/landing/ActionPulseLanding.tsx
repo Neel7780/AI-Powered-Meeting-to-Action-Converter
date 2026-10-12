@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import SelectionList from "@/components/ui/SelectionList";
 import { Cover } from "@/components/ui/cover";
 import InteractiveProductWalkthrough from "@/components/landing/InteractiveProductWalkthrough";
-import InteractiveWorkflowPipeline from "@/components/landing/InteractiveWorkflowPipeline";
+import LinearWorkflowShowcase from "@/components/landing/LinearWorkflowShowcase";
 import InteractiveBentoFeatures from "@/components/landing/InteractiveBentoFeatures";
 import InteractiveRoleMatrix from "@/components/landing/InteractiveRoleMatrix";
 import InteractiveArchitectureFlow from "@/components/landing/InteractiveArchitectureFlow";
@@ -197,11 +197,10 @@ export default function ActionPulseLanding() {
           </div>
         </section>
 
-        {/* How it works */}
+        {/* How it works (Linear Intake & Workflow) */}
         <section id="how-it-works" className="scroll-mt-20 border-b border-white/10 bg-black py-20 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <SectionHeading eyebrow="The workflow" title="From raw conversation to real progress." description="A clear handoff from AI-assisted extraction to human judgment and shared execution."/>
-            <InteractiveWorkflowPipeline />
+            <LinearWorkflowShowcase />
           </div>
         </section>
 
