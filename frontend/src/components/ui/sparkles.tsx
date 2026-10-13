@@ -32,10 +32,16 @@ export const SparklesCore = (props: ParticlesProps) => {
   const [init, setInit] = useState(false);
   useEffect(() => {
     initParticlesEngine(async (engine) => {
-      await loadSlim(engine);
-    }).then(() => {
-      setInit(true);
-    });
+      try {
+        await loadSlim(engine);
+      } catch (err) {
+        console.warn("Sparkles engine initialization notice:", err);
+      }
+    })
+      .then(() => {
+        setInit(true);
+      })
+      .catch(() => {});
   }, []);
   const controls = useAnimation();
 

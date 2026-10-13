@@ -15,6 +15,8 @@ import {
   MousePointer,
   ArrowRight,
   ShieldCheck,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -155,6 +157,8 @@ export default function InteractiveProductWalkthrough() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tab, setTab] = useState<"transcript" | "actions">("actions");
   const [errorId, setErrorId] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const isLight = theme === "light";
 
   // Autoplay State Machine
   const [isAutoplay, setIsAutoplay] = useState<boolean>(true);
@@ -348,9 +352,18 @@ export default function InteractiveProductWalkthrough() {
       ref={containerRef}
       onMouseEnter={enterInteractiveMode}
       onMouseLeave={handleMouseLeave}
-      className="scroll-mt-24 linear-3d-card relative overflow-hidden rounded-xl border border-white/15 border-t-white/30 bg-[#060608] shadow-2xl transition-all duration-300"
+      className={`scroll-mt-24 linear-3d-card relative overflow-hidden rounded-xl border transition-all duration-300 ${
+        isLight
+          ? "border-neutral-200/90 bg-white shadow-[0_25px_80px_-20px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.2)] text-neutral-900"
+          : "border-white/15 border-t-white/30 bg-[#060608] shadow-2xl text-white"
+      }`}
     >
-      <div className="linear-rim-light" />
+      {/* Top Accent Rim */}
+      {isLight ? (
+        <div className="h-[2px] w-full bg-gradient-to-r from-blue-500/20 via-blue-500/50 to-indigo-500/20" />
+      ) : (
+        <div className="linear-rim-light" />
+      )}
 
       {/* Notion-Style Animated Blue Cursor (Visible during Autoplay) */}
       <NotionCursor
@@ -363,16 +376,30 @@ export default function InteractiveProductWalkthrough() {
       />
 
       {/* Window Titlebar & Controls */}
-      <div className="flex min-h-12 items-center justify-between gap-3 border-b border-white/10 bg-[#0a0a0d] px-4 sm:px-5">
+      <div
+        className={`flex min-h-12 items-center justify-between gap-3 border-b px-4 sm:px-5 transition-colors ${
+          isLight ? "border-neutral-200 bg-[#F8FAFC]" : "border-white/10 bg-[#0a0a0d]"
+        }`}
+      >
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex shrink-0 gap-1.5">
-            <i className="size-2 rounded-full bg-neutral-700" />
-            <i className="size-2 rounded-full bg-neutral-700" />
-            <i className="size-2 rounded-full bg-neutral-700" />
+          <span className="flex shrink-0 gap-1.5 items-center">
+            {isLight ? (
+              <>
+                <i className="size-2.5 rounded-full bg-[#FF5F56] border border-[#E0443E]/70 shadow-sm" />
+                <i className="size-2.5 rounded-full bg-[#FFBD2E] border border-[#DEA123]/70 shadow-sm" />
+                <i className="size-2.5 rounded-full bg-[#27C93F] border border-[#1AAB29]/70 shadow-sm" />
+              </>
+            ) : (
+              <>
+                <i className="size-2 rounded-full bg-neutral-700" />
+                <i className="size-2 rounded-full bg-neutral-700" />
+                <i className="size-2 rounded-full bg-neutral-700" />
+              </>
+            )}
           </span>
-          <span className="h-4 w-px shrink-0 bg-white/10" />
-          <span className="truncate text-xs font-medium text-neutral-300">
-            Live Preview <span className="text-neutral-600">/</span> Grounded Extraction Engine
+          <span className={`h-4 w-px shrink-0 ${isLight ? "bg-neutral-200" : "bg-white/10"}`} />
+          <span className={`truncate text-xs font-medium ${isLight ? "text-neutral-700" : "text-neutral-300"}`}>
+            Live Preview <span className={isLight ? "text-neutral-400" : "text-neutral-600"}>/</span> Grounded Extraction Engine
           </span>
         </div>
 
@@ -382,19 +409,23 @@ export default function InteractiveProductWalkthrough() {
           <div
             className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono transition-colors ${
               isAutoplay
-                ? "border-blue-500/40 bg-blue-500/10 text-blue-400"
-                : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                ? isLight
+                  ? "border-blue-200 bg-blue-50 text-blue-700 font-medium"
+                  : "border-blue-500/40 bg-blue-500/10 text-blue-400"
+                : isLight
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 font-medium"
+                  : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
             }`}
           >
             {isAutoplay ? (
               <>
-                <span className="size-1.5 rounded-full bg-blue-400 animate-ping" />
+                <span className={`size-1.5 rounded-full ${isLight ? "bg-blue-600" : "bg-blue-400"} animate-ping`} />
                 <Play size={10} className="fill-current" />
                 <span>Autoplay Demo</span>
               </>
             ) : (
               <>
-                <span className="size-1.5 rounded-full bg-emerald-400" />
+                <span className={`size-1.5 rounded-full ${isLight ? "bg-emerald-600" : "bg-emerald-400"}`} />
                 <MousePointer size={10} />
                 <span>Interactive Mode</span>
               </>
@@ -413,15 +444,19 @@ export default function InteractiveProductWalkthrough() {
                 setIsAutoplay(true);
               }
             }}
-            className="h-7 px-2.5 text-xs text-neutral-300 hover:text-white border border-white/10 hover:bg-white/5"
+            className={`h-7 px-2.5 text-xs border transition-colors ${
+              isLight
+                ? "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 shadow-sm"
+                : "border-white/10 text-neutral-300 hover:text-white hover:bg-white/5"
+            }`}
           >
             {isAutoplay ? (
               <>
-                <Pause size={11} className="mr-1 text-blue-400" /> Pause
+                <Pause size={11} className={`mr-1 ${isLight ? "text-blue-600" : "text-blue-400"}`} /> Pause
               </>
             ) : (
               <>
-                <Play size={11} className="mr-1 text-emerald-400" /> Play Video
+                <Play size={11} className={`mr-1 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} /> Play Video
               </>
             )}
           </Button>
@@ -432,12 +467,45 @@ export default function InteractiveProductWalkthrough() {
             size="icon"
             aria-label="Reset demo"
             onClick={resetToInitial}
-            className="size-7 text-neutral-400 hover:text-white border border-white/10 hover:bg-white/5"
+            className={`size-7 border transition-colors ${
+              isLight
+                ? "border-neutral-200 bg-white text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 shadow-sm"
+                : "border-white/10 text-neutral-400 hover:text-white hover:bg-white/5"
+            }`}
           >
             <RotateCcw size={11} />
           </Button>
 
-          <span className="shrink-0 rounded border border-white/15 bg-white/5 px-2 py-1 font-mono text-[10px] uppercase text-white font-medium">
+          {/* Theme Switcher Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+            className={`h-7 px-2.5 text-xs border transition-colors ${
+              isLight
+                ? "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 shadow-sm"
+                : "border-white/10 text-neutral-300 hover:text-white hover:bg-white/5"
+            }`}
+            title={`Switch to ${isLight ? "dark" : "light"} mode`}
+          >
+            {isLight ? (
+              <>
+                <Moon size={11} className="mr-1 text-neutral-500" /> Dark
+              </>
+            ) : (
+              <>
+                <Sun size={11} className="mr-1 text-amber-400" /> Light
+              </>
+            )}
+          </Button>
+
+          <span
+            className={`shrink-0 rounded border px-2 py-1 font-mono text-[10px] uppercase font-medium ${
+              isLight
+                ? "border-neutral-200 bg-neutral-100 text-neutral-700"
+                : "border-white/15 bg-white/5 text-white"
+            }`}
+          >
             Grounded v1.0
           </span>
         </div>
@@ -445,16 +513,20 @@ export default function InteractiveProductWalkthrough() {
 
       {/* Subtle Walkthrough Timeline Progress Bar */}
       {isAutoplay && (
-        <div className="h-0.5 w-full bg-white/5 overflow-hidden">
+        <div className={`h-0.5 w-full overflow-hidden ${isLight ? "bg-neutral-100" : "bg-white/5"}`}>
           <motion.div
-            className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400"
+            className="h-full bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
       )}
 
       {/* Mobile Tab Switcher */}
-      <div className="flex border-b border-white/10 lg:hidden" role="tablist" aria-label="Demo panels">
+      <div
+        className={`flex border-b lg:hidden ${isLight ? "border-neutral-200 bg-[#F8FAFC]" : "border-white/10"}`}
+        role="tablist"
+        aria-label="Demo panels"
+      >
         <Button
           variant="ghost"
           role="tab"
@@ -465,8 +537,12 @@ export default function InteractiveProductWalkthrough() {
           }}
           className={`h-11 w-1/2 rounded-none border-b-2 ${
             tab === "transcript"
-              ? "border-white text-white"
-              : "border-transparent text-neutral-400"
+              ? isLight
+                ? "border-blue-600 text-neutral-900 font-semibold"
+                : "border-white text-white"
+              : isLight
+                ? "border-transparent text-neutral-500"
+                : "border-transparent text-neutral-400"
           }`}
         >
           Transcript
@@ -481,8 +557,12 @@ export default function InteractiveProductWalkthrough() {
           }}
           className={`h-11 w-1/2 rounded-none border-b-2 ${
             tab === "actions"
-              ? "border-white text-white"
-              : "border-transparent text-neutral-400"
+              ? isLight
+                ? "border-blue-600 text-neutral-900 font-semibold"
+                : "border-white text-white"
+              : isLight
+                ? "border-transparent text-neutral-500"
+                : "border-transparent text-neutral-400"
           }`}
         >
           Extracted actions
@@ -496,18 +576,28 @@ export default function InteractiveProductWalkthrough() {
           ref={transcriptCardRef}
           className={`${
             tab === "transcript" ? "block" : "hidden"
-          } lg:block lg:border-r border-white/10 bg-black`}
+          } lg:block lg:border-r transition-colors ${
+            isLight ? "border-neutral-200 bg-[#F8FAFC]" : "border-white/10 bg-black"
+          }`}
           role="tabpanel"
         >
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 bg-[#08080a]">
+          <div
+            className={`flex items-center justify-between border-b px-5 py-4 ${
+              isLight ? "border-neutral-200 bg-white" : "border-white/10 bg-[#08080a]"
+            }`}
+          >
             <div>
-              <p className="font-mono text-[10px] uppercase text-neutral-500">01 / Input</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">Meeting transcript</h3>
+              <p className={`font-mono text-[10px] uppercase ${isLight ? "text-neutral-400" : "text-neutral-500"}`}>
+                01 / Input
+              </p>
+              <h3 className={`mt-1 text-sm font-medium tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>
+                Meeting transcript
+              </h3>
             </div>
-            <FileText size={17} className="text-neutral-500" />
+            <FileText size={17} className={isLight ? "text-neutral-400" : "text-neutral-500"} />
           </div>
 
-          <div className="min-h-[440px] space-y-1 p-3 sm:p-4 lg:min-h-[515px]">
+          <div className="min-h-[440px] space-y-1.5 p-3 sm:p-4 lg:min-h-[515px]">
             {transcript.map((line) => {
               const isMatched = activeQuoteId === line.id;
               return (
@@ -515,20 +605,44 @@ export default function InteractiveProductWalkthrough() {
                   key={line.id}
                   className={`rounded-md border px-3 py-3 transition-all duration-300 ${
                     isMatched
-                      ? "border-emerald-500/50 bg-emerald-500/10 shadow-lg shadow-emerald-950/20 ring-1 ring-emerald-500/30 -translate-y-0.5"
-                      : "border-transparent hover:border-white/10 hover:bg-white/5"
+                      ? isLight
+                        ? "border-emerald-500/50 bg-emerald-50/90 shadow-md ring-1 ring-emerald-500/20 -translate-y-0.5"
+                        : "border-emerald-500/50 bg-emerald-500/10 shadow-lg shadow-emerald-950/20 ring-1 ring-emerald-500/30 -translate-y-0.5"
+                      : isLight
+                        ? "border-transparent bg-white/80 hover:border-neutral-200 hover:bg-white shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+                        : "border-transparent hover:border-white/10 hover:bg-white/5"
                   }`}
                 >
                   <div className="mb-1.5 flex items-center gap-2">
-                    <span className="text-xs font-medium text-white">{line.speaker}</span>
-                    <span className="font-mono text-[10px] text-neutral-500">{line.time}</span>
+                    <span className={`text-xs font-semibold ${isLight ? "text-neutral-900" : "text-white"}`}>
+                      {line.speaker}
+                    </span>
+                    <span className={`font-mono text-[10px] ${isLight ? "text-neutral-400" : "text-neutral-500"}`}>
+                      {line.time}
+                    </span>
                     {isMatched && (
-                      <span className="ml-auto flex items-center gap-1 font-mono text-[9px] uppercase text-emerald-400 font-semibold bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                      <span
+                        className={`ml-auto flex items-center gap-1 font-mono text-[9px] uppercase font-semibold px-1.5 py-0.5 rounded border ${
+                          isLight
+                            ? "bg-emerald-100 border-emerald-300 text-emerald-800"
+                            : "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                        }`}
+                      >
                         <ShieldCheck size={10} /> Source matched
                       </span>
                     )}
                   </div>
-                  <p className={`text-[13px] leading-5 ${isMatched ? "text-neutral-200" : "text-neutral-400"}`}>
+                  <p
+                    className={`text-[13px] leading-5 ${
+                      isMatched
+                        ? isLight
+                          ? "text-neutral-900 font-medium"
+                          : "text-neutral-200"
+                        : isLight
+                          ? "text-neutral-600"
+                          : "text-neutral-400"
+                    }`}
+                  >
                     “{line.text}”
                   </p>
                 </div>
@@ -536,9 +650,13 @@ export default function InteractiveProductWalkthrough() {
             })}
           </div>
 
-          <div className="border-t border-white/10 px-5 py-3 font-mono text-[10px] text-neutral-500 bg-[#08080a] flex items-center justify-between">
+          <div
+            className={`border-t px-5 py-3 font-mono text-[10px] flex items-center justify-between ${
+              isLight ? "border-neutral-200 bg-white text-neutral-400" : "border-white/10 bg-[#08080a] text-neutral-500"
+            }`}
+          >
             <span>6 SEGMENTS · SAMPLE TRANSCRIPT</span>
-            <span className="text-neutral-600">UNTRUSTED USER INPUT BOUNDARY</span>
+            <span className={isLight ? "text-neutral-400" : "text-neutral-600"}>UNTRUSTED USER INPUT BOUNDARY</span>
           </div>
         </div>
 
@@ -546,25 +664,47 @@ export default function InteractiveProductWalkthrough() {
         <div
           className={`${
             tab === "actions" ? "block" : "hidden"
-          } lg:block bg-[#08080a]`}
+          } lg:block transition-colors ${
+            isLight ? "bg-white" : "bg-[#08080a]"
+          }`}
           role="tabpanel"
         >
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 bg-[#0a0a0d]">
+          <div
+            className={`flex items-center justify-between border-b px-5 py-4 ${
+              isLight ? "border-neutral-200 bg-white" : "border-white/10 bg-[#0a0a0d]"
+            }`}
+          >
             <div>
-              <p className="font-mono text-[10px] uppercase text-neutral-500">02 / Human review</p>
-              <h3 className="mt-1 text-sm font-semibold text-white">AI extracted actions</h3>
+              <p className={`font-mono text-[10px] uppercase ${isLight ? "text-neutral-400" : "text-neutral-500"}`}>
+                02 / Human review
+              </p>
+              <h3 className={`mt-1 text-sm font-medium tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>
+                AI extracted actions
+              </h3>
             </div>
             <div className="flex items-center gap-2">
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-white/10 bg-white/5 font-mono text-[10px] text-neutral-300">
-                <Sparkles size={11} className="text-white" /> Grounded Triplet
+              <span
+                className={`hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded border font-mono text-[10px] ${
+                  isLight
+                    ? "border-neutral-200 bg-neutral-100 text-neutral-700"
+                    : "border-white/10 bg-white/5 text-neutral-300"
+                }`}
+              >
+                <Sparkles size={11} className={isLight ? "text-neutral-700" : "text-white"} /> Grounded Triplet
               </span>
-              <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 font-mono text-[10px] text-amber-400 font-medium">
+              <span
+                className={`rounded border px-2 py-1 font-mono text-[10px] font-medium ${
+                  isLight
+                    ? "border-amber-300 bg-amber-50 text-amber-800"
+                    : "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                }`}
+              >
                 {actions.filter((a) => a.status === "review").length} to review
               </span>
             </div>
           </div>
 
-          <div className="space-y-3 p-3 sm:p-4 lg:min-h-[515px]">
+          <div className={`space-y-3 p-3 sm:p-4 lg:min-h-[515px] ${isLight ? "bg-[#F8FAFC]/50" : ""}`}>
             {actions.map((item) => {
               const isCard1 = item.id === "onboarding";
               const isCard3 = item.id === "readme";
@@ -586,12 +726,20 @@ export default function InteractiveProductWalkthrough() {
                   }}
                   className={`relative rounded-lg border p-4 transition-all duration-300 ${
                     isActive
-                      ? "border-white/50 bg-[#0f0f14] shadow-2xl shadow-black -translate-y-1 ring-1 ring-white/15"
+                      ? isLight
+                        ? "border-blue-500 bg-blue-50/40 shadow-xl ring-1 ring-blue-500/20 -translate-y-1"
+                        : "border-white/50 bg-[#0f0f14] shadow-2xl shadow-black -translate-y-1 ring-1 ring-white/15"
                       : item.status === "approved"
-                      ? "border-emerald-500/40 bg-[#0a0c0a]"
+                      ? isLight
+                        ? "border-emerald-300 bg-emerald-50/50 shadow-sm"
+                        : "border-emerald-500/40 bg-[#0a0c0a]"
                       : item.id === "readme" && item.status === "review"
-                      ? "border-amber-500/35 bg-[#0c0a06]"
-                      : "border-white/10 bg-[#0a0a0c] hover:border-white/25 hover:-translate-y-0.5"
+                      ? isLight
+                        ? "border-amber-300 bg-amber-50/40 shadow-sm"
+                        : "border-amber-500/35 bg-[#0c0a06]"
+                      : isLight
+                        ? "border-neutral-200/90 bg-white shadow-sm hover:border-neutral-300 hover:shadow-md hover:-translate-y-0.5"
+                        : "border-white/10 bg-[#0a0a0c] hover:border-white/25 hover:-translate-y-0.5"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -601,19 +749,35 @@ export default function InteractiveProductWalkthrough() {
                           aria-label="Task title"
                           value={item.title}
                           onChange={(e) => updateAction(item.id, { title: e.target.value })}
-                          className="w-full rounded border border-white/20 bg-black px-2 py-1 text-sm text-white outline-none focus:border-white"
+                          className={`w-full rounded border px-2 py-1 text-sm outline-none ${
+                            isLight
+                              ? "border-neutral-300 bg-white text-neutral-900 focus:border-blue-500"
+                              : "border-white/20 bg-black text-white focus:border-white"
+                          }`}
                         />
                       ) : (
-                        <h4 className="text-[13px] font-semibold text-white sm:text-sm">{item.title}</h4>
+                        <h4
+                          className={`text-[13px] font-semibold sm:text-sm ${
+                            isLight ? "text-neutral-900" : "text-white"
+                          }`}
+                        >
+                          {item.title}
+                        </h4>
                       )}
                     </div>
                     <span
                       className={`shrink-0 rounded px-2 py-1 font-mono text-[9px] uppercase transition-colors ${
                         item.status === "approved"
-                          ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold"
+                          ? isLight
+                            ? "bg-emerald-100 border border-emerald-300 text-emerald-800 font-semibold"
+                            : "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-semibold"
                           : item.status === "rejected"
-                          ? "bg-red-500/10 border border-red-500/30 text-red-400"
-                          : "bg-amber-500/10 border border-amber-500/30 text-amber-400"
+                          ? isLight
+                            ? "bg-rose-100 border border-rose-300 text-rose-800"
+                            : "bg-red-500/10 border border-red-500/30 text-red-400"
+                          : isLight
+                            ? "bg-amber-100 border border-amber-300 text-amber-800 font-medium"
+                            : "bg-amber-500/10 border border-amber-500/30 text-amber-400"
                       }`}
                     >
                       {item.status === "review" ? "Needs review" : item.status}
@@ -622,8 +786,8 @@ export default function InteractiveProductWalkthrough() {
 
                   {/* Owner & Due Date Meta */}
                   <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
-                    <label className="flex items-center gap-1.5 text-neutral-400">
-                      <UserRound size={12} className="text-neutral-500" /> Owner:{" "}
+                    <label className={`flex items-center gap-1.5 ${isLight ? "text-neutral-600" : "text-neutral-400"}`}>
+                      <UserRound size={12} className={isLight ? "text-neutral-400" : "text-neutral-500"} /> Owner:{" "}
                       {isEditing ? (
                         <input
                           aria-label="Owner"
@@ -633,33 +797,59 @@ export default function InteractiveProductWalkthrough() {
                             updateAction(item.id, { owner: e.target.value });
                             setErrorId(null);
                           }}
-                          className="w-28 rounded border border-white/20 bg-black px-1.5 py-1 text-white outline-none focus:border-white text-xs"
+                          className={`w-28 rounded border px-1.5 py-1 outline-none text-xs ${
+                            isLight
+                              ? "border-neutral-300 bg-white text-neutral-900 focus:border-blue-500"
+                              : "border-white/20 bg-black text-white focus:border-white"
+                          }`}
                         />
                       ) : (
-                        <span className={item.owner ? "text-white font-medium" : "text-amber-400 font-semibold"}>
+                        <span
+                          className={
+                            item.owner
+                              ? isLight
+                                ? "text-neutral-900 font-semibold"
+                                : "text-white font-medium"
+                              : isLight
+                                ? "text-amber-700 font-bold"
+                                : "text-amber-400 font-semibold"
+                          }
+                        >
                           {item.owner || "Unassigned"}
                         </span>
                       )}
                     </label>
-                    <label className="flex items-center gap-1.5 text-neutral-400">
-                      <span className="font-mono text-[11px] text-neutral-500">↳</span> Due:{" "}
+                    <label className={`flex items-center gap-1.5 ${isLight ? "text-neutral-600" : "text-neutral-400"}`}>
+                      <span className={`font-mono text-[11px] ${isLight ? "text-neutral-400" : "text-neutral-500"}`}>↳</span> Due:{" "}
                       {isEditing ? (
                         <input
                           aria-label="Deadline"
                           placeholder="Set deadline"
                           value={item.due}
                           onChange={(e) => updateAction(item.id, { due: e.target.value })}
-                          className="w-24 rounded border border-white/20 bg-black px-1.5 py-1 text-white outline-none focus:border-white text-xs"
+                          className={`w-24 rounded border px-1.5 py-1 outline-none text-xs ${
+                            isLight
+                              ? "border-neutral-300 bg-white text-neutral-900 focus:border-blue-500"
+                              : "border-white/20 bg-black text-white focus:border-white"
+                          }`}
                         />
                       ) : (
-                        <span className="text-white">{item.due || "Not specified"}</span>
+                        <span className={isLight ? "text-neutral-800 font-medium" : "text-white"}>
+                          {item.due || "Not specified"}
+                        </span>
                       )}
                     </label>
                   </div>
 
                   {/* Uncertainty Banner (FR-08) */}
                   {!item.owner && item.status === "review" && (
-                    <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-amber-400 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">
+                    <p
+                      className={`mt-2.5 flex items-center gap-1.5 text-[11px] px-2 py-1 rounded border ${
+                        isLight
+                          ? "text-amber-900 bg-amber-100/70 border-amber-300"
+                          : "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                      }`}
+                    >
                       <CircleHelp size={12} className="shrink-0" />
                       {errorId === item.id
                         ? "Assign an owner before approving"
@@ -668,19 +858,36 @@ export default function InteractiveProductWalkthrough() {
                   )}
 
                   {/* Grounded Source Excerpt (FR-07) */}
-                  <div className="mt-3 border-l-2 border-emerald-500/40 pl-2.5 text-[11px] leading-5 text-neutral-400">
-                    <span className="mr-1 font-mono text-[10px] text-emerald-400 font-semibold">SOURCE</span> “{item.source}”
+                  <div
+                    className={`mt-3 border-l-2 pl-2.5 text-[11px] leading-5 ${
+                      isLight
+                        ? "border-emerald-500 bg-neutral-50 p-2 rounded-r text-neutral-700"
+                        : "border-emerald-500/40 text-neutral-400"
+                    }`}
+                  >
+                    <span className={`mr-1 font-mono text-[10px] font-bold ${isLight ? "text-emerald-700" : "text-emerald-400"}`}>
+                      SOURCE
+                    </span>{" "}
+                    “{item.source}”
                   </div>
 
                   {/* Review Actions Bar */}
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3">
+                  <div
+                    className={`mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 ${
+                      isLight ? "border-neutral-100" : "border-white/10"
+                    }`}
+                  >
                     {item.status === "review" ? (
                       <>
                         <div className="flex gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-neutral-400 hover:text-red-400"
+                            className={`h-7 px-2 ${
+                              isLight
+                                ? "text-neutral-500 hover:text-red-600 hover:bg-red-50"
+                                : "text-neutral-400 hover:text-red-400"
+                            }`}
                             onClick={() => {
                               enterInteractiveMode();
                               updateAction(item.id, { status: "rejected" });
@@ -693,7 +900,11 @@ export default function InteractiveProductWalkthrough() {
                             ref={isCard3 ? approveBtn3Ref : null}
                             variant="ghost"
                             size="sm"
-                            className="h-7 px-2 text-neutral-400 hover:text-white"
+                            className={`h-7 px-2 ${
+                              isLight
+                                ? "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
+                                : "text-neutral-400 hover:text-white"
+                            }`}
                             onClick={() => {
                               enterInteractiveMode();
                               setEditingId(isEditing ? null : item.id);
@@ -707,7 +918,11 @@ export default function InteractiveProductWalkthrough() {
                         <Button
                           ref={isCard1 ? approveBtn1Ref : isCard3 ? editBtn3Ref : null}
                           size="sm"
-                          className="h-7 px-3 bg-white text-black hover:bg-neutral-200 font-medium transition-all"
+                          className={`h-7 px-3 font-medium transition-all ${
+                            isLight
+                              ? "bg-neutral-900 text-white hover:bg-neutral-800 shadow-sm"
+                              : "bg-white text-black hover:bg-neutral-200"
+                          }`}
                           onClick={() => {
                             enterInteractiveMode();
                             approveAction(item);
@@ -719,14 +934,22 @@ export default function InteractiveProductWalkthrough() {
                       </>
                     ) : (
                       <span
-                        className={`flex items-center gap-1.5 text-xs font-medium ${
-                          item.status === "approved" ? "text-emerald-400" : "text-red-400"
+                        className={`flex items-center gap-1.5 text-xs font-semibold ${
+                          item.status === "approved"
+                            ? isLight
+                              ? "text-emerald-700"
+                              : "text-emerald-400"
+                            : isLight
+                              ? "text-rose-700"
+                              : "text-red-400"
                         }`}
                       >
                         {item.status === "approved" ? (
                           <>
                             <CheckCircle2 size={14} /> Committed to Kanban{" "}
-                            <span className="text-neutral-500 font-normal">· Synced to workspace</span>
+                            <span className={`font-normal ${isLight ? "text-neutral-500" : "text-neutral-500"}`}>
+                              · Synced to workspace
+                            </span>
                           </>
                         ) : (
                           <>
@@ -744,23 +967,27 @@ export default function InteractiveProductWalkthrough() {
       </div>
 
       {/* Floating Interactive Prompt Helper */}
-      <div className="border-t border-white/10 bg-[#08080a] px-4 py-2.5 flex items-center justify-between text-xs text-neutral-400">
+      <div
+        className={`border-t px-4 py-2.5 flex items-center justify-between text-xs ${
+          isLight ? "border-neutral-200 bg-[#F8FAFC] text-neutral-600" : "border-white/10 bg-[#08080a] text-neutral-400"
+        }`}
+      >
         <div className="flex items-center gap-2">
           {isAutoplay ? (
-            <span className="flex items-center gap-1.5 text-blue-400 font-mono text-[11px]">
-              <span className="size-2 rounded-full bg-blue-400 animate-ping" />
+            <span className={`flex items-center gap-1.5 font-mono text-[11px] ${isLight ? "text-blue-700 font-semibold" : "text-blue-400"}`}>
+              <span className={`size-2 rounded-full animate-ping ${isLight ? "bg-blue-600" : "bg-blue-400"}`} />
               Notion-style animated preview active
             </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px]">
-              <span className="size-2 rounded-full bg-emerald-400" />
+            <span className={`flex items-center gap-1.5 font-mono text-[11px] ${isLight ? "text-emerald-700 font-semibold" : "text-emerald-400"}`}>
+              <span className={`size-2 rounded-full ${isLight ? "bg-emerald-600" : "bg-emerald-400"}`} />
               You have control · Click or edit any action card
             </span>
           )}
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="hidden sm:inline text-neutral-500 font-mono text-[10px]">
+          <span className={`hidden sm:inline font-mono text-[10px] ${isLight ? "text-neutral-500" : "text-neutral-500"}`}>
             {isAutoplay ? "Hover anywhere to interact" : "Idle for 8s resumes preview"}
           </span>
           <Button
@@ -774,7 +1001,11 @@ export default function InteractiveProductWalkthrough() {
                 setIsAutoplay(true);
               }
             }}
-            className="h-6 px-2 text-[11px] text-neutral-300 hover:text-white"
+            className={`h-6 px-2 text-[11px] ${
+              isLight
+                ? "text-neutral-700 hover:text-neutral-900 hover:bg-neutral-200/60"
+                : "text-neutral-300 hover:text-white"
+            }`}
           >
             {isAutoplay ? "Take control" : "Restart preview"} <ArrowRight size={10} className="ml-1" />
           </Button>

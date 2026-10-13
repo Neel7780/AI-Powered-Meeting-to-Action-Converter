@@ -1,17 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, ChevronRight, CircleHelp, ClipboardCheck, Code2, FileText, Fingerprint, GitBranch, LockKeyhole, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, Upload, UserRound, Users, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, CircleHelp, ClipboardCheck, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SelectionList from "@/components/ui/SelectionList";
 import { Cover } from "@/components/ui/cover";
 import InteractiveProductWalkthrough from "@/components/landing/InteractiveProductWalkthrough";
+import LinearWorkflowShowcase from "@/components/landing/LinearWorkflowShowcase";
+import InteractiveBentoFeatures from "@/components/landing/InteractiveBentoFeatures";
+import InteractiveRoleMatrix from "@/components/landing/InteractiveRoleMatrix";
+import LinearTrustShowcase from "@/components/landing/LinearTrustShowcase";
 
 const repo = "https://github.com/Neel7780/AI-Powered-Meeting-to-Action-Converter";
 const nav = [
   { label: "Features", href: "#features" },
   { label: "How it works", href: "#how-it-works" },
   { label: "Security", href: "#security" },
-  { label: "Architecture", href: "#architecture" },
 ];
 
 function Brand() {
@@ -27,10 +30,10 @@ function Brand() {
 
 function SectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description?: string }) {
   return (
-    <div className="max-w-2xl">
-      <p className="mb-4 font-mono text-[11px] font-medium uppercase tracking-wider text-neutral-400">{eyebrow}</p>
-      <h2 className="text-3xl font-semibold leading-tight text-white sm:text-4xl">{title}</h2>
-      {description && <p className="mt-4 text-[15px] leading-7 text-neutral-400">{description}</p>}
+    <div className="max-w-3xl">
+      <p className="mb-3 font-mono text-[11px] font-medium uppercase tracking-wider text-neutral-400">{eyebrow}</p>
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-[1.08]">{title}</h2>
+      {description && <p className="mt-4 text-base sm:text-lg text-neutral-400 leading-relaxed font-normal">{description}</p>}
     </div>
   );
 }
@@ -93,7 +96,7 @@ export default function ActionPulseLanding() {
             <span className="inline-flex items-center gap-2 rounded border border-white/15 bg-white/5 px-3 py-1.5 font-mono text-[10px] font-medium uppercase text-neutral-300">
               <Sparkles size={12}/> AI-powered meeting intelligence
             </span>
-            <h1 className="mt-7 text-[42px] font-semibold leading-[1.12] tracking-tight text-white sm:text-6xl">
+            <h1 className="mt-7 text-[42px] font-medium leading-[1.08] tracking-tight text-white sm:text-6xl lg:text-7xl">
               Turn meeting conversations into <Cover>accountable actions.</Cover>
             </h1>
             <p className="mx-auto mt-6 max-w-[620px] text-[15px] leading-7 text-neutral-400 sm:text-base">
@@ -193,98 +196,17 @@ export default function ActionPulseLanding() {
           </div>
         </section>
 
-        {/* How it works */}
+        {/* How it works (Linear Intake & Workflow) */}
         <section id="how-it-works" className="scroll-mt-20 border-b border-white/10 bg-black py-20 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <SectionHeading eyebrow="The workflow" title="From raw conversation to real progress." description="A clear handoff from AI-assisted extraction to human judgment and shared execution."/>
-            <div className="mt-12 grid gap-0 border-y border-white/10 sm:grid-cols-2 lg:grid-cols-4">
-              {[
-                {n:"01", title:"Capture", text:"Paste notes or upload .txt, .vtt, .srt, or .docx transcripts.", icon:Upload},
-                {n:"02", title:"Extract", text:"AI identifies tasks, deadlines, and potential owners from the transcript.", icon:Sparkles},
-                {n:"03", title:"Review", text:"Organisers verify, edit, approve, or reject every suggestion.", icon:ClipboardCheck},
-                {n:"04", title:"Execute", text:"Approved tasks move to the shared Kanban board and can notify assignees.", icon:ArrowRight}
-              ].map((step,i) => (
-                <div key={step.n} className={`relative px-5 py-7 bg-black ${i > 0 ? "border-t border-white/10 sm:border-t-0 sm:border-l" : ""} ${i === 2 ? "sm:border-t lg:border-t-0" : ""}`}>
-                  <div className="mb-8 flex items-center justify-between">
-                    <span className="font-mono text-xs text-neutral-400">{step.n} / 04</span>
-                    <step.icon size={17} className="text-neutral-500"/>
-                  </div>
-                  <h3 className="text-lg font-semibold text-white">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-neutral-400">{step.text}</p>
-                </div>
-              ))}
-            </div>
+            <LinearWorkflowShowcase />
           </div>
         </section>
 
         {/* Core Capabilities */}
         <section id="features" className="scroll-mt-20 mx-auto max-w-7xl bg-black px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
           <SectionHeading eyebrow="Core capabilities" title="Everything has a reason to be here." description="Keep the context, clarify the owner, and give your team a place to move the work forward."/>
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
-            <div className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6 md:col-span-2">
-              <div className="flex size-9 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white">
-                <Quote size={18}/>
-              </div>
-              <h3 className="mt-6 text-lg font-semibold text-white">Grounded action extraction</h3>
-              <p className="mt-2 max-w-lg text-sm leading-6 text-neutral-400">Task, owner, and deadline are surfaced alongside the exact words that support the suggestion.</p>
-              <div className="mt-6 grid gap-2 rounded-md border border-white/10 bg-black p-4 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
-                <div>
-                  <p className="font-mono text-[10px] uppercase text-neutral-500">Transcript</p>
-                  <p className="mt-2 text-xs leading-5 text-neutral-400">“I will fix the login bug on Safari by Wednesday.”</p>
-                </div>
-                <ArrowRight size={15} className="hidden text-white sm:block"/>
-                <div className="border-t border-white/10 pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
-                  <p className="font-mono text-[10px] uppercase text-neutral-500">Structured action</p>
-                  <p className="mt-2 text-xs text-white">Fix Safari login bug <span className="text-neutral-500">· Rahul · Wednesday</span></p>
-                </div>
-              </div>
-            </div>
-
-            <div className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6">
-              <div className="flex size-9 items-center justify-center rounded-md border border-amber-500/20 bg-amber-500/10 text-amber-400">
-                <UserRound size={18}/>
-              </div>
-              <h3 className="mt-6 text-lg font-semibold text-white">Zero-guess ownership</h3>
-              <p className="mt-2 text-sm leading-6 text-neutral-400">Unclear or missing names stay unassigned until a person resolves them.</p>
-              <div className="mt-8 rounded-md border border-amber-500/25 bg-amber-500/5 p-3 font-mono text-xs text-amber-400">
-                owner: null <span className="ml-2 text-neutral-500">→ review required</span>
-              </div>
-            </div>
-
-            <div className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6">
-              <div className="flex size-9 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white">
-                <FileText size={18}/>
-              </div>
-              <h3 className="mt-6 text-lg font-semibold text-white">Flexible input</h3>
-              <p className="mt-2 text-sm leading-6 text-neutral-400">Bring the transcript you already have. No meeting bot required.</p>
-              <div className="mt-8 flex flex-wrap gap-2">
-                {["Paste", "TXT", "VTT", "SRT", "DOCX"].map(type => (
-                  <span key={type} className="rounded border border-white/15 bg-black px-2.5 py-1.5 font-mono text-[10px] text-neutral-300">{type}</span>
-                ))}
-              </div>
-            </div>
-
-            <div className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6 md:col-span-2">
-              <div className="flex size-9 items-center justify-center rounded-md border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
-                <GitBranch size={18}/>
-              </div>
-              <h3 className="mt-6 text-lg font-semibold text-white">Shared Kanban workspace</h3>
-              <p className="mt-2 text-sm leading-6 text-neutral-400">After approval, work has a visible place to live, with task sharing and notifications.</p>
-              <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {[
-                  {name:"To do",task:"Prepare onboarding flow"},
-                  {name:"In progress",task:"Fix Safari login bug"},
-                  {name:"Blocked",task:"Review vendor invoice"},
-                  {name:"Done",task:"Draft demo agenda"}
-                ].map(col => (
-                  <div key={col.name} className="min-w-0 rounded border border-white/10 bg-black p-2.5">
-                    <p className="mb-3 font-mono text-[10px] uppercase text-neutral-500">{col.name}</p>
-                    <div className="min-h-12 rounded border border-white/10 bg-[#0c0c0e] p-2 text-[11px] leading-4 text-neutral-400">{col.task}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <InteractiveBentoFeatures />
         </section>
 
         {/* Direct Notifications & Assignee Dispatch */}
@@ -303,7 +225,7 @@ export default function ActionPulseLanding() {
                     <Mail size={17} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-white">Automated Email Task Digests</h4>
+                    <h4 className="text-sm font-medium tracking-tight text-white sm:text-base">Automated Email Task Digests</h4>
                     <p className="mt-1 text-xs leading-5 text-neutral-400">
                       Delivers clean HTML summaries with verbatim meeting excerpts, deadlines, and direct Kanban board links.
                     </p>
@@ -315,7 +237,7 @@ export default function ActionPulseLanding() {
                     <MessageSquare size={17} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-white">1-Tap WhatsApp Action Links</h4>
+                    <h4 className="text-sm font-medium tracking-tight text-white sm:text-base">1-Tap WhatsApp Action Links</h4>
                     <p className="mt-1 text-xs leading-5 text-neutral-400">
                       Instantly generates zero-cost pre-filled <span className="font-mono text-emerald-400">wa.me</span> links to share tasks and deadlines directly to team chats.
                     </p>
@@ -327,7 +249,7 @@ export default function ActionPulseLanding() {
                     <Bell size={17} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-white">Workspace Board Push & Bell</h4>
+                    <h4 className="text-sm font-medium tracking-tight text-white sm:text-base">Workspace Board Push & Bell</h4>
                     <p className="mt-1 text-xs leading-5 text-neutral-400">
                       Real-time updates notify primary task owners the moment an organiser confirms the review gate.
                     </p>
@@ -371,7 +293,7 @@ export default function ActionPulseLanding() {
                 <span className="font-mono text-[10px] uppercase text-neutral-500">Extracted action</span>
                 <Sparkles size={16} className="text-white"/>
               </div>
-              <h3 className="mt-5 text-xl font-semibold text-white">Prepare revised onboarding flow</h3>
+              <h3 className="mt-5 text-xl font-medium tracking-tight text-white sm:text-2xl">Prepare revised onboarding flow</h3>
               <p className="mt-3 text-sm text-neutral-400">Suggested owner <span className="text-white font-medium">Aman Shah</span> <span className="mx-2 text-neutral-600">·</span> Due <span className="text-white font-medium">Friday</span></p>
               <div className="mt-6 rounded-md border border-emerald-500/25 bg-emerald-500/5 p-4">
                 <p className="font-mono text-[10px] uppercase text-emerald-400">Verbatim source excerpt</p>
@@ -392,90 +314,25 @@ export default function ActionPulseLanding() {
         {/* Workspace access */}
         <section className="mx-auto max-w-7xl bg-black px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
           <SectionHeading eyebrow="Workspace access" title="The right controls for every role." description="A shared space with clear responsibilities, not a one-size-fits-all permission model."/>
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
-            {[
-              {name:"Admin", icon:ShieldCheck, text:"Manage the workspace, members, permissions, and policies."},
-              {name:"Organiser", icon:ClipboardCheck, text:"Create meetings, process transcripts, review suggestions, and approve tasks."},
-              {name:"Member", icon:Users, text:"View relevant meetings, manage assigned work, and update task status."}
-            ].map(role => (
-              <div key={role.name} className="product-panel rounded-lg border border-white/10 bg-[#060608] p-6">
-                <role.icon size={19} className="text-white"/>
-                <h3 className="mt-7 text-lg font-semibold text-white">{role.name}</h3>
-                <p className="mt-2 text-sm leading-6 text-neutral-400">{role.text}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-5 flex items-center gap-2 text-xs text-neutral-500">
-            <Fingerprint size={14}/> Workspace permissions are designed around Postgres Row-Level Security.
-          </p>
+          <InteractiveRoleMatrix />
         </section>
 
         {/* Security & privacy */}
         <section id="security" className="scroll-mt-20 border-y border-white/10 bg-black py-20 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <SectionHeading eyebrow="Security & privacy" title="Trust is built into the workflow." description="Human oversight and careful data boundaries are part of the product design, not an afterthought."/>
-            <div className="mt-12 grid gap-x-10 gap-y-0 sm:grid-cols-2">
-              {[
-                {icon:ClipboardCheck, title:"Human approval gate", text:"AI suggestions cannot become board tasks without explicit approval."},
-                {icon:LockKeyhole, title:"Verified task commits", text:"Task commits are designed to pass through verified server endpoints and data policies."},
-                {icon:Shield, title:"Untrusted input boundaries", text:"Meeting transcripts are treated as untrusted input, separate from system instructions."},
-                {icon:Fingerprint, title:"No-AI privacy mode", text:"Confidential meetings can bypass external AI processing."}
-              ].map(item => (
-                <div key={item.title} className="flex gap-4 border-t border-white/10 py-6">
-                  <div className="grid size-9 shrink-0 place-items-center rounded-md border border-white/10 bg-[#080808] text-white">
-                    <item.icon size={17}/>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-white">{item.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-neutral-400">{item.text}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-12">
+              <LinearTrustShowcase />
             </div>
           </div>
         </section>
 
-        {/* System Architecture */}
-        <section id="architecture" className="scroll-mt-20 mx-auto max-w-7xl bg-black px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-5">
-            <SectionHeading eyebrow="System architecture" title="Built for your stack. Ready to scale." description="A deliberate separation of the interface, application logic, data, and AI provider layer."/>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" asChild>
-                <a href="#architecture-diagram">View architecture spec <ArrowDown/></a>
-              </Button>
-              <Button variant="outline" asChild>
-                <a href={repo} target="_blank" rel="noreferrer">View on GitHub <ArrowUpRight/></a>
-              </Button>
-            </div>
-          </div>
-          <div id="architecture-diagram" className="mt-12 grid gap-4 border border-white/10 bg-[#060608] p-4 sm:p-6 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-stretch">
-            {[
-              {step:"01 / INTERFACE", name:"Browser", detail:"React frontend", icon:Code2},
-              {step:"02 / API", name:"Application", detail:"FastAPI backend", icon:GitBranch},
-              {step:"03 / DATA", name:"Workspace data", detail:"Postgres · Auth · Storage · RLS", icon:LockKeyhole},
-              {step:"04 / AI", name:"Provider adapter", detail:"Gemini / Sarvam", icon:Sparkles}
-            ].map((item,i) => (
-              <div key={item.name} className="contents">
-                <div className="rounded-md border border-white/10 bg-black p-5">
-                  <item.icon size={18} className="text-white"/>
-                  <p className="mt-6 font-mono text-[10px] text-neutral-500">{item.step}</p>
-                  <h3 className="mt-2 text-sm font-semibold text-white">{item.name}</h3>
-                  <p className="mt-1 text-xs leading-5 text-neutral-400">{item.detail}</p>
-                </div>
-                {i < 3 && <ChevronRight size={18} className="mx-auto hidden self-center text-neutral-600 lg:block"/>}
-              </div>
-            ))}
-          </div>
-          <p className="mt-4 text-xs text-neutral-500">
-            Planned supporting services: email notifications · web push · WhatsApp sharing · audit logging · retention rules
-          </p>
-        </section>
 
         {/* Closing CTA */}
         <section className="border-t border-white/10 bg-black py-20 text-center sm:py-24">
           <div className="mx-auto max-w-2xl px-4">
             <span className="font-mono text-[10px] uppercase text-neutral-400 tracking-wider">Make the follow-through count</span>
-            <h2 className="mt-4 text-3xl font-semibold text-white sm:text-4xl">Turn your next meeting into action.</h2>
+            <h2 className="mt-4 text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-[1.08]">Turn your next meeting into action.</h2>
             <p className="mt-4 text-sm leading-7 text-neutral-400 sm:text-base">
               Stop losing valuable commitments in meeting notes. Extract, review, and deliver with ActionPulse.
             </p>
