@@ -16,6 +16,8 @@ class Settings:
 
     # Gemini 3.1 Flash-Lite
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    AI_NOTICE_VERSION: str = os.getenv("AI_NOTICE_VERSION", "2026-09-v1")
+    STORAGE_BUCKET_TRANSCRIPTS: str = "meeting-transcripts"
 
     # SMTP Configuration (Free tier: Gmail App Password or Brevo)
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
