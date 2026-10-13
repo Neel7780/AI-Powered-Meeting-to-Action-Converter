@@ -5,16 +5,19 @@ import "./index.css";
 import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import { WorkspaceProvider } from "./context/WorkspaceContext";
+import { DarkModeProvider } from "./context/DarkModeContext";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      <AuthProvider>
-        <WorkspaceProvider>
-          <App />
-        </WorkspaceProvider>
-      </AuthProvider>
+      <DarkModeProvider>
+        <AuthProvider>
+          <WorkspaceProvider>
+            <App />
+          </WorkspaceProvider>
+        </AuthProvider>
+      </DarkModeProvider>
     </ErrorBoundary>
   </StrictMode>
 );

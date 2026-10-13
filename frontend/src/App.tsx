@@ -34,8 +34,18 @@ function App() {
           }
         />
 
+        {/* /tasks and /kanban mount KanbanBoard inside Dashboard shell, wrapped by ProtectedRoute */}
         <Route
           path="/tasks"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/kanban"
           element={
             <ProtectedRoute>
               <Dashboard />
