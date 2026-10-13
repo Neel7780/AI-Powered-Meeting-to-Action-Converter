@@ -1,0 +1,11 @@
+1
+00:00:05,250 --> 00:00:10,500
+Priya: The client demo is scheduled for tomorrow.
+
+2
+00:00:11,000 --> 00:00:16,000
+Rahul: I will prepare the presentation slides by tonight.
+
+3
+00:00:17,000 --> 00:00:21,500
+Aman: I'll test the demo environment.

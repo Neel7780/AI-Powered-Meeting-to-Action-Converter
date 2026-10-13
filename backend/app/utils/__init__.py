@@ -1,1 +1,1 @@
-"""Utility helpers for ActionPulse."""
+"""Utilities package."""

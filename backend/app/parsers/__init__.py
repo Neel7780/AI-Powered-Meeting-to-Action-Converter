@@ -1,61 +1,56 @@
-"""Transcript parsing package dispatcher (BE-5).
+from __future__ import annotations
 
-Supports pasted text and files in .txt, .vtt, .srt, and .docx formats.
-"""
-
+import os
 from pathlib import Path
 
-from app.parsers.clean import TranscriptParseError
-from app.parsers.docx import parse_docx_transcript
-from app.parsers.srt import parse_srt_transcript
-from app.parsers.text import Segment, parse_text_transcript
-from app.parsers.vtt import parse_vtt_transcript
+from app.parsers.clean import TranscriptParseError, clean_text
+from app.parsers.text import Segment, parse_text
+from app.parsers.vtt import parse_vtt
+from app.parsers.srt import parse_srt
+from app.parsers.docx import parse_docx
 
 
 def to_canonical_text(segments: list[Segment]) -> str:
-    """Format segments into canonical text for LLM extraction and DB storage.
-    
-    Produces one 'Speaker: text' line per segment (or just 'text' when speaker is unknown).
+    """
+    Converts parsed segments to canonical format:
+    one 'Speaker: text' line per segment (or just 'text' if speaker is unknown).
+    This format is stored in transcripts.canonical_text and fed into LLM prompts.
     """
     lines: list[str] = []
-    for seg in segments:
-        text = seg.text.strip()
-        if not text:
-            continue
-        if seg.speaker_name and seg.speaker_name.strip():
-            lines.append(f"{seg.speaker_name.strip()}: {text}")
+    for s in segments:
+        if s.speaker_name:
+            lines.append(f"{s.speaker_name}: {s.text}")
         else:
-            lines.append(text)
+            lines.append(s.text)
     return "\n".join(lines)
 
 
 def parse_transcript(filename: str | None, data: bytes | str) -> list[Segment]:
-    """Parse raw transcript data into a list of Segment objects based on file extension.
-    
-    filename=None denotes direct pasted text.
-    Raises TranscriptParseError on unsupported extension or empty segments.
     """
-    if filename is None:
-        segments = parse_text_transcript(data)
+    Dispatcher that selects the appropriate parser based on file extension.
+    - filename=None or empty string implies pasted text (.txt parser).
+    - Supported extensions: .txt, .vtt, .srt, .docx (case-insensitive).
+    - Raises TranscriptParseError on unsupported extension or empty segments.
+    """
+    if not filename:
+        segments = parse_text(data)
     else:
         ext = Path(filename).suffix.lower()
-        if ext == ".txt":
-            segments = parse_text_transcript(data)
+        if ext in ("", ".txt"):
+            segments = parse_text(data)
         elif ext == ".vtt":
-            segments = parse_vtt_transcript(data)
+            segments = parse_vtt(data)
         elif ext == ".srt":
-            segments = parse_srt_transcript(data)
+            segments = parse_srt(data)
         elif ext == ".docx":
-            if isinstance(data, str):
-                data = data.encode("utf-8")
-            segments = parse_docx_transcript(data)
+            segments = parse_docx(data)
         else:
             raise TranscriptParseError(
-                f"Unsupported transcript format '{ext}'. Allowed extensions: .txt, .vtt, .srt, .docx"
+                f"Unsupported file format '{ext}'. Allowed extensions: .txt, .vtt, .srt, .docx"
             )
 
     if not segments:
-        raise TranscriptParseError("Transcript contains no valid text segments")
+        raise TranscriptParseError("No valid segments could be extracted from the transcript")
 
     return segments
 
@@ -63,6 +58,11 @@ def parse_transcript(filename: str | None, data: bytes | str) -> list[Segment]:
 __all__ = [
     "Segment",
     "TranscriptParseError",
+    "clean_text",
+    "parse_text",
+    "parse_vtt",
+    "parse_srt",
+    "parse_docx",
     "parse_transcript",
     "to_canonical_text",
 ]

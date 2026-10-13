@@ -1,0 +1,3 @@
+[00:01:00] Alice: Welcome everyone to the sprint review.
+[00:01:30] Bob: I completed the auth migration yesterday.
+[00:02:15] Charlie: Great, I will deploy the changes to staging by 5 PM.

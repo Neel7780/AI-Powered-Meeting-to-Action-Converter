@@ -1,77 +1,108 @@
-"""SubRip (.srt) transcript parser (BE-5)."""
+from __future__ import annotations
 
 import re
-
-from app.parsers.clean import clean_transcript_data
-from app.parsers.text import Segment
-
-
-def _parse_srt_timestamp(ts: str) -> int | None:
-    """Parse SRT timestamp (HH:MM:SS,mmm) to milliseconds."""
-    ts = ts.strip().replace(",", ".")
-    match = re.match(r"^(?:(\d{1,2}):)?(\d{2}):(\d{2})(?:\.(\d{1,3}))?$", ts)
-    if not match:
-        return None
-    h_str, m_str, s_str, ms_str = match.groups()
-    h = int(h_str) if h_str else 0
-    m = int(m_str)
-    s = int(s_str)
-    ms = int(ms_str.ljust(3, "0")[:3]) if ms_str else 0
-    return (h * 3600 + m * 60 + s) * 1000 + ms
+from app.parsers.clean import clean_text, TranscriptParseError
+from app.parsers.text import Segment, SPEAKER_PATTERN
 
 
-def parse_srt_transcript(raw_data: bytes | str) -> list[Segment]:
-    """Parse SubRip (.srt) file into list of Segments."""
-    cleaned = clean_transcript_data(raw_data)
-    blocks = re.split(r"\n\s*\n", cleaned)
+SRT_TIMING_PATTERN = re.compile(
+    r"^(?:(\d{1,2}):)?(\d{2}):(\d{2}),(\d{3})\s+-->\s+(?:(\d{1,2}):)?(\d{2}):(\d{2}),(\d{3})(?:[ \t].*)?$"
+)
 
+TAG_STRIP_PATTERN = re.compile(r"<[^>]+>")
+
+
+def _parse_srt_timestamp(h: str | None, m: str, s: str, ms: str) -> int:
+    hours = int(h) if h is not None else 0
+    minutes = int(m)
+    seconds = int(s)
+    milliseconds = int(ms)
+    return (hours * 3600 + minutes * 60 + seconds) * 1000 + milliseconds
+
+
+def parse_srt(data: bytes | str) -> list[Segment]:
+    """
+    Parses an SRT subtitle / transcript file.
+    - Parses subtitle blocks separated by index and timing lines.
+    - Extracts start_ms and end_ms with comma separator.
+    - Extracts speaker from 'Speaker: Text' prefix.
+    - Strips inline subtitle formatting tags.
+    """
+    cleaned = clean_text(data)
+    if not cleaned:
+        raise TranscriptParseError("SRT transcript contains no usable text")
+
+    lines = cleaned.split("\n")
     segments: list[Segment] = []
-    timing_re = re.compile(r"((?:\d{1,2}:)?\d{2}:\d{2}[,\.]\d{1,3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[,\.]\d{1,3})")
-    speaker_re = re.compile(r"^([a-zA-Z][a-zA-Z\s._'-]{0,39}[a-zA-Z._'-]):\s*(.*)$")
 
-    for block in blocks:
-        lines = [ln.strip() for ln in block.split("\n") if ln.strip()]
-        if not lines:
-            continue
+    i = 0
+    n = len(lines)
 
-        timing_idx = -1
-        for idx, line in enumerate(lines):
-            if timing_re.search(line):
-                timing_idx = idx
-                break
+    while i < n:
+        line = lines[i].strip()
 
-        if timing_idx == -1:
-            continue
+        # Look for the timing line (might be line i if index was skipped, or line i+1 if line i is index)
+        timing_match = SRT_TIMING_PATTERN.match(line)
+        if not timing_match and i + 1 < n:
+            timing_match = SRT_TIMING_PATTERN.match(lines[i + 1].strip())
+            if timing_match:
+                i += 1  # Advance past the index line
 
-        timing_match = timing_re.search(lines[timing_idx])
         if not timing_match:
+            i += 1
             continue
 
-        start_ms = _parse_srt_timestamp(timing_match.group(1))
-        end_ms = _parse_srt_timestamp(timing_match.group(2))
-        if start_ms is not None and end_ms is not None and end_ms < start_ms:
-            end_ms = start_ms
+        start_ms = _parse_srt_timestamp(
+            timing_match.group(1),
+            timing_match.group(2),
+            timing_match.group(3),
+            timing_match.group(4),
+        )
+        end_ms = _parse_srt_timestamp(
+            timing_match.group(5),
+            timing_match.group(6),
+            timing_match.group(7),
+            timing_match.group(8),
+        )
+        i += 1
 
-        text_lines = lines[timing_idx + 1:]
-        full_text = " ".join(text_lines).strip()
-        if not full_text:
+        # Collect text lines for this subtitle block
+        block_text_lines = []
+        while i < n:
+            curr = lines[i].strip()
+            if not curr:
+                break
+            # If current line is next timing line or next index followed by timing line, break
+            if SRT_TIMING_PATTERN.match(curr):
+                break
+            if i + 1 < n and SRT_TIMING_PATTERN.match(lines[i + 1].strip()):
+                break
+            block_text_lines.append(curr)
+            i += 1
+
+        if not block_text_lines:
             continue
 
-        # Strip basic HTML tags if any (e.g. <i>, <b>)
-        full_text = re.sub(r"<[^>]+>", "", full_text).strip()
+        raw_text = " ".join(block_text_lines)
+        clean_block_text = TAG_STRIP_PATTERN.sub("", raw_text).strip()
 
         speaker: str | None = None
-        spk_match = speaker_re.match(full_text)
-        if spk_match:
-            speaker = spk_match.group(1).strip()
-            full_text = spk_match.group(2).strip()
+        sp_match = SPEAKER_PATTERN.match(clean_block_text)
+        if sp_match:
+            cand_speaker = sp_match.group(1).strip()
+            if not re.search(r"\b\d+$", cand_speaker):
+                speaker = cand_speaker
+                clean_block_text = sp_match.group(2).strip()
 
-        if full_text:
+        if clean_block_text:
             segments.append(Segment(
                 speaker_name=speaker,
                 start_ms=start_ms,
-                end_ms=end_ms,
-                text=full_text
+                end_ms=max(start_ms, end_ms),
+                text=clean_block_text,
             ))
+
+    if not segments:
+        raise TranscriptParseError("No valid subtitle blocks found in SRT transcript")
 
     return segments
