@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, CircleHelp, ClipboardCheck, Fingerprint, LockKeyhole, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, CircleHelp, ClipboardCheck, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SelectionList from "@/components/ui/SelectionList";
 import { Cover } from "@/components/ui/cover";
@@ -8,6 +8,7 @@ import InteractiveProductWalkthrough from "@/components/landing/InteractiveProdu
 import LinearWorkflowShowcase from "@/components/landing/LinearWorkflowShowcase";
 import InteractiveBentoFeatures from "@/components/landing/InteractiveBentoFeatures";
 import InteractiveRoleMatrix from "@/components/landing/InteractiveRoleMatrix";
+import LinearTrustShowcase from "@/components/landing/LinearTrustShowcase";
 
 const repo = "https://github.com/Neel7780/AI-Powered-Meeting-to-Action-Converter";
 const nav = [
@@ -320,23 +321,8 @@ export default function ActionPulseLanding() {
         <section id="security" className="scroll-mt-20 border-y border-white/10 bg-black py-20 sm:py-24">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <SectionHeading eyebrow="Security & privacy" title="Trust is built into the workflow." description="Human oversight and careful data boundaries are part of the product design, not an afterthought."/>
-            <div className="mt-12 grid gap-x-10 gap-y-0 sm:grid-cols-2">
-              {[
-                {icon:ClipboardCheck, title:"Human approval gate", text:"AI suggestions cannot become board tasks without explicit approval."},
-                {icon:LockKeyhole, title:"Verified task commits", text:"Task commits are designed to pass through verified server endpoints and data policies."},
-                {icon:Shield, title:"Untrusted input boundaries", text:"Meeting transcripts are treated as untrusted input, separate from system instructions."},
-                {icon:Fingerprint, title:"No-AI privacy mode", text:"Confidential meetings can bypass external AI processing."}
-              ].map(item => (
-                <div key={item.title} className="flex gap-4 border-t border-white/10 py-6">
-                  <div className="grid size-9 shrink-0 place-items-center rounded-md border border-white/10 bg-[#080808] text-white">
-                    <item.icon size={17}/>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium tracking-tight text-white sm:text-base">{item.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-neutral-400">{item.text}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-12">
+              <LinearTrustShowcase />
             </div>
           </div>
         </section>
