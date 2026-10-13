@@ -17,7 +17,7 @@ Our project operates strictly on free-tier services. **Never import or configure
 | **Frontend** | React 18+ (Vite SPA, PWA) or Next.js | Hosted on Vercel Hobby / Cloudflare Pages. Client-side code uses `@supabase/supabase-js` with the **Anon Key** (`VITE_SUPABASE_ANON_KEY`) only. |
 | **Backend** | Python 3.11+ / FastAPI | Hosted on Render Free web service. Ephemeral disk. Backend code uses the Supabase **Service-Role Key** for privileged mutations. |
 | **Database & Auth** | Supabase Postgres (Mumbai region) | Database tables, Row-Level Security (RLS) policies, and triggers are defined in [`schema.sql`](schema.sql). |
-| **LLM Provider** | Google Gemini 3.1 Flash-Lite (Free) | Use `google-genai` / `gemini-3.1-flash-lite`. Fallback: Sarvam 105B (free credits). **DO NOT import OpenAI or Anthropic.** |
+| **LLM Provider** | Google Gemini 3.1 Flash-Lite (Free) | Use `langchain-google-genai` (LangChain over `google-genai`) / `gemini-3.1-flash-lite`. Fallback: Sarvam 105B (free credits). **DO NOT import OpenAI or Anthropic.** |
 | **Email** | SMTP (Gmail App Password / Brevo free) | Standard Python `smtplib` / email client. **DO NOT import Resend or SendGrid.** |
 | **WhatsApp** | `wa.me` URL Link + Web Push (PWA) | Zero-cost 1-tap WhatsApp sharing link. **DO NOT use paid WhatsApp Business API.** |
 
