@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { motion } from "framer-motion";
 import {
   Sparkles,
@@ -541,7 +541,9 @@ export default function InteractiveBentoFeatures() {
 
           {/* Bottom Visual: 3D Interactive Three.js Arc Globe */}
           <div className="absolute inset-x-0 -bottom-16 h-[340px] sm:h-[370px] z-10">
-            <World data={sampleArcs} globeConfig={globeConfig} />
+            <Suspense fallback={null}>
+              <World data={sampleArcs} globeConfig={globeConfig} />
+            </Suspense>
           </div>
 
           {/* Atmospheric bottom fade gradient */}
