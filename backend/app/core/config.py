@@ -16,6 +16,10 @@ class Settings:
 
     # Gemini 3.1 Flash-Lite
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
+    LLM_PROVIDER_ALLOWLIST: list[str] = [
+        p.strip() for p in os.getenv("LLM_PROVIDER_ALLOWLIST", "gemini").split(",") if p.strip()
+    ]
     AI_NOTICE_VERSION: str = os.getenv("AI_NOTICE_VERSION", "2026-09-v1")
     STORAGE_BUCKET_TRANSCRIPTS: str = "meeting-transcripts"
 

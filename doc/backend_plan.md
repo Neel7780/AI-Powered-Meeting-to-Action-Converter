@@ -67,7 +67,7 @@
 | **Supabase Auth** | Sign-up, login, Google OAuth, magic link | The frontend does the login. The backend only verifies the user's JWT. |
 | **Supabase Storage** (bucket `meeting-transcripts`) | Original uploaded transcript files | Render's disk is wiped on every restart |
 | **`supabase-py`** with the service-role key | All backend database access | **Bypasses RLS**, so the backend must check permissions itself (§10) |
-| **Google Gemini 3.1 Flash-Lite** via **`google-genai`** | Extraction | Free tier, native JSON-schema output. Model id `gemini-3.1-flash-lite`. |
+| **Google Gemini 3.1 Flash-Lite** via **LangChain** (`langchain-google-genai`, built on `google-genai`) | Extraction | Free tier, native JSON-schema output. Model id `gemini-3.1-flash-lite`. |
 | **`smtplib` + `email.message`** (standard library) | Sending email | Gmail App Password or Brevo free SMTP. No paid email API. |
 | **`python-docx`** | Reading `.docx` transcripts | The only new parsing dependency. `.txt`, `.vtt` and `.srt` need plain Python only. |
 | **`zoneinfo` + `tzdata`** | Timezones and deadlines | Without `tzdata`, `ZoneInfo("Asia/Kolkata")` crashes on Windows |
@@ -95,7 +95,7 @@ Browser (React + Vite PWA on Vercel)
 
 FastAPI (Render Free)
   ├─ service-role key ─► Supabase Postgres / Storage   (bypasses RLS → we check roles in code)
-  ├─ google-genai ─────► Gemini 3.1 Flash-Lite         (extraction only)
+  ├─ langchain ────────► Gemini 3.1 Flash-Lite         (extraction only)
   └─ smtplib ──────────► Gmail / Brevo SMTP            (task emails + invite emails)
 
 Supabase pg_cron ── every minute ──► POST /internal/tick   (keeps Render + Supabase awake)
@@ -426,7 +426,7 @@ def notify_tasks_assigned(meeting_id: UUID, task_ids: list[UUID]) -> None: ...
    - Use null for anything not stated. Give a confidence from 0 to 1 for the item, the owner and the deadline.
    ```
 4. **Gemini call** (`gemini.py`):
-   - `google-genai`, model `gemini-3.1-flash-lite`, `temperature=0`.
+   - LangChain `ChatGoogleGenerativeAI` (`langchain-google-genai`), model `gemini-3.1-flash-lite`, `temperature=0`.
    - `response_mime_type="application/json"` and `response_schema=LLMExtraction` (the model below).
    - Client timeout 60 s. Read token counts from `response.usage_metadata`.
    - **On 429, 5xx or timeout:** retry at most 2 times, waiting 2 s and then 8 s.
