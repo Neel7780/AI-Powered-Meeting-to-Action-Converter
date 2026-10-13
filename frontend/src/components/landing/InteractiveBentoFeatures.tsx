@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Sparkles,
@@ -10,6 +10,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { World, type Position } from "@/components/ui/globe";
 
 // =========================================================================
 // 1. SUB-COMPONENT: Animated SVG Waves Background for Card 1
@@ -104,125 +105,169 @@ function AnimatedWavesBackground() {
 }
 
 // =========================================================================
-// 2. SUB-COMPONENT: 3D Rotating Dot Globe on HTML5 Canvas for Card 3
+// 2. GLOBE CONFIGURATION & ARCS for Card 3
 // =========================================================================
-function AnimatedDotGlobe() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+const globeConfig = {
+  pointSize: 4,
+  globeColor: "#062056",
+  showAtmosphere: true,
+  atmosphereColor: "#FFFFFF",
+  atmosphereAltitude: 0.1,
+  emissive: "#062056",
+  emissiveIntensity: 0.1,
+  shininess: 0.9,
+  polygonColor: "rgba(255,255,255,0.7)",
+  ambientLight: "#38bdf8",
+  directionalLeftLight: "#ffffff",
+  directionalTopLight: "#ffffff",
+  pointLight: "#ffffff",
+  arcTime: 1000,
+  arcLength: 0.9,
+  rings: 1,
+  maxRings: 3,
+  initialPosition: { lat: 19.076, lng: 72.8777 },
+  autoRotate: true,
+  autoRotateSpeed: 0.5,
+};
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let animId: number;
-    let rotation = 0;
-
-    // Generate ~720 points distributed evenly on the sphere using golden spiral
-    const count = 750;
-    const points: { x: number; y: number; z: number }[] = [];
-    for (let i = 0; i < count; i++) {
-      const phi = Math.acos(1 - (2 * (i + 0.5)) / count);
-      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-      points.push({
-        x: Math.cos(theta) * Math.sin(phi),
-        y: Math.sin(theta) * Math.sin(phi),
-        z: Math.cos(phi),
-      });
-    }
-
-    const render = () => {
-      const width = canvas.width;
-      const height = canvas.height;
-      ctx.clearRect(0, 0, width, height);
-
-      // Globe sphere radius and center (peeking from bottom-right as in reference)
-      const radius = Math.min(width, height) * 0.92;
-      const cx = width * 0.74;
-      const cy = height * 0.88;
-
-      rotation += 0.0035;
-      const cosR = Math.cos(rotation);
-      const sinR = Math.sin(rotation);
-      const tilt = 0.36; // ~20.6 degree axis tilt
-      const cosT = Math.cos(tilt);
-      const sinT = Math.sin(tilt);
-
-      for (let i = 0; i < points.length; i++) {
-        const pt = points[i];
-        // Rotate around Y axis
-        const x1 = pt.x * cosR - pt.y * sinR;
-        const y1 = pt.x * sinR + pt.y * cosR;
-        const z1 = pt.z;
-
-        // Tilt around X axis
-        const y2 = y1 * cosT - z1 * sinT;
-        const z2 = y1 * sinT + z1 * cosT;
-        const x2 = x1;
-
-        // Front hemisphere visibility (depth threshold)
-        if (z2 > -0.18) {
-          const depth = (z2 + 0.18) / 1.18; // 0 to 1
-          const screenX = cx + x2 * radius;
-          const screenY = cy - y2 * radius;
-
-          if (screenX >= -10 && screenX <= width + 10 && screenY >= -10 && screenY <= height + 10) {
-            const size = 0.75 + depth * 1.9;
-            const alpha = 0.12 + depth * 0.88;
-
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
-            // Cyan/sky-blue glowing tone matching reference screenshot
-            ctx.fillStyle = `rgba(56, 189, 248, ${alpha})`;
-            ctx.fill();
-
-            // Luminous white core on nearest foreground dots
-            if (depth > 0.85 && i % 14 === 0) {
-              ctx.beginPath();
-              ctx.arc(screenX, screenY, size * 1.35, 0, Math.PI * 2);
-              ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.95})`;
-              ctx.fill();
-            }
-          }
-        }
-      }
-
-      animId = requestAnimationFrame(render);
-    };
-
-    render();
-
-    return () => {
-      cancelAnimationFrame(animId);
-    };
-  }, []);
-
-  return (
-    <div className="relative size-full overflow-hidden select-none pointer-events-none">
-      {/* Outer Atmosphere Glow Aura */}
-      <div
-        aria-hidden="true"
-        className="absolute right-0 bottom-0 w-[420px] h-[420px] rounded-full bg-blue-500/15 blur-[90px] translate-x-1/4 translate-y-1/4 pointer-events-none"
-      />
-      {/* Crescent Rim Highlight (as in reference image) */}
-      <div
-        aria-hidden="true"
-        className="absolute right-3 bottom-3 w-[360px] h-[360px] rounded-full pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(circle at 35% 35%, transparent 62%, rgba(56,189,248,0.35) 74%, rgba(147,197,253,0.7) 81%, transparent 88%)",
-          filter: "blur(2px)",
-        }}
-      />
-      <canvas
-        ref={canvasRef}
-        width={480}
-        height={360}
-        className="w-full h-full block"
-      />
-    </div>
-  );
-}
+const colors = ["#06b6d4", "#3b82f6", "#6366f1"];
+const sampleArcs: Position[] = [
+  {
+    order: 1,
+    startLat: -19.885592,
+    startLng: -43.951191,
+    endLat: -22.9068,
+    endLng: -43.1729,
+    arcAlt: 0.1,
+    color: colors[0],
+  },
+  {
+    order: 1,
+    startLat: 28.6139,
+    startLng: 77.209,
+    endLat: 3.139,
+    endLng: 101.6869,
+    arcAlt: 0.2,
+    color: colors[1],
+  },
+  {
+    order: 1,
+    startLat: -19.885592,
+    startLng: -43.951191,
+    endLat: -1.303396,
+    endLng: 36.852443,
+    arcAlt: 0.5,
+    color: colors[2],
+  },
+  {
+    order: 2,
+    startLat: 1.3521,
+    startLng: 103.8198,
+    endLat: 35.6762,
+    endLng: 139.6503,
+    arcAlt: 0.2,
+    color: colors[1],
+  },
+  {
+    order: 2,
+    startLat: 51.5072,
+    startLng: -0.1276,
+    endLat: 3.139,
+    endLng: 101.6869,
+    arcAlt: 0.3,
+    color: colors[0],
+  },
+  {
+    order: 2,
+    startLat: -15.785493,
+    startLng: -47.909029,
+    endLat: 36.162809,
+    endLng: -115.119411,
+    arcAlt: 0.3,
+    color: colors[2],
+  },
+  {
+    order: 3,
+    startLat: -33.8688,
+    startLng: 151.2093,
+    endLat: 22.3193,
+    endLng: 114.1694,
+    arcAlt: 0.3,
+    color: colors[0],
+  },
+  {
+    order: 3,
+    startLat: 21.3099,
+    startLng: -157.8581,
+    endLat: 40.7128,
+    endLng: -74.006,
+    arcAlt: 0.3,
+    color: colors[1],
+  },
+  {
+    order: 3,
+    startLat: -6.2088,
+    startLng: 106.8456,
+    endLat: 51.5072,
+    endLng: -0.1276,
+    arcAlt: 0.3,
+    color: colors[2],
+  },
+  {
+    order: 4,
+    startLat: 11.986597,
+    startLng: 8.571831,
+    endLat: -15.595412,
+    endLng: -56.05918,
+    arcAlt: 0.5,
+    color: colors[0],
+  },
+  {
+    order: 4,
+    startLat: -34.6037,
+    startLng: -58.3816,
+    endLat: 22.3193,
+    endLng: 114.1694,
+    arcAlt: 0.7,
+    color: colors[1],
+  },
+  {
+    order: 4,
+    startLat: 51.5072,
+    startLng: -0.1276,
+    endLat: 48.8566,
+    endLng: -2.3522,
+    arcAlt: 0.1,
+    color: colors[2],
+  },
+  {
+    order: 5,
+    startLat: 14.5995,
+    startLng: 120.9842,
+    endLat: 51.5072,
+    endLng: -0.1276,
+    arcAlt: 0.3,
+    color: colors[1],
+  },
+  {
+    order: 5,
+    startLat: 1.3521,
+    startLng: 103.8198,
+    endLat: -33.8688,
+    endLng: 151.2093,
+    arcAlt: 0.2,
+    color: colors[0],
+  },
+  {
+    order: 5,
+    startLat: 34.0522,
+    startLng: -118.2437,
+    endLat: 48.8566,
+    endLng: -2.3522,
+    arcAlt: 0.2,
+    color: colors[2],
+  },
+];
 
 // =========================================================================
 // 3. MAIN COMPONENT: InteractiveBentoFeatures
@@ -480,12 +525,12 @@ export default function InteractiveBentoFeatures() {
         </div>
 
         {/* =====================================================================
-            CARD 3 (BOTTOM LEFT): Global Edge Infrastructure (3D Animated Canvas Globe)
+            CARD 3 (BOTTOM LEFT): Global Edge Infrastructure (3D Interactive Three.js Arc Globe)
             Span 5 on desktop (matching reference layout)
             ===================================================================== */}
-        <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-white/10 bg-[#090a0f] p-7 sm:p-9 shadow-2xl relative overflow-hidden group hover:border-white/20 transition-all duration-300 min-h-[380px]">
+        <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl border border-white/10 bg-[#090a0f] p-7 sm:p-9 shadow-2xl relative overflow-hidden group hover:border-white/20 transition-all duration-300 min-h-[420px]">
           {/* Top Text Description */}
-          <div className="relative z-10">
+          <div className="relative z-20 pointer-events-none">
             <h3 className="text-xl sm:text-2xl font-medium tracking-tight text-white">
               Hosting over the edge
             </h3>
@@ -494,10 +539,13 @@ export default function InteractiveBentoFeatures() {
             </p>
           </div>
 
-          {/* Bottom Visual: 3D Rotating Dot Globe */}
-          <div className="relative z-0 h-[220px] sm:h-[240px] -mx-7 -mb-7 sm:-mx-9 sm:-mb-9">
-            <AnimatedDotGlobe />
+          {/* Bottom Visual: 3D Interactive Three.js Arc Globe */}
+          <div className="absolute inset-x-0 -bottom-16 h-[340px] sm:h-[370px] z-10">
+            <World data={sampleArcs} globeConfig={globeConfig} />
           </div>
+
+          {/* Atmospheric bottom fade gradient */}
+          <div className="absolute bottom-0 inset-x-0 h-28 bg-gradient-to-t from-[#090a0f] via-[#090a0f]/40 to-transparent pointer-events-none z-20" />
         </div>
 
         {/* =====================================================================
