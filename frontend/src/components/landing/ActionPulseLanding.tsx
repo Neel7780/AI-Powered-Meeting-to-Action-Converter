@@ -8,14 +8,12 @@ import InteractiveProductWalkthrough from "@/components/landing/InteractiveProdu
 import LinearWorkflowShowcase from "@/components/landing/LinearWorkflowShowcase";
 import InteractiveBentoFeatures from "@/components/landing/InteractiveBentoFeatures";
 import InteractiveRoleMatrix from "@/components/landing/InteractiveRoleMatrix";
-import InteractiveArchitectureFlow from "@/components/landing/InteractiveArchitectureFlow";
 
 const repo = "https://github.com/Neel7780/AI-Powered-Meeting-to-Action-Converter";
 const nav = [
   { label: "Features", href: "#features" },
   { label: "How it works", href: "#how-it-works" },
   { label: "Security", href: "#security" },
-  { label: "Architecture", href: "#architecture" },
 ];
 
 function Brand() {
@@ -343,23 +341,6 @@ export default function ActionPulseLanding() {
           </div>
         </section>
 
-        {/* System Architecture */}
-        <section id="architecture" className="scroll-mt-20 mx-auto max-w-7xl bg-black px-4 py-20 sm:px-6 sm:py-24 lg:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-5">
-            <SectionHeading eyebrow="System architecture" title="Built for your stack. Ready to scale." description="A deliberate separation of the interface, application logic, data, and AI provider layer."/>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" asChild>
-                <a href="#architecture-diagram">View architecture spec <ArrowDown/></a>
-              </Button>
-              <Button variant="outline" asChild>
-                <a href={repo} target="_blank" rel="noreferrer">View on GitHub <ArrowUpRight/></a>
-              </Button>
-            </div>
-          </div>
-          <div id="architecture-diagram">
-            <InteractiveArchitectureFlow />
-          </div>
-        </section>
 
         {/* Closing CTA */}
         <section className="border-t border-white/10 bg-black py-20 text-center sm:py-24">
