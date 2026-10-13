@@ -12,9 +12,13 @@ export interface WorkspaceMember {
 
 export interface TranscriptSegment {
   id: string;
-  meeting_id: string;
+  transcript_id?: string;
+  meeting_id?: string;
+  segment_index?: number;
   speaker_name: string;
   speaker_color?: string;
+  start_ms?: number | null;
+  end_ms?: number | null;
   start_seconds: number;
   timestamp: string; // e.g. "02:14"
   text: string;
@@ -25,7 +29,7 @@ export type ActionItemStatus = 'pending' | 'approved' | 'rejected';
 export interface ActionItemCandidate {
   id: string;
   meeting_id: string;
-  workspace_id: string;
+  workspace_id?: string;
   title: string;
   description: string;
   due_date: string | null; // ISO YYYY-MM-DD

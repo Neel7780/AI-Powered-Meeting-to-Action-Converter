@@ -14,7 +14,7 @@ import {
   Search 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { 
+import type { 
   ActionItemCandidate, 
   MeetingDetails, 
   TranscriptSegment, 
@@ -128,7 +128,7 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
 
   const handleApprove = async (id: string) => {
     try {
-      const updated = await reviewApi.approveActionItem(id);
+      const updated = await reviewApi.approveActionItem(id, meetingId);
       setCandidates(prev => prev.map(c => c.id === id ? updated : c));
       showToast(`Approved "${updated.title.slice(0, 32)}..."`, 'success');
     } catch (err) {
@@ -139,7 +139,7 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
 
   const handleReject = async (id: string) => {
     try {
-      const updated = await reviewApi.rejectActionItem(id);
+      const updated = await reviewApi.rejectActionItem(id, meetingId);
       setCandidates(prev => prev.map(c => c.id === id ? updated : c));
       showToast(`Rejected item`, 'info');
     } catch (err) {

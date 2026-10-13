@@ -12,7 +12,7 @@ import {
   Check, 
   Filter 
 } from 'lucide-react';
-import { TranscriptSegment } from '../../types/review';
+import type { TranscriptSegment } from '../../types/review';
 
 interface TranscriptViewerProps {
   segments: TranscriptSegment[];
@@ -105,7 +105,7 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
   }, [highlightedSegmentId]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
     if (isPlaying) {
       interval = setInterval(() => {
         setPlaybackSeconds(prev => {
@@ -271,7 +271,7 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
             return (
               <div
                 key={segment.id}
-                ref={(el) => (segmentRefs.current[segment.id] = el)}
+                ref={(el) => { segmentRefs.current[segment.id] = el; }}
                 onClick={() => handleSegmentClick(segment)}
                 className={`pt-3 first:pt-0 group transition-all duration-200 rounded-lg cursor-pointer ${
                   isHighlighted

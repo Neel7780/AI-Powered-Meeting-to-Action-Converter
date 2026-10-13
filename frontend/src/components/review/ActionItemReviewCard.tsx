@@ -13,7 +13,7 @@ import {
   ExternalLink,
   Tag
 } from 'lucide-react';
-import { ActionItemCandidate, WorkspaceMember } from '../../types/review';
+import type { ActionItemCandidate, WorkspaceMember } from '../../types/review';
 
 interface ActionItemReviewCardProps {
   item: ActionItemCandidate;
@@ -48,7 +48,6 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
     setEditDueDate(item.due_date || '');
   }, [item.title, item.description, item.due_date]);
 
-  const assignedMember = members.find(m => m.id === item.assignee_id) || item.assignee;
   const isUnassigned = !item.assignee_id;
 
   const handleSaveInlineEdit = () => {
