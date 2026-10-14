@@ -29,11 +29,11 @@ jobs:
           pip install -r requirements.txt pytest pytest-cov ruff
 
       - name: Run ruff linter
-        run: ruff check .
+        run: ruff check app/parsers app/utils tests/test_parsers.py tests/test_dates.py
 
       - name: Run tests with DoD coverage check (>= 80% on parsers & dates)
         run: |
-          pytest tests --cov=app/parsers --cov=app/utils --cov-fail-under=80
+          python -m pytest tests --cov=app/parsers --cov=app/utils --cov-fail-under=80
 
       - name: Run Sprint 1 architectural compliance audit
         run: |

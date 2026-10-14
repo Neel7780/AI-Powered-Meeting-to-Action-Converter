@@ -51,11 +51,8 @@ def parse_docx(data: bytes | io.BytesIO | str) -> list[Segment]:
         import docx  # type: ignore
         doc = docx.Document(io.BytesIO(raw_bytes))
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    except ImportError:
+    except (ImportError, ValueError, AttributeError, zipfile.BadZipFile, ET.ParseError):
         # Fallback to standard library zip + XML parser
-        paragraphs = _extract_docx_paragraphs_zip(raw_bytes)
-    except Exception:
-        # In case python-docx threw an error, attempt the zip fallback
         paragraphs = _extract_docx_paragraphs_zip(raw_bytes)
 
     if not paragraphs:

@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import pytest
 
 from app.utils.dates import is_valid_timezone, to_utc
 
@@ -80,7 +79,8 @@ class TestToUtc:
 
     def test_to_utc_zoneinfo_exception(self, monkeypatch):
         import app.utils.dates as dates_mod
+        from zoneinfo import ZoneInfoNotFoundError
         def mock_zoneinfo(*args, **kwargs):
-            raise RuntimeError("Simulated error")
+            raise ZoneInfoNotFoundError("Simulated error")
         monkeypatch.setattr(dates_mod, "ZoneInfo", mock_zoneinfo)
         assert to_utc("2026-10-02", "12:00", "UTC") is None

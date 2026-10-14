@@ -15,7 +15,7 @@ def is_valid_timezone(tz: str) -> bool:
     try:
         ZoneInfo(tz.strip())
         return True
-    except Exception:
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
         return False
 
 
@@ -66,5 +66,5 @@ def to_utc(date: str | None, time: str | None, tz: str) -> datetime | None:
         zone = ZoneInfo(tz.strip())
         local_dt = datetime.combine(parsed_date, parsed_time, tzinfo=zone)
         return local_dt.astimezone(timezone.utc)
-    except Exception:
+    except (ZoneInfoNotFoundError, ValueError, TypeError, OverflowError):
         return None
