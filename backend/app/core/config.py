@@ -29,6 +29,9 @@ class Settings:
     SMTP_USER: str = os.getenv("SMTP_USER", "")
     SMTP_PASS: str = os.getenv("SMTP_PASS", os.getenv("SMTP_PASSWORD", ""))
     MAIL_FROM: str = os.getenv("MAIL_FROM", os.getenv("EMAIL_FROM", "ActionPulse <noreply@actionpulse.app>"))
+    # Brevo HTTPS API key (xkeysib-...). When set it is used instead of SMTP,
+    # which Render's free tier blocks.
+    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", "")
     # Backwards compatibility aliases
     SMTP_PASSWORD: str = SMTP_PASS
     EMAIL_FROM: str = MAIL_FROM

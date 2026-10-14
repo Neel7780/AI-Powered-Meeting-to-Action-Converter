@@ -1,7 +1,7 @@
 """Email delivery and notification service for ActionPulse (BE-2).
 
-Zero-Budget Tech Stack: Standard Python smtplib with TLS (port 587)
-Free-tier providers: Gmail App Password or Brevo SMTP.
+Zero-Budget Tech Stack: Brevo free HTTPS API when BREVO_API_KEY is set (Render's
+free tier blocks outbound SMTP ports), else standard smtplib with TLS (port 587).
 No paid APIs (Resend, SendGrid, etc. are strictly forbidden).
 """
 
@@ -12,9 +12,12 @@ import smtplib
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
+from email.utils import parseaddr
 from typing import Any, List, Optional
 from uuid import UUID
 from zoneinfo import ZoneInfo
+
+import httpx
 
 from app.core.config import settings
 from app.core.supabase import get_supabase_client
@@ -43,6 +46,25 @@ def send_email(
 
     if final_html is None or final_text is None:
         raise ValueError("Both HTML and text body must be provided to send_email.")
+
+    if settings.BREVO_API_KEY:
+        sender_name, sender_email = parseaddr(settings.MAIL_FROM)
+        resp = httpx.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": settings.BREVO_API_KEY},
+            json={
+                "sender": {"name": sender_name or "ActionPulse", "email": sender_email},
+                "to": [{"email": to}],
+                "subject": subject,
+                "htmlContent": final_html,
+                "textContent": final_text,
+            },
+            timeout=10,
+        )
+        if resp.is_error:
+            raise RuntimeError(f"Brevo API error {resp.status_code}: {resp.text[:300]}")
+        logger.info("Email delivered via Brevo API to %s", to)
+        return
 
     if not settings.SMTP_HOST or not settings.SMTP_PORT:
         raise RuntimeError("SMTP_HOST and SMTP_PORT are not configured.")

@@ -91,6 +91,24 @@ class TestEmailDelivery:
                 text_body="Fail"
             )
 
+    @patch("smtplib.SMTP")
+    @patch("app.services.email.httpx.post")
+    def test_send_email_uses_brevo_api_when_key_set(self, mock_post, mock_smtp_cls):
+        mock_post.return_value = MagicMock(is_error=False)
+        with patch.object(settings, "BREVO_API_KEY", "xkeysib-test"), \
+             patch.object(settings, "MAIL_FROM", "ActionPulse <noreply@example.com>"):
+            send_email("api@example.com", "API Subject", "<p>H</p>", "T")
+
+        mock_smtp_cls.assert_not_called()
+        payload = mock_post.call_args.kwargs["json"]
+        assert mock_post.call_args.kwargs["headers"] == {"api-key": "xkeysib-test"}
+        assert payload["sender"] == {"name": "ActionPulse", "email": "noreply@example.com"}
+        assert payload["to"] == [{"email": "api@example.com"}]
+
+        mock_post.return_value = MagicMock(is_error=True, status_code=401, text="unauthorized")
+        with patch.object(settings, "BREVO_API_KEY", "bad"), pytest.raises(RuntimeError, match="401"):
+            send_email("api@example.com", "S", "<p>H</p>", "T")
+
     @patch("app.services.email.send_email")
     def test_send_invite_email(self, mock_send_email):
         send_invite_email(
