@@ -1,54 +1,71 @@
-"""Date and timezone utility functions for ActionPulse (BE-5 & Core)."""
+from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
+from datetime import time as dtime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 def is_valid_timezone(tz: str) -> bool:
-    """Check if the provided string is a valid IANA timezone name."""
-    if not tz or not isinstance(tz, str):
+    """
+    Validates whether the provided timezone name is recognized by zoneinfo.
+    Returns True for valid timezones, False otherwise.
+    Never raises an exception.
+    """
+    if not isinstance(tz, str) or not tz.strip():
         return False
     try:
         ZoneInfo(tz.strip())
         return True
-    except (ZoneInfoNotFoundError, ValueError, KeyError):
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
         return False
 
 
-def to_utc(date_str: str | None, time_str: str | None, tz: str) -> datetime | None:
-    """Convert a local date string (YYYY-MM-DD) and optional time string (HH:MM or HH:MM:SS)
-    in timezone tz to a UTC datetime.
-    
-    If time_str is None or empty, defaults to 23:59:59 local time (end of day).
-    Returns None on bad input or invalid timezone. Never raises.
+def to_utc(date: str | None, time: str | None, tz: str) -> datetime | None:
     """
-    if not date_str or not isinstance(date_str, str):
+    Converts a local meeting date and optional time in a given timezone to UTC datetime.
+    - If date only is provided (time is None or empty), assumes end-of-day: 23:59:59 local time.
+    - If time is provided, parses 'HH:MM' or 'HH:MM:SS'.
+    - Bad date, time, or timezone returns None.
+    - Never raises an exception.
+
+    Example:
+    >>> to_utc("2026-10-02", None, "Asia/Kolkata")
+    datetime.datetime(2026, 10, 2, 18, 29, 59, tzinfo=datetime.timezone.utc)
+    >>> to_utc("2026-10-02", "14:30", "Asia/Kolkata")
+    datetime.datetime(2026, 10, 2, 9, 0, tzinfo=datetime.timezone.utc)
+    """
+    if not date or not isinstance(date, str) or not tz or not isinstance(tz, str):
         return None
+
     if not is_valid_timezone(tz):
         return None
 
-    date_clean = date_str.strip()
-    # Match YYYY-MM-DD
-    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date_clean):
+    # Parse date (format YYYY-MM-DD)
+    try:
+        parsed_date = datetime.strptime(date.strip(), "%Y-%m-%d").date()
+    except (ValueError, TypeError):
         return None
 
-    hour, minute, second = 23, 59, 59
-    if time_str and isinstance(time_str, str) and time_str.strip():
-        t_clean = time_str.strip()
-        time_match = re.match(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$", t_clean)
-        if not time_match:
+    # Parse time
+    parsed_time: dtime
+    if time is None or not str(time).strip():
+        parsed_time = dtime(hour=23, minute=59, second=59)
+    else:
+        time_str = str(time).strip()
+        parsed_time_val = None
+        for fmt in ("%H:%M", "%H:%M:%S"):
+            try:
+                parsed_time_val = datetime.strptime(time_str, fmt).time()
+                break
+            except ValueError:
+                continue
+        if parsed_time_val is None:
             return None
-        h_val, m_val, s_val = time_match.groups()
-        hour, minute = int(h_val), int(m_val)
-        second = int(s_val) if s_val is not None else 0
-        if not (0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
-            return None
+        parsed_time = parsed_time_val
 
     try:
-        year, month, day = map(int, date_clean.split("-"))
         zone = ZoneInfo(tz.strip())
-        local_dt = datetime(year, month, day, hour, minute, second, tzinfo=zone)
+        local_dt = datetime.combine(parsed_date, parsed_time, tzinfo=zone)
         return local_dt.astimezone(UTC)
-    except Exception:
+    except (ZoneInfoNotFoundError, ValueError, TypeError, OverflowError):
         return None

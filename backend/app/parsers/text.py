@@ -1,9 +1,9 @@
-"""Plain text and pasted transcript parser (BE-5)."""
+from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
-from app.parsers.clean import clean_transcript_data
+from app.parsers.clean import TranscriptParseError, clean_text
 
 
 @dataclass
@@ -14,79 +14,106 @@ class Segment:
     text: str
 
 
-def _parse_timestamp_ms(ts_str: str) -> int | None:
-    """Parse [HH:MM:SS], [MM:SS], (HH:MM:SS), (MM:SS) into milliseconds."""
-    ts_str = ts_str.strip("[]()")
-    parts = ts_str.split(":")
-    try:
-        if len(parts) == 3:
-            h, m, s = int(parts[0]), int(parts[1]), float(parts[2].replace(",", "."))
-            return int((h * 3600 + m * 60 + s) * 1000)
-        elif len(parts) == 2:
-            m, s = int(parts[0]), float(parts[1].replace(",", "."))
-            return int((m * 60 + s) * 1000)
-    except (ValueError, IndexError):
-        pass
-    return None
+# Matches [00:12:05], (12:05), [12:05.500], (01:12:05,123), etc.
+TIMESTAMP_PATTERN = re.compile(
+    r"^[\[\(](\d{1,2}:)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?[\]\)]\s*"
+)
+
+# Speaker label: up to 40 characters starting with a letter, followed by colon and whitespace
+# Must not end in digits (e.g. 'Meeting at 10:30' or '10: 30')
+SPEAKER_PATTERN = re.compile(
+    r"^([A-Za-z][^:\n]{0,39}):\s+(.+)$"
+)
 
 
-def parse_text_transcript(raw_data: bytes | str) -> list[Segment]:
-    """Parse plain text or pasted meeting transcript into list of Segments."""
-    cleaned = clean_transcript_data(raw_data)
-    lines = [ln.strip() for ln in cleaned.split("\n") if ln.strip()]
+def _parse_timestamp_ms(match: re.Match) -> int:
+    """Converts a regex timestamp match to milliseconds."""
+    hours_part = match.group(1)
+    minutes = int(match.group(2))
+    seconds = int(match.group(3))
+    ms_part = match.group(4)
 
+    hours = int(hours_part[:-1]) if hours_part else 0
+    ms = int(ms_part.ljust(3, "0")[:3]) if ms_part else 0
+
+    return (hours * 3600 + minutes * 60 + seconds) * 1000 + ms
+
+
+def parse_text(data: bytes | str) -> list[Segment]:
+    """
+    Parses plain text / pasted transcript into a list of Segment objects.
+    - Cleans input using clean_text.
+    - Extracts optional timestamps [HH:MM:SS] or (MM:SS).
+    - Extracts speaker names (letters first, <= 40 chars before colon).
+    - Ensures start_ms and end_ms satisfy database constraints.
+    """
+    cleaned = clean_text(data)
+    if not cleaned:
+        raise TranscriptParseError("Transcript contains no usable text")
+
+    lines = cleaned.split("\n")
     raw_segments: list[dict] = []
 
-    ts_pattern = re.compile(
-        r"^(\[[0-9]{1,2}:[0-9]{2}(?::[0-9]{2}(?:[.,][0-9]{1,3})?)?\]"
-        r"|\([0-9]{1,2}:[0-9]{2}(?::[0-9]{2}(?:[.,][0-9]{1,3})?)?\))\s*"
-    )
-
-    # Regex for speaker: starts with letter, at most 40 chars, no digit directly before colon, followed by space
-    # Ensures "Meeting at 10:30" or "at 10:30" is not treated as a speaker
-    speaker_pattern = re.compile(r"^([a-zA-Z][a-zA-Z\s._'-]{0,39}[a-zA-Z._'-]):\s*(.*)$")
-
     for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
         start_ms: int | None = None
-        ts_match = ts_pattern.match(line)
+
+        # Check for leading timestamp
+        ts_match = TIMESTAMP_PATTERN.match(line)
         if ts_match:
-            ts_str = ts_match.group(1)
-            start_ms = _parse_timestamp_ms(ts_str)
+            start_ms = _parse_timestamp_ms(ts_match)
             line = line[ts_match.end():].strip()
+            if not line:
+                continue
 
-        speaker_name: str | None = None
-        spk_match = speaker_pattern.match(line)
-        if spk_match:
-            # Check it's not a false positive like "Time: 10:30" or numbers
-            candidate_speaker = spk_match.group(1).strip()
-            rest_of_line = spk_match.group(2).strip()
-            if candidate_speaker and rest_of_line:
-                speaker_name = candidate_speaker
-                line = rest_of_line
+        speaker: str | None = None
+        text = line
 
-        if line:
-            raw_segments.append({
-                "speaker_name": speaker_name,
-                "start_ms": start_ms,
-                "text": line
-            })
+        # Check for speaker label
+        sp_match = SPEAKER_PATTERN.match(line)
+        if sp_match:
+            candidate_speaker = sp_match.group(1).strip()
+            # Ensure candidate speaker does not end with digits (e.g. 'at 10' in 'Meeting at 10: 30')
+            if not re.search(r"\b\d+$", candidate_speaker):
+                speaker = candidate_speaker
+                text = sp_match.group(2).strip()
 
-    # Reconcile start_ms and end_ms (database constraint: BOTH null or BOTH set)
+        raw_segments.append({
+            "speaker_name": speaker,
+            "start_ms": start_ms,
+            "text": text,
+        })
+
+    if not raw_segments:
+        raise TranscriptParseError("No segments found in transcript")
+
+    # Timing alignment: start_ms and end_ms must both be set or both be null
+    has_any_timestamps = any(s["start_ms"] is not None for s in raw_segments)
+
     segments: list[Segment] = []
     for i, item in enumerate(raw_segments):
         cur_start = item["start_ms"]
         cur_end: int | None = None
-        if cur_start is not None:
-            # Find next segment with start_ms
-            next_start: int | None = None
+
+        if has_any_timestamps and cur_start is not None:
+            # Look ahead for next segment with a start_ms
+            next_start = None
             for j in range(i + 1, len(raw_segments)):
                 if raw_segments[j]["start_ms"] is not None:
                     next_start = raw_segments[j]["start_ms"]
                     break
+
             if next_start is not None and next_start >= cur_start:
                 cur_end = next_start
             else:
                 cur_end = cur_start
+        elif has_any_timestamps and cur_start is None:
+            # Segment has no timestamp; keep both None
+            cur_start = None
+            cur_end = None
 
         segments.append(Segment(
             speaker_name=item["speaker_name"],
