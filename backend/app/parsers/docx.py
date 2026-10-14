@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import io
-import zipfile
 import xml.etree.ElementTree as ET
+import zipfile
+
 from app.parsers.clean import TranscriptParseError
 from app.parsers.text import Segment, parse_text
 
@@ -51,7 +52,7 @@ def parse_docx(data: bytes | io.BytesIO | str) -> list[Segment]:
         import docx  # type: ignore
         doc = docx.Document(io.BytesIO(raw_bytes))
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    except (ImportError, ValueError, AttributeError, zipfile.BadZipFile, ET.ParseError):
+    except (ImportError, KeyError, ValueError, AttributeError, zipfile.BadZipFile, ET.ParseError):
         # Fallback to standard library zip + XML parser
         paragraphs = _extract_docx_paragraphs_zip(raw_bytes)
 

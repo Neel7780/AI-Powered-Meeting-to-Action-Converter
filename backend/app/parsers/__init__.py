@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.parsers.clean import TranscriptParseError, clean_text
+from app.parsers.docx import parse_docx
+from app.parsers.srt import parse_srt
 from app.parsers.text import Segment, parse_text
 from app.parsers.vtt import parse_vtt
-from app.parsers.srt import parse_srt
-from app.parsers.docx import parse_docx
 
 
 def to_canonical_text(segments: list[Segment]) -> str:

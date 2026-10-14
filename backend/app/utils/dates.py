@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, time as dtime, timezone
+from datetime import UTC, datetime
+from datetime import time as dtime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -65,6 +66,6 @@ def to_utc(date: str | None, time: str | None, tz: str) -> datetime | None:
     try:
         zone = ZoneInfo(tz.strip())
         local_dt = datetime.combine(parsed_date, parsed_time, tzinfo=zone)
-        return local_dt.astimezone(timezone.utc)
+        return local_dt.astimezone(UTC)
     except (ZoneInfoNotFoundError, ValueError, TypeError, OverflowError):
         return None

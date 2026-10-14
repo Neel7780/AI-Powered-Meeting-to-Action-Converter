@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from app.parsers.clean import clean_text, TranscriptParseError
+
+from app.parsers.clean import TranscriptParseError, clean_text
 
 
 @dataclass

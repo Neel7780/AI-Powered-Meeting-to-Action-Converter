@@ -1,17 +1,18 @@
 import io
-import pytest
 from pathlib import Path
+
+import pytest
 
 from app.parsers import (
     Segment,
     TranscriptParseError,
     clean_text,
-    parse_transcript,
-    to_canonical_text,
-    parse_text,
-    parse_vtt,
-    parse_srt,
     parse_docx,
+    parse_srt,
+    parse_text,
+    parse_transcript,
+    parse_vtt,
+    to_canonical_text,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"

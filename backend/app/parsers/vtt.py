@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from app.parsers.clean import clean_text, TranscriptParseError
-from app.parsers.text import Segment, SPEAKER_PATTERN
 
+from app.parsers.clean import TranscriptParseError, clean_text
+from app.parsers.text import SPEAKER_PATTERN, Segment
 
 VTT_TIMING_PATTERN = re.compile(
     r"^(?:(\d{1,2}):)?(\d{2}):(\d{2})\.(\d{3})\s+-->\s+(?:(\d{1,2}):)?(\d{2}):(\d{2})\.(\d{3})(?:[ \t].*)?$"
@@ -24,6 +24,12 @@ def _parse_vtt_timestamp(h: str | None, m: str, s: str, ms: str) -> int:
     return (hours * 3600 + minutes * 60 + seconds) * 1000 + milliseconds
 
 
+def _is_cue_id(line: str) -> bool:
+    """Returns True if a line looks like an optional cue identifier (short token, no voice/speaker tag)."""
+    stripped = line.strip()
+    return bool(stripped and not stripped.startswith("<v") and ":" not in stripped and len(stripped.split()) <= 2)
+
+
 def _is_cue_start(lines: list[str], idx: int) -> bool:
     """Returns True if lines[idx] is a timing line or a cue id followed by a timing line."""
     if idx >= len(lines):
@@ -31,7 +37,7 @@ def _is_cue_start(lines: list[str], idx: int) -> bool:
     if VTT_TIMING_PATTERN.match(lines[idx].strip()):
         return True
     if idx + 1 < len(lines) and VTT_TIMING_PATTERN.match(lines[idx + 1].strip()):
-        return True
+        return _is_cue_id(lines[idx])
     return False
 
 
@@ -73,7 +79,7 @@ def parse_vtt(data: bytes | str) -> list[Segment]:
         # Check for timing line or cue ID preceding timing line
         timing_match = VTT_TIMING_PATTERN.match(line)
         if not timing_match:
-            if i + 1 < n and VTT_TIMING_PATTERN.match(lines[i + 1].strip()):
+            if i + 1 < n and VTT_TIMING_PATTERN.match(lines[i + 1].strip()) and _is_cue_id(line):
                 i += 1  # Skip cue ID
                 line = lines[i].strip()
                 timing_match = VTT_TIMING_PATTERN.match(line)

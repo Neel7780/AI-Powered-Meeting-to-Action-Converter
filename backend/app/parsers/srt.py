@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import re
-from app.parsers.clean import clean_text, TranscriptParseError
-from app.parsers.text import Segment, SPEAKER_PATTERN
 
+from app.parsers.clean import TranscriptParseError, clean_text
+from app.parsers.text import SPEAKER_PATTERN, Segment
 
 SRT_TIMING_PATTERN = re.compile(
     r"^(?:(\d{1,2}):)?(\d{2}):(\d{2}),(\d{3})\s+-->\s+(?:(\d{1,2}):)?(\d{2}):(\d{2}),(\d{3})(?:[ \t].*)?$"
