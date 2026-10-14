@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import MeetingReview from "./pages/MeetingReview";
+import AcceptInvite from "./pages/AcceptInvite";
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/create-meeting" element={<Navigate to="/meetings" replace />} />
         <Route path="/meeting-review" element={<MeetingReview />} />
+        <Route path="/invite/:token" element={<ProtectedRoute><AcceptInvite /></ProtectedRoute>} />
         <Route path="/meetings/:id/review" element={<MeetingReview />} />
 
         <Route

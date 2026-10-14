@@ -1,28 +1,30 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  CheckCheck, 
-  Sparkles, 
-  ArrowLeft, 
-  RotateCcw, 
-  CheckCircle2, 
-  Clock, 
-  Users, 
-  AlertCircle, 
-  Layers, 
-  ChevronRight, 
-  ShieldCheck, 
-  Search 
+import {
+  CheckCheck,
+  Sparkles,
+  ArrowLeft,
+  RotateCcw,
+  CheckCircle2,
+  Clock,
+  Users,
+  AlertCircle,
+  Layers,
+  ChevronRight,
+  LoaderCircle,
+  ShieldCheck,
+  Search
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import type { 
-  ActionItemCandidate, 
-  MeetingDetails, 
-  TranscriptSegment, 
-  WorkspaceMember 
+import { useNavigate, useParams } from 'react-router-dom';
+import type {
+  ActionItemCandidate,
+  MeetingDetails,
+  TranscriptSegment,
+  WorkspaceMember
 } from '../types/review';
 import { reviewApi } from '../services/reviewApi';
 import { TranscriptViewer } from '../components/review/TranscriptViewer';
 import { ActionItemReviewCard } from '../components/review/ActionItemReviewCard';
+import { Button } from '../components/ui/button';
 
 interface MeetingReviewProps {
   meetingId?: string;
@@ -31,11 +33,13 @@ interface MeetingReviewProps {
 }
 
 export const MeetingReview: React.FC<MeetingReviewProps> = ({
-  meetingId = 'mtg-sprint-102',
+  meetingId: meetingIdProp,
   onNavigateBack,
   onNavigateToKanban
 }) => {
   const navigate = useNavigate();
+  const { id: routeMeetingId } = useParams();
+  const meetingId = meetingIdProp || routeMeetingId || 'mtg-sprint-102';
   const [meeting, setMeeting] = useState<MeetingDetails | null>(null);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [candidates, setCandidates] = useState<ActionItemCandidate[]>([]);
@@ -60,12 +64,12 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
   const loadData = async () => {
     try {
       setLoading(true);
-      const [mtgData, transData, candData, memData] = await Promise.all([
+      const [mtgData, transData, candData] = await Promise.all([
         reviewApi.fetchMeetingDetails(meetingId),
         reviewApi.fetchTranscript(meetingId),
-        reviewApi.fetchActionItemCandidates(meetingId),
-        reviewApi.fetchWorkspaceMembers('ws-team-10')
+        reviewApi.fetchActionItemCandidates(meetingId)
       ]);
+      const memData = await reviewApi.fetchWorkspaceMembers(mtgData.workspace_id);
 
       setMeeting(mtgData);
       setTranscript(transData);
@@ -88,8 +92,8 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
   const approvedItems = candidates.filter(c => c.status === 'approved');
   const rejectedItems = candidates.filter(c => c.status === 'rejected');
   const unassignedPendingItems = pendingItems.filter(c => !c.assignee_id);
-  const completionPercentage = totalItems > 0 
-    ? Math.round(((approvedItems.length + rejectedItems.length) / totalItems) * 100) 
+  const completionPercentage = totalItems > 0
+    ? Math.round(((approvedItems.length + rejectedItems.length) / totalItems) * 100)
     : 0;
 
   const actionItemSegmentIds = useMemo(() => {
@@ -128,23 +132,27 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
 
   const handleApprove = async (id: string) => {
     try {
-      const updated = await reviewApi.approveActionItem(id, meetingId);
+      const item = candidates.find(c => c.id === id);
+      if (!item) return;
+      const [updated] = await reviewApi.approveActionItems(meetingId, [item]);
       setCandidates(prev => prev.map(c => c.id === id ? updated : c));
       showToast(`Approved "${updated.title.slice(0, 32)}..."`, 'success');
     } catch (err) {
       console.error('Approve failed:', err);
-      showToast('Failed to approve action item', 'warning');
+      showToast(`Failed to approve: ${(err as Error).message}`, 'warning');
     }
   };
 
   const handleReject = async (id: string) => {
     try {
-      const updated = await reviewApi.rejectActionItem(id, meetingId);
+      const item = candidates.find(c => c.id === id);
+      if (!item) return;
+      const updated = await reviewApi.rejectActionItem(meetingId, item);
       setCandidates(prev => prev.map(c => c.id === id ? updated : c));
       showToast(`Rejected item`, 'info');
     } catch (err) {
       console.error('Reject failed:', err);
-      showToast('Failed to reject action item', 'warning');
+      showToast(`Failed to reject: ${(err as Error).message}`, 'warning');
     }
   };
 
@@ -155,12 +163,15 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
       showToast(`Reverted back to pending review`, 'info');
     } catch (err) {
       console.error('Revert failed:', err);
+      showToast((err as Error).message, 'warning');
     }
   };
 
   const handleUpdate = async (id: string, updates: Partial<ActionItemCandidate>) => {
     try {
-      const updated = await reviewApi.updateActionItem(id, updates);
+      const item = candidates.find(c => c.id === id);
+      if (!item) return;
+      const updated = await reviewApi.editActionItem(item, updates, members);
       setCandidates(prev => prev.map(c => c.id === id ? updated : c));
       showToast(`Updated action item details`, 'success');
     } catch (err) {
@@ -175,14 +186,12 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
       if (!window.confirm(confirmMsg)) {
         return;
       }
-      const eligibleIds = pendingItems.filter(c => c.assignee_id).map(c => c.id);
-      if (eligibleIds.length === 0) {
+      const eligible = pendingItems.filter(c => c.assignee_id);
+      if (eligible.length === 0) {
         showToast('Please assign owners to pending items before approving', 'warning');
         return;
       }
-      const updatedList = await reviewApi.approveAllActionItems(meetingId, eligibleIds);
-      setCandidates(updatedList);
-      showToast(`Batch approved ${eligibleIds.length} assigned action items!`, 'success');
+      await approveBatch(eligible);
       return;
     }
 
@@ -191,13 +200,18 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
       return;
     }
 
+    await approveBatch(pendingItems);
+  };
+
+  const approveBatch = async (items: ActionItemCandidate[]) => {
     try {
-      const updatedList = await reviewApi.approveAllActionItems(meetingId);
-      setCandidates(updatedList);
-      showToast(`Successfully approved all ${pendingItems.length} pending action items!`, 'success');
+      const updated = await reviewApi.approveActionItems(meetingId, items);
+      const byId = new Map(updated.map(u => [u.id, u]));
+      setCandidates(prev => prev.map(c => byId.get(c.id) || c));
+      showToast(`Approved ${updated.length} action item(s)`, 'success');
     } catch (err) {
       console.error('Batch approve failed:', err);
-      showToast('Failed to batch approve action items', 'warning');
+      showToast(`Failed to approve: ${(err as Error).message}`, 'warning');
     }
   };
 
@@ -234,127 +248,131 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
   const goBack = onNavigateBack || (() => navigate('/meetings'));
   const goKanban = onNavigateToKanban || (() => navigate('/tasks'));
 
+  const statusTabs = [
+    ['all', 'All', candidates.length],
+    ['pending', 'Pending', pendingItems.length],
+    ['approved', 'Approved', approvedItems.length],
+    ['rejected', 'Rejected', rejectedItems.length],
+  ] as const;
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-sm font-medium text-slate-600">Loading Meeting Review Workspace...</p>
-        </div>
+      <div className="flex min-h-screen items-center justify-center gap-3 bg-black text-sm text-neutral-500">
+        <LoaderCircle className="size-4 animate-spin" />
+        Loading meeting review…
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100/70 text-slate-900">
+    <div className="flex min-h-screen flex-col bg-black text-white">
       {toastMessage && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-semibold animate-in fade-in slide-in-from-top-2 duration-200 ${
-          toastMessage.type === 'success' 
-            ? 'bg-emerald-900 text-emerald-50 border-emerald-700' 
-            : toastMessage.type === 'warning'
-            ? 'bg-amber-900 text-amber-50 border-amber-700'
-            : 'bg-slate-900 text-slate-50 border-slate-700'
-        }`}>
-          {toastMessage.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-          {toastMessage.type === 'warning' && <AlertCircle className="w-4 h-4 text-amber-400" />}
-          {toastMessage.type === 'info' && <Clock className="w-4 h-4 text-indigo-400" />}
+        <div
+          role="status"
+          className="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-md border border-white/15 bg-[#0a0a0c] px-4 py-2.5 text-xs font-medium text-white shadow-2xl"
+        >
+          {toastMessage.type === 'success' && <CheckCircle2 className="size-4 text-emerald-400" />}
+          {toastMessage.type === 'warning' && <AlertCircle className="size-4 text-amber-400" />}
+          {toastMessage.type === 'info' && <Clock className="size-4 text-neutral-400" />}
           <span>{toastMessage.text}</span>
         </div>
       )}
 
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <button
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/95 backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={goBack}
-                className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
-                title="Back to meetings list"
+                title="Back to meetings"
+                aria-label="Back to meetings"
               >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
+                <ArrowLeft />
+              </Button>
 
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                    FE 4: Staging Gate
-                  </span>
-                  <span className="text-slate-300">/</span>
-                  <span className="text-xs font-medium text-slate-500">
+                  <span className="eyebrow">Review gate</span>
+                  <span className="text-neutral-700">/</span>
+                  <span className="truncate text-xs text-neutral-500">
                     {meeting?.organiser_name} (Organiser)
                   </span>
                 </div>
-                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                <h1 className="truncate text-base font-medium tracking-tight text-white sm:text-lg">
                   {meeting?.title}
                 </h1>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-                <span className="text-slate-500">Staging Review:</span>
-                <span className="font-semibold text-slate-800">
-                  {approvedItems.length} approved • {pendingItems.length} pending
+            <div className="flex flex-wrap items-center gap-2 md:shrink-0">
+              <div className="hidden items-center gap-2 rounded-md border border-white/10 bg-white/[0.02] px-3 py-1.5 text-xs sm:flex">
+                <span className="text-neutral-500">Review:</span>
+                <span className="font-medium text-white">
+                  {approvedItems.length} approved · {pendingItems.length} pending
                 </span>
-                <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden ml-1">
-                  <div 
-                    className="h-full bg-emerald-500 transition-all duration-300" 
+                <div className="ml-1 h-1.5 w-16 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full bg-emerald-400 transition-all duration-300"
                     style={{ width: `${completionPercentage}%` }}
                   />
                 </div>
               </div>
 
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleReset}
                 title="Reset demo items back to original state"
-                className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg text-xs flex items-center gap-1 transition"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw />
                 <span className="hidden md:inline">Reset</span>
-              </button>
+              </Button>
 
-              <button
+              <Button
+                size="sm"
                 onClick={handleApproveAll}
                 disabled={pendingItems.length === 0}
-                className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white flex items-center gap-1.5 transition shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Approve all eligible pending action items in batch"
               >
-                <CheckCheck className="w-4 h-4" />
-                <span>Approve All ({pendingItems.length})</span>
-              </button>
+                <CheckCheck />
+                Approve all ({pendingItems.length})
+              </Button>
 
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={goKanban}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1 transition"
-                title="View published tasks on Kanban board"
+                title="View published tasks on the task board"
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Kanban Board</span>
-                <ChevronRight className="w-3 h-3" />
-              </button>
+                <Layers />
+                Task board
+                <ChevronRight />
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-3">
-        <div className="p-2.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-purple-200/80 rounded-xl flex items-center justify-between gap-3 text-xs shadow-xs">
-          <div className="flex items-center gap-2 text-purple-900 font-medium">
-            <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0" />
+      <div className="mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between gap-3 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2.5 text-xs">
+          <div className="flex items-center gap-2 text-neutral-300">
+            <Sparkles className="size-4 shrink-0 text-amber-400" />
             <span>
-              <strong>AI Attestation (CR-01):</strong> AI-generated suggestions. Verify before publishing.
+              <strong className="font-medium text-white">AI attestation:</strong> AI-generated suggestions. Verify before publishing.
             </span>
           </div>
-          <div className="text-[11px] text-purple-700 hidden sm:flex items-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Staging Gate Protocol</span>
+          <div className="hidden items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-neutral-500 sm:flex">
+            <ShieldCheck className="size-3.5 text-emerald-400" />
+            <span>Human approval required</span>
           </div>
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 flex-1 flex flex-col">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 items-start">
-          <div className="lg:col-span-5 xl:col-span-5 h-[calc(100vh-14rem)] min-h-[500px]">
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-4 sm:px-6 lg:px-8">
+        <div className="grid flex-1 grid-cols-1 items-start gap-5 lg:grid-cols-12">
+          <div className="h-[calc(100vh-14rem)] min-h-[500px] lg:col-span-5">
             <TranscriptViewer
               segments={transcript}
               activeTimestamp={activeTimestamp}
@@ -364,83 +382,60 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
             />
           </div>
 
-          <div className="lg:col-span-7 xl:col-span-7 flex flex-col h-[calc(100vh-14rem)] min-h-[500px] bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 bg-slate-50/70 space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="panel flex h-[calc(100vh-14rem)] min-h-[500px] flex-col overflow-hidden lg:col-span-7">
+            <div className="space-y-3 border-b border-white/10 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-bold text-slate-900">
-                    Candidate Action Items
+                  <h2 className="text-sm font-medium text-white">
+                    Candidate action items
                   </h2>
-                  <span className="text-xs bg-indigo-100 text-indigo-800 font-semibold px-2 py-0.5 rounded-full">
+                  <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-neutral-300">
                     {candidates.length} total
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1 bg-slate-200/60 p-0.5 rounded-lg text-xs font-medium">
-                  <button
-                    onClick={() => setStatusFilter('all')}
-                    className={`px-2.5 py-1 rounded-md transition ${
-                      statusFilter === 'all' 
-                        ? 'bg-white text-slate-900 shadow-xs font-semibold' 
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    All ({candidates.length})
-                  </button>
-                  <button
-                    onClick={() => setStatusFilter('pending')}
-                    className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 ${
-                      statusFilter === 'pending' 
-                        ? 'bg-white text-amber-900 shadow-xs font-semibold' 
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Pending ({pendingItems.length})
-                  </button>
-                  <button
-                    onClick={() => setStatusFilter('approved')}
-                    className={`px-2.5 py-1 rounded-md transition ${
-                      statusFilter === 'approved' 
-                        ? 'bg-white text-emerald-900 shadow-xs font-semibold' 
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Approved ({approvedItems.length})
-                  </button>
-                  <button
-                    onClick={() => setStatusFilter('rejected')}
-                    className={`px-2.5 py-1 rounded-md transition ${
-                      statusFilter === 'rejected' 
-                        ? 'bg-white text-slate-800 shadow-xs font-semibold' 
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    Rejected ({rejectedItems.length})
-                  </button>
+                <div className="inline-flex rounded-md border border-white/10 bg-white/[0.02] p-0.5 text-xs">
+                  {statusTabs.map(([value, label, count]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setStatusFilter(value)}
+                      aria-pressed={statusFilter === value}
+                      className={`rounded px-2.5 py-1 font-medium transition-colors ${
+                        statusFilter === value
+                          ? 'bg-white text-black'
+                          : 'text-neutral-400 hover:text-white'
+                      }`}
+                    >
+                      {label} ({count})
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-2">
                 <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
                   <input
                     type="text"
+                    aria-label="Search candidate items"
                     placeholder="Search candidate items..."
                     value={searchFilter}
                     onChange={(e) => setSearchFilter(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition placeholder:text-slate-400"
+                    className="field h-8 py-0 pl-8 text-xs"
                   />
                 </div>
 
-                <div className="relative flex items-center">
-                  <Users className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+                <div className="relative">
+                  <Users className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
                   <select
+                    aria-label="Filter by assignee"
                     value={assigneeFilter}
                     onChange={(e) => setAssigneeFilter(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition text-slate-700 cursor-pointer appearance-none"
+                    className="field h-8 cursor-pointer py-0 pl-8 text-xs"
                   >
-                    <option value="all">All Assignees</option>
-                    <option value="unassigned">⚠️ Unassigned Only ({unassignedPendingItems.length})</option>
+                    <option value="all">All assignees</option>
+                    <option value="unassigned">Unassigned only ({unassignedPendingItems.length})</option>
                     {members.map(m => (
                       <option key={m.id} value={m.id}>
                         {m.full_name}
@@ -451,16 +446,17 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
               </div>
 
               {unassignedPendingItems.length > 0 && statusFilter !== 'approved' && statusFilter !== 'rejected' && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 flex items-center justify-between text-xs text-amber-900">
-                  <div className="flex items-center gap-1.5 font-medium">
-                    <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                <div className="flex items-center justify-between gap-2 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-neutral-300">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="size-4 shrink-0 text-amber-400" />
                     <span>
                       {unassignedPendingItems.length} candidate item(s) require an assignee before approval.
                     </span>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setAssigneeFilter('unassigned')}
-                    className="text-[11px] font-semibold underline hover:text-amber-950"
+                    className="shrink-0 font-medium text-amber-400 underline-offset-4 hover:underline"
                   >
                     Filter unassigned
                   </button>
@@ -468,20 +464,21 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+            <div className="flex-1 space-y-3 overflow-y-auto p-4">
               {filteredCandidates.length === 0 ? (
-                <div className="py-16 text-center text-slate-400 space-y-2">
-                  <CheckCircle2 className="w-8 h-8 mx-auto text-slate-300" />
-                  <p className="text-xs font-medium text-slate-600">
+                <div className="space-y-2 py-16 text-center">
+                  <CheckCircle2 className="mx-auto size-8 text-neutral-700" />
+                  <p className="text-xs font-medium text-neutral-400">
                     No candidate items found for current filter.
                   </p>
                   <button
+                    type="button"
                     onClick={() => {
                       setStatusFilter('all');
                       setSearchFilter('');
                       setAssigneeFilter('all');
                     }}
-                    className="text-xs text-indigo-600 hover:underline font-semibold"
+                    className="text-xs font-medium text-white underline-offset-4 hover:underline"
                   >
                     Reset all filters
                   </button>
@@ -503,21 +500,21 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
               )}
             </div>
 
-            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span className="font-medium">
+            <div className="flex items-center justify-between border-t border-white/10 px-4 py-2.5 text-xs text-neutral-500">
+              <span>
                 Showing {filteredCandidates.length} of {candidates.length} items
               </span>
-              <div className="flex items-center gap-3">
-                <span className="text-emerald-700 font-semibold">
-                  {approvedItems.length} Approved
+              <div className="flex items-center gap-3 font-mono text-[11px]">
+                <span className="text-emerald-400">
+                  {approvedItems.length} approved
                 </span>
-                <span className="text-slate-300">|</span>
-                <span className="text-amber-700 font-semibold">
-                  {pendingItems.length} Pending
+                <span className="text-neutral-700">|</span>
+                <span className="text-amber-400">
+                  {pendingItems.length} pending
                 </span>
-                <span className="text-slate-300">|</span>
-                <span className="text-rose-700 font-semibold">
-                  {rejectedItems.length} Rejected
+                <span className="text-neutral-700">|</span>
+                <span className="text-red-400">
+                  {rejectedItems.length} rejected
                 </span>
               </div>
             </div>

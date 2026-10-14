@@ -1,16 +1,16 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { 
-  Play, 
-  Pause, 
-  Search, 
-  Clock, 
-  Sparkles, 
-  Volume2, 
-  Maximize2, 
-  Minimize2, 
-  Copy, 
-  Check, 
-  Filter 
+import {
+  Play,
+  Pause,
+  Search,
+  Clock,
+  Sparkles,
+  Volume2,
+  Maximize2,
+  Minimize2,
+  Copy,
+  Check,
+  Filter
 } from 'lucide-react';
 import type { TranscriptSegment } from '../../types/review';
 
@@ -22,37 +22,13 @@ interface TranscriptViewerProps {
   actionItemSegmentIds?: Set<string>;
 }
 
-const SPEAKER_COLORS: Record<string, { bg: string; text: string; border: string; pill: string }> = {
-  emerald: {
-    bg: 'bg-emerald-50',
-    text: 'text-emerald-700',
-    border: 'border-emerald-200',
-    pill: 'bg-emerald-100 text-emerald-800'
-  },
-  indigo: {
-    bg: 'bg-indigo-50',
-    text: 'text-indigo-700',
-    border: 'border-indigo-200',
-    pill: 'bg-indigo-100 text-indigo-800'
-  },
-  purple: {
-    bg: 'bg-purple-50',
-    text: 'text-purple-700',
-    border: 'border-purple-200',
-    pill: 'bg-purple-100 text-purple-800'
-  },
-  blue: {
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    border: 'border-blue-200',
-    pill: 'bg-blue-100 text-blue-800'
-  },
-  amber: {
-    bg: 'bg-amber-50',
-    text: 'text-amber-700',
-    border: 'border-amber-200',
-    pill: 'bg-amber-100 text-amber-800'
-  }
+// Speaker avatar tints, keyed by segment.speaker_color
+const SPEAKER_PILLS: Record<string, string> = {
+  emerald: 'bg-emerald-500/15 text-emerald-300',
+  indigo: 'bg-indigo-500/15 text-indigo-300',
+  purple: 'bg-purple-500/15 text-purple-300',
+  blue: 'bg-blue-500/15 text-blue-300',
+  amber: 'bg-amber-500/15 text-amber-300',
 };
 
 export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
@@ -83,14 +59,14 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
 
   const filteredSegments = useMemo(() => {
     return segments.filter(seg => {
-      const matchesSearch = 
+      const matchesSearch =
         searchQuery.trim() === '' ||
         seg.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
         seg.speaker_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         seg.timestamp.includes(searchQuery);
 
-      const matchesSpeaker = 
-        selectedSpeaker === 'all' || 
+      const matchesSpeaker =
+        selectedSpeaker === 'all' ||
         seg.speaker_name === selectedSpeaker;
 
       return matchesSearch && matchesSpeaker;
@@ -143,65 +119,69 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-      <div className="p-4 border-b border-slate-100 bg-slate-50/70 space-y-3">
+    <div className="panel flex h-full flex-col overflow-hidden">
+      <div className="space-y-3 border-b border-white/10 p-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-              <Clock className="w-4 h-4" />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-8 place-items-center rounded-md border border-white/15 bg-white/5 text-white">
+              <Clock className="size-4" />
+            </span>
             <div>
-              <h3 className="text-sm font-semibold text-slate-800">Meeting Transcript</h3>
-              <p className="text-xs text-slate-500">
+              <h3 className="text-sm font-medium text-white">Meeting transcript</h3>
+              <p className="text-xs text-neutral-500">
                 Click any timestamp to synchronize review context
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={handleCopyTranscript}
               title="Copy entire transcript"
-              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-md transition text-xs flex items-center gap-1 font-medium"
+              className="flex items-center gap-1 rounded-md p-1.5 text-xs font-medium text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
             >
               {copied ? (
                 <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="text-emerald-600">Copied</span>
+                  <Check className="size-3.5 text-emerald-400" />
+                  <span className="text-emerald-400">Copied</span>
                 </>
               ) : (
                 <>
-                  <Copy className="w-3.5 h-3.5" />
+                  <Copy className="size-3.5" />
                   <span>Copy</span>
                 </>
               )}
             </button>
             <button
+              type="button"
               onClick={() => setIsCompact(!isCompact)}
               title={isCompact ? 'Comfortable view' : 'Compact view'}
-              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-md transition"
+              aria-label={isCompact ? 'Comfortable view' : 'Compact view'}
+              className="rounded-md p-1.5 text-neutral-400 transition-colors hover:bg-white/10 hover:text-white"
             >
-              {isCompact ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+              {isCompact ? <Maximize2 className="size-3.5" /> : <Minimize2 className="size-3.5" />}
             </button>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg p-2.5 border border-slate-200/80 shadow-xs flex items-center gap-3">
+        <div className="flex items-center gap-3 rounded-md border border-white/10 bg-black p-2.5">
           <button
+            type="button"
             onClick={() => setIsPlaying(!isPlaying)}
             aria-label={isPlaying ? 'Pause playback' : 'Play audio transcript'}
-            className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center transition shadow-xs flex-shrink-0"
+            className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-black transition-colors hover:bg-neutral-200"
           >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+            {isPlaying ? <Pause className="size-4" /> : <Play className="ml-0.5 size-4" />}
           </button>
 
           <div className="flex-1 space-y-1">
-            <div className="flex justify-between items-center text-[11px] font-mono text-slate-500">
-              <span className="font-semibold text-slate-700">{formatSeconds(playbackSeconds)}</span>
+            <div className="flex items-center justify-between font-mono text-[11px] text-neutral-500">
+              <span className="text-neutral-300">{formatSeconds(playbackSeconds)}</span>
               <span>{formatSeconds(maxSeconds)}</span>
             </div>
-            <div 
-              className="h-1.5 bg-slate-100 rounded-full overflow-hidden cursor-pointer relative"
+            <div
+              className="relative h-1.5 cursor-pointer overflow-hidden rounded-full bg-white/10"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const pos = (e.clientX - rect.left) / rect.width;
@@ -209,38 +189,40 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
                 setPlaybackSeconds(newSec);
               }}
             >
-              <div 
-                className="h-full bg-indigo-600 transition-all rounded-full"
+              <div
+                className="h-full rounded-full bg-white transition-all"
                 style={{ width: `${(playbackSeconds / maxSeconds) * 100}%` }}
               />
             </div>
           </div>
 
-          <div className="flex items-center text-xs text-slate-400 gap-1 pl-1 border-l border-slate-100">
-            <Volume2 className="w-3.5 h-3.5" />
+          <div className="flex items-center border-l border-white/10 pl-2 text-neutral-500">
+            <Volume2 className="size-3.5" />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+        <div className="grid grid-cols-1 gap-2 pt-1 sm:grid-cols-2">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
             <input
               type="text"
+              aria-label="Search transcript"
               placeholder="Search transcript or timestamps..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition placeholder:text-slate-400"
+              className="field h-8 py-0 pl-8 text-xs"
             />
           </div>
 
-          <div className="relative flex items-center">
-            <Filter className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+          <div className="relative">
+            <Filter className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
             <select
+              aria-label="Filter by speaker"
               value={selectedSpeaker}
               onChange={(e) => setSelectedSpeaker(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition text-slate-700 cursor-pointer appearance-none"
+              className="field h-8 cursor-pointer py-0 pl-8 text-xs"
             >
-              <option value="all">All Speakers ({speakers.length})</option>
+              <option value="all">All speakers ({speakers.length})</option>
               {speakers.map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
@@ -249,14 +231,15 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 divide-y divide-slate-100/80">
+      <div className="flex-1 space-y-1 overflow-y-auto p-3">
         {filteredSegments.length === 0 ? (
-          <div className="py-12 text-center text-slate-400 space-y-2">
-            <Search className="w-8 h-8 mx-auto text-slate-300" />
-            <p className="text-xs">No transcript segments match your filter criteria.</p>
+          <div className="space-y-2 py-12 text-center">
+            <Search className="mx-auto size-8 text-neutral-700" />
+            <p className="text-xs text-neutral-400">No transcript segments match your filter criteria.</p>
             <button
+              type="button"
               onClick={() => { setSearchQuery(''); setSelectedSpeaker('all'); }}
-              className="text-xs text-indigo-600 hover:underline font-medium"
+              className="text-xs font-medium text-white underline-offset-4 hover:underline"
             >
               Clear filters
             </button>
@@ -266,62 +249,63 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
             const isHighlighted = highlightedSegmentId === segment.id;
             const isTimestampActive = activeTimestamp === segment.timestamp;
             const hasActionItem = actionItemSegmentIds.has(segment.id);
-            const speakerTheme = SPEAKER_COLORS[segment.speaker_color || 'indigo'] || SPEAKER_COLORS.indigo;
+            const speakerPill = SPEAKER_PILLS[segment.speaker_color || 'indigo'] || SPEAKER_PILLS.indigo;
 
             return (
               <div
                 key={segment.id}
                 ref={(el) => { segmentRefs.current[segment.id] = el; }}
                 onClick={() => handleSegmentClick(segment)}
-                className={`pt-3 first:pt-0 group transition-all duration-200 rounded-lg cursor-pointer ${
+                className={`group cursor-pointer rounded-md border p-2.5 transition-colors duration-200 ${
                   isHighlighted
-                    ? 'p-3 bg-amber-50/70 border-2 border-amber-300 shadow-sm ring-2 ring-amber-200/50 -mx-1'
+                    ? 'border-amber-500/40 bg-amber-500/[0.06]'
                     : isTimestampActive
-                    ? 'p-2 bg-indigo-50/50 border border-indigo-200 rounded-lg'
-                    : 'hover:bg-slate-50/80 p-2'
+                    ? 'border-white/20 bg-white/[0.04]'
+                    : 'border-transparent hover:bg-white/[0.03]'
                 }`}
               >
-                <div className="flex items-start justify-between gap-2 mb-1.5">
+                <div className="mb-1.5 flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${speakerTheme.pill}`}>
+                    <div className={`grid size-6 place-items-center rounded-full text-[10px] font-semibold ${speakerPill}`}>
                       {segment.speaker_name.split(' ').map(n => n[0]).join('')}
                     </div>
 
-                    <span className="text-xs font-semibold text-slate-800">
+                    <span className="text-xs font-medium text-white">
                       {segment.speaker_name}
                     </span>
 
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleSegmentClick(segment);
                       }}
-                      className={`px-1.5 py-0.5 text-[10px] font-mono rounded font-medium transition flex items-center gap-1 ${
+                      className={`flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] transition-colors ${
                         isHighlighted || isTimestampActive
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-700'
+                          ? 'bg-white text-black'
+                          : 'bg-white/5 text-neutral-400 group-hover:text-white'
                       }`}
                       title="Click to jump to this timestamp"
                     >
-                      <Clock className="w-2.5 h-2.5" />
+                      <Clock className="size-2.5" />
                       {segment.timestamp}
                     </button>
                   </div>
 
                   {hasActionItem && (
-                    <span 
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                    <span
+                      className="inline-flex items-center gap-1 rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400"
                       title="An action item was extracted from this transcript segment"
                     >
-                      <Sparkles className="w-2.5 h-2.5 text-emerald-600" />
-                      Item Detected
+                      <Sparkles className="size-2.5" />
+                      Item detected
                     </span>
                   )}
                 </div>
 
-                <p className={`text-slate-700 leading-relaxed ${
+                <p className={`leading-relaxed ${
                   isCompact ? 'text-[11px]' : 'text-xs'
-                } ${isHighlighted ? 'font-medium text-slate-900' : ''}`}>
+                } ${isHighlighted ? 'text-white' : 'text-neutral-300'}`}>
                   {segment.text}
                 </p>
               </div>
@@ -330,10 +314,10 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
         )}
       </div>
 
-      <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+      <div className="flex items-center justify-between border-t border-white/10 px-4 py-2.5 text-[11px] text-neutral-500">
         <span>{filteredSegments.length} segments displayed</span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span className="flex items-center gap-1.5">
+          <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
           Audio synchronized
         </span>
       </div>

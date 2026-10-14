@@ -5,17 +5,14 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { KanbanColumn } from '@/components/kanban/KanbanColumn';
 import type { KanbanTaskItem, TaskStatus } from '@/components/kanban/KanbanCard';
 import {
-  Kanban,
   Users,
   UserCheck,
   Calendar,
   Search,
   RefreshCw,
   Plus,
-  ArrowLeft,
   CheckCircle2,
   AlertTriangle,
-  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -327,6 +324,8 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
     );
 
+    if (taskId.startsWith('demo-')) return; // sample cards only live in memory
+
     setUpdatingTaskIds((prev) => new Set(prev).add(taskId));
 
     try {
@@ -396,168 +395,143 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
   const totalCount = filteredTasks.length;
   const doneCount = doneTasks.length;
   const blockedCount = blockedTasks.length;
+  const isDemo = tasks.some((t) => t.id.startsWith('demo-'));
+
+  const segmentClass = (on: boolean) =>
+    `inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+      on ? 'bg-white text-black' : 'text-neutral-400 hover:text-white'
+    }`;
 
   return (
-    <div className="min-h-full bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-black dark:text-white selection:bg-indigo-500 selection:text-white dark:selection:bg-white dark:selection:text-black">
-      {/* Top Banner / Navigation */}
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur-md dark:border-[#1c1c1c] dark:bg-black/80">
-        <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between gap-4">
-            {/* Left: Branding & Back link */}
-            <div className="flex items-center gap-4">
-              <Link
-                to="/dashboard"
-                className="inline-flex items-center gap-2 text-xs text-slate-500 hover:text-slate-900 transition-colors dark:text-neutral-400 dark:hover:text-white"
-                title="Return to Dashboard"
-              >
-                <ArrowLeft className="size-4" />
-                <span className="hidden sm:inline">Dashboard</span>
-              </Link>
-
-              <div className="h-4 w-px bg-slate-200 dark:bg-[#262626]" />
-
-              <div className="flex items-center gap-2.5">
-                <div className="grid size-8 place-items-center rounded-lg border border-slate-200 bg-slate-900 text-white font-bold shadow-sm dark:border-white/20 dark:bg-white dark:text-black">
-                  <Kanban className="size-4 text-white dark:text-black" />
-                </div>
-                <div>
-                  <h1 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                    ActionPulse Kanban
-                    <span className="inline-flex items-center gap-1 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 px-1.5 py-0.5 text-[10px] font-medium border border-emerald-200 dark:border-emerald-500/20">
-                      <Sparkles className="size-3" /> Live
-                    </span>
-                  </h1>
-                  <p className="text-[11px] text-slate-500 dark:text-neutral-400">Workspace Action Items</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Quick actions & Meeting navigation */}
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => fetchData(true)}
-                disabled={isRefreshing}
-                className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-white/5"
-                title="Refresh tasks"
-              >
-                <RefreshCw className={`size-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline ml-1.5">Refresh</span>
-              </Button>
-
-              <Button
-                asChild
-                size="sm"
-                className="bg-indigo-600 text-white font-semibold hover:bg-indigo-700 dark:bg-white dark:text-black dark:hover:bg-neutral-200 transition-colors shadow-sm"
-              >
-                <Link to="/create-meeting">
-                  <Plus className="size-3.5 mr-1" />
-                  <span>New Meeting</span>
-                </Link>
-              </Button>
-            </div>
-          </div>
+    <div className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
+      {/* Page header */}
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">Task board</p>
+          <h1 className="mt-2 flex flex-wrap items-center gap-3 text-3xl font-medium tracking-tight text-white">
+            Tasks
+            {isDemo ? (
+              <span className="rounded border border-white/15 bg-white/5 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-neutral-400">
+                Sample data / not saved
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-emerald-400">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+                Live
+              </span>
+            )}
+          </h1>
+          <p className="mt-2 text-sm text-neutral-400">Approved action items from your workspace meetings.</p>
         </div>
-      </header>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => fetchData(true)}
+            disabled={isRefreshing}
+            title="Refresh tasks"
+          >
+            <RefreshCw className={isRefreshing ? 'animate-spin' : ''} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
+
+          <Button asChild size="sm">
+            <Link to="/meetings">
+              <Plus />
+              New meeting
+            </Link>
+          </Button>
+        </div>
+      </div>
 
       {/* Filter Toolbar & Statistics */}
-      <section className="border-b border-slate-200 bg-white py-3.5 dark:border-[#181818] dark:bg-[#070707]">
-        <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5">
-            {/* Left Filter Controls */}
-            <div className="flex flex-wrap items-center gap-2.5">
-              {/* Filter 1: All Workspace Tasks vs. Assigned to Me */}
-              <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-[#222222] dark:bg-[#0d0d0d]">
-                <button
-                  type="button"
-                  onClick={() => setFilterType('all')}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    filterType === 'all'
-                      ? 'bg-white text-slate-900 shadow-sm dark:bg-white dark:text-black'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-white'
-                  }`}
-                >
-                  <Users className="size-3.5" />
-                  <span>All Workspace Tasks</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFilterType('assigned')}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                    filterType === 'assigned'
-                      ? 'bg-white text-slate-900 shadow-sm dark:bg-white dark:text-black'
-                      : 'text-slate-600 hover:text-slate-900 dark:text-neutral-400 dark:hover:text-white'
-                  }`}
-                >
-                  <UserCheck className="size-3.5" />
-                  <span>Assigned to Me</span>
-                </button>
-              </div>
+      <div className="mb-5 flex flex-col gap-3 border-y border-white/10 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Filter 1: All Workspace Tasks vs. Assigned to Me */}
+          <div className="inline-flex rounded-md border border-white/10 bg-white/[0.02] p-0.5">
+            <button
+              type="button"
+              onClick={() => setFilterType('all')}
+              aria-pressed={filterType === 'all'}
+              className={segmentClass(filterType === 'all')}
+            >
+              <Users className="size-3.5" />
+              All workspace tasks
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterType('assigned')}
+              aria-pressed={filterType === 'assigned'}
+              className={segmentClass(filterType === 'assigned')}
+            >
+              <UserCheck className="size-3.5" />
+              Assigned to me
+            </button>
+          </div>
 
-              {/* Filter 2: Filter by Meeting */}
-              <div className="flex items-center gap-1.5">
-                <Calendar className="size-3.5 text-slate-400 dark:text-neutral-500" />
-                <select
-                  value={selectedMeetingId}
-                  onChange={(e) => setSelectedMeetingId(e.target.value)}
-                  className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-[#222222] dark:bg-[#0d0d0d] dark:text-neutral-200 dark:focus:border-white/40 dark:focus:ring-white/20 [color-scheme:light] dark:[color-scheme:dark]"
-                >
-                  <option value="all">All Source Meetings</option>
-                  {meetings.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          {/* Filter 2: Filter by Meeting */}
+          <div className="relative">
+            <Calendar className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
+            <select
+              aria-label="Filter by meeting"
+              value={selectedMeetingId}
+              onChange={(e) => setSelectedMeetingId(e.target.value)}
+              className="field h-8 w-auto cursor-pointer py-0 pl-8 text-xs"
+            >
+              <option value="all">All source meetings</option>
+              {meetings.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.title}
+                </option>
+              ))}
+            </select>
+          </div>
 
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-slate-400 dark:text-neutral-500" />
-                <input
-                  type="text"
-                  placeholder="Search tasks or quotes..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-8 w-44 sm:w-60 rounded-md border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-[#222222] dark:bg-[#0d0d0d] dark:text-white dark:placeholder:text-neutral-500 dark:focus:border-white/40 dark:focus:ring-white/20"
-                />
-              </div>
-            </div>
-
-            {/* Right Summary Badges */}
-            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-neutral-400">
-              <div className="flex items-center gap-1.5">
-                <span className="text-slate-400 dark:text-neutral-500">Total:</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{totalCount}</span>
-              </div>
-              <div className="h-3 w-px bg-slate-200 dark:bg-[#262626]" />
-              <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-                <CheckCircle2 className="size-3.5" />
-                <span>Done: {doneCount}</span>
-              </div>
-              {blockedCount > 0 && (
-                <>
-                  <div className="h-3 w-px bg-slate-200 dark:bg-[#262626]" />
-                  <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400 font-medium">
-                    <AlertTriangle className="size-3.5" />
-                    <span>Blocked: {blockedCount}</span>
-                  </div>
-                </>
-              )}
-            </div>
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
+            <input
+              type="text"
+              aria-label="Search tasks"
+              placeholder="Search tasks or quotes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="field h-8 w-44 py-0 pl-8 text-xs sm:w-60"
+            />
           </div>
         </div>
-      </section>
+
+        {/* Summary */}
+        <div className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+          <span>
+            Total <span className="text-white">{totalCount}</span>
+          </span>
+          <span className="h-3 w-px bg-white/10" />
+          <span className="inline-flex items-center gap-1.5 text-emerald-400">
+            <CheckCircle2 className="size-3.5" />
+            Done {doneCount}
+          </span>
+          {blockedCount > 0 && (
+            <>
+              <span className="h-3 w-px bg-white/10" />
+              <span className="inline-flex items-center gap-1.5 text-red-400">
+                <AlertTriangle className="size-3.5" />
+                Blocked {blockedCount}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Error notification banner if any */}
       {errorMsg && (
-        <div className="border-b border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-950/40 px-4 py-2 text-center text-xs text-red-700 dark:text-red-300">
-          {errorMsg}
+        <div role="alert" className="mb-5 flex items-center justify-between gap-3 rounded-md border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+          <span>{errorMsg}</span>
           <button
             type="button"
             onClick={() => setErrorMsg(null)}
-            className="ml-3 underline hover:text-red-900 dark:hover:text-white"
+            className="shrink-0 font-medium underline-offset-4 hover:underline"
           >
             Dismiss
           </button>
@@ -565,64 +539,62 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       )}
 
       {/* Main Kanban Board Layout: 4 Columns */}
-      <main className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="h-[520px] rounded-xl border border-slate-200 bg-white p-4 animate-pulse flex flex-col gap-3 dark:border-[#181818] dark:bg-[#050505]"
-              >
-                <div className="h-6 w-24 bg-slate-200 dark:bg-white/5 rounded" />
-                <div className="h-28 w-full bg-slate-200 dark:bg-white/5 rounded-lg" />
-                <div className="h-28 w-full bg-slate-200 dark:bg-white/5 rounded-lg" />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
-            {/* Column 1: To Do */}
-            <KanbanColumn
-              status="todo"
-              title="To Do"
-              tasks={todoTasks}
-              onStatusChange={handleStatusChange}
-              onDropTask={handleStatusChange}
-              updatingTaskIds={updatingTaskIds}
-            />
+      {isLoading ? (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="flex h-[520px] animate-pulse flex-col gap-3 rounded-xl border border-white/10 bg-[#040404] p-4"
+            >
+              <div className="h-6 w-24 rounded bg-white/5" />
+              <div className="h-28 w-full rounded-lg bg-white/5" />
+              <div className="h-28 w-full rounded-lg bg-white/5" />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2 lg:grid-cols-4">
+          {/* Column 1: To Do */}
+          <KanbanColumn
+            status="todo"
+            title="To Do"
+            tasks={todoTasks}
+            onStatusChange={handleStatusChange}
+            onDropTask={handleStatusChange}
+            updatingTaskIds={updatingTaskIds}
+          />
 
-            {/* Column 2: In Progress */}
-            <KanbanColumn
-              status="in_progress"
-              title="In Progress"
-              tasks={inProgressTasks}
-              onStatusChange={handleStatusChange}
-              onDropTask={handleStatusChange}
-              updatingTaskIds={updatingTaskIds}
-            />
+          {/* Column 2: In Progress */}
+          <KanbanColumn
+            status="in_progress"
+            title="In Progress"
+            tasks={inProgressTasks}
+            onStatusChange={handleStatusChange}
+            onDropTask={handleStatusChange}
+            updatingTaskIds={updatingTaskIds}
+          />
 
-            {/* Column 3: Blocked */}
-            <KanbanColumn
-              status="blocked"
-              title="Blocked"
-              tasks={blockedTasks}
-              onStatusChange={handleStatusChange}
-              onDropTask={handleStatusChange}
-              updatingTaskIds={updatingTaskIds}
-            />
+          {/* Column 3: Blocked */}
+          <KanbanColumn
+            status="blocked"
+            title="Blocked"
+            tasks={blockedTasks}
+            onStatusChange={handleStatusChange}
+            onDropTask={handleStatusChange}
+            updatingTaskIds={updatingTaskIds}
+          />
 
-            {/* Column 4: Done */}
-            <KanbanColumn
-              status="done"
-              title="Done"
-              tasks={doneTasks}
-              onStatusChange={handleStatusChange}
-              onDropTask={handleStatusChange}
-              updatingTaskIds={updatingTaskIds}
-            />
-          </div>
-        )}
-      </main>
+          {/* Column 4: Done */}
+          <KanbanColumn
+            status="done"
+            title="Done"
+            tasks={doneTasks}
+            onStatusChange={handleStatusChange}
+            onDropTask={handleStatusChange}
+            updatingTaskIds={updatingTaskIds}
+          />
+        </div>
+      )}
     </div>
   );
 }

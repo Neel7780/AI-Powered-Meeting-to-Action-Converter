@@ -53,3 +53,8 @@ $$;
 
 revoke execute on function public.accept_invite(text), public.leave_workspace(uuid) from public, anon;
 grant  execute on function public.accept_invite(text), public.leave_workspace(uuid) to authenticated;
+
+-- 0001 revokes default privileges on new tables, so this table needs explicit grants (like 0001's own tables).
+revoke all on public.workspace_invites from anon, authenticated;
+grant select, delete on public.workspace_invites to authenticated;
+grant select, insert, update, delete on public.workspace_invites to service_role;
