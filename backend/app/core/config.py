@@ -1,5 +1,5 @@
 import os
-from typing import List
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -40,17 +40,16 @@ class Settings:
     # Internal tick keep-alive secret
     INTERNAL_TICK_SECRET: str = os.getenv("INTERNAL_TICK_SECRET", "")
 
-    # CORS
-    _default_cors = "http://localhost:5173,http://localhost:3000"
-    _frontend_url = os.getenv("FRONTEND_URL")
-    if _frontend_url:
-        _default_cors += f",{_frontend_url}"
-    CORS_ORIGINS: List[str] = [
-        origin.strip()
-        for origin in os.getenv(
-            "CORS_ORIGINS",
-            _default_cors
-        ).split(",")
+    # CORS: CORS_ORIGINS (comma-separated) replaces the local dev defaults; the deployed
+    # frontend is always allowed so an env override can't lock it out. Origins never end
+    # in "/", so a trailing slash in an env value would silently never match.
+    CORS_ORIGINS: list[str] = [
+        origin.strip().rstrip("/")
+        for origin in [
+            *os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(","),
+            "https://ai-powered-meeting-to-action-conver.vercel.app",
+            os.getenv("FRONTEND_URL", ""),
+        ]
         if origin.strip()
     ]
 

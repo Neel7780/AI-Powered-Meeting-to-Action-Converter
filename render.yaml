@@ -1,0 +1,34 @@
+# Render Blueprint for the FastAPI backend (https://render.com/docs/blueprint-spec).
+# A Blueprint service with the same name as an existing service updates that service.
+services:
+  - type: web
+    name: actionpulse-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    # FastAPI is ASGI: Render's default `gunicorn your_application.wsgi` is a placeholder
+    # and gunicorn isn't installed, so the service exits with status 127.
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # New Render services default to Python 3.14; CI tests on 3.11.
+      - key: PYTHON_VERSION
+        value: 3.11.16
+      # Invite/email links and CORS.
+      - key: FRONTEND_URL
+        value: https://ai-powered-meeting-to-action-conver.vercel.app
+      # Secrets: Render asks for these when the Blueprint is first applied.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: INTERNAL_TICK_SECRET
+        sync: false
