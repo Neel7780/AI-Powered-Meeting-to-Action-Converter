@@ -1,5 +1,8 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { X } from "lucide-react";
+import { Button } from "../ui/button";
+import { Notice } from "../ui/notice";
 
 type MemberRole = "organiser" | "member";
 
@@ -71,13 +74,13 @@ export default function AddMemberModal({
       }
 
       setSuccess(
-        `Member ${trimmedEmail} is ready to be added as ${role}.`
+        `Invite sent to ${trimmedEmail} as ${role}.`
       );
 
       setEmail("");
     } catch (error) {
       console.error("Add member error:", error);
-      setError("Unable to add member. Please try again.");
+      setError(error instanceof Error ? error.message : "Unable to add member. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -85,34 +88,33 @@ export default function AddMemberModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           handleClose();
         }
       }}
     >
-      <div className="w-full max-w-md rounded-2xl bg-white text-slate-900 shadow-2xl">
-
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-member-title"
+        className="panel w-full max-w-md shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">
-              Add Member
+            <p className="eyebrow">Workspace access</p>
+            <h2 id="add-member-title" className="mt-1.5 text-lg font-medium tracking-tight text-white">
+              Add member
             </h2>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Add a registered user to this workspace.
+            <p className="mt-1 text-sm text-neutral-400">
+              Send an email invite to join this workspace.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={handleClose}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-            aria-label="Close modal"
-          >
-            ✕
-          </button>
+          <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Close modal">
+            <X />
+          </Button>
         </div>
 
         <form
@@ -120,13 +122,9 @@ export default function AddMemberModal({
           className="space-y-5 p-6"
         >
           <div>
-            <label
-              htmlFor="member-email"
-              className="mb-2 block text-sm font-medium text-slate-700"
-            >
+            <label htmlFor="member-email" className="field-label">
               Email address
             </label>
-
             <input
               id="member-email"
               type="email"
@@ -136,18 +134,14 @@ export default function AddMemberModal({
               }
               placeholder="member@example.com"
               disabled={loading}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 placeholder:text-slate-400 caret-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100"
+              className="field"
             />
           </div>
 
           <div>
-            <label
-              htmlFor="member-role"
-              className="mb-2 block text-sm font-medium text-slate-700"
-            >
+            <label htmlFor="member-role" className="field-label">
               Workspace role
             </label>
-
             <select
               id="member-role"
               value={role}
@@ -155,7 +149,7 @@ export default function AddMemberModal({
                 setRole(event.target.value as MemberRole)
               }
               disabled={loading}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100"
+              className="field cursor-pointer"
             >
               <option value="member">
                 Team Member
@@ -167,39 +161,16 @@ export default function AddMemberModal({
             </select>
           </div>
 
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-              <p className="text-sm text-red-700">
-                {error}
-              </p>
-            </div>
-          )}
+          {error && <Notice tone="error">{error}</Notice>}
+          {success && <Notice tone="success">{success}</Notice>}
 
-          {success && (
-            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-              <p className="text-sm text-green-700">
-                {success}
-              </p>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={loading}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
+          <div className="flex justify-end gap-3 pt-1">
+            <Button type="button" variant="ghost" onClick={handleClose} disabled={loading}>
               Cancel
-            </button>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Adding..." : "Add Member"}
-            </button>
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Sending…" : "Send invite"}
+            </Button>
           </div>
         </form>
       </div>

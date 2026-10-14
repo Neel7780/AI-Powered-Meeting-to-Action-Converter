@@ -1,14 +1,15 @@
 import { useState, useRef } from 'react';
-import { uploadTranscriptFile, uploadTranscriptText } from '../../services/storage';
-import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { ArrowRight, FileText, LoaderCircle, Upload } from 'lucide-react';
+import { Button } from '../ui/button';
+import { Notice } from '../ui/notice';
 
 interface TranscriptUploadModalProps {
-  workspaceId?: string;
-  meetingId: string;
-  onUploadSuccess: (path: string) => void;
+  /** Sends the transcript to the backend; throw to show an error. */
+  onSubmit: (input: { text?: string; file?: File }) => Promise<void>;
+  progress?: string;
 }
 
-export function TranscriptUploadModal({ workspaceId, meetingId, onUploadSuccess }: TranscriptUploadModalProps) {
+export function TranscriptUploadModal({ onSubmit, progress }: TranscriptUploadModalProps) {
   const [activeTab, setActiveTab] = useState<'paste' | 'upload'>('paste');
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -37,7 +38,7 @@ export function TranscriptUploadModal({ workspaceId, meetingId, onUploadSuccess 
   const validateAndSetFile = (f: File) => {
     const allowedExtensions = ['.vtt', '.srt', '.txt', '.docx'];
     const extension = f.name.substring(f.name.lastIndexOf('.')).toLowerCase();
-    
+
     if (!allowedExtensions.includes(extension)) {
       setStatus('error');
       setErrorMessage(`Unsupported file format. Please upload ${allowedExtensions.join(', ')}`);
@@ -48,78 +49,60 @@ export function TranscriptUploadModal({ workspaceId, meetingId, onUploadSuccess 
   };
 
   const handleSubmit = async () => {
-    if (!workspaceId) {
-      setStatus('error');
-      setErrorMessage('Please select or create a workspace before uploading.');
-      return;
-    }
+    const input = activeTab === 'paste' ? { text: text.trim() } : { file: file ?? undefined };
+    if (!input.text && !input.file) return;
 
     setIsUploading(true);
     setStatus('idle');
     setErrorMessage('');
-
-    let result;
-    if (activeTab === 'paste' && text.trim()) {
-      result = await uploadTranscriptText(workspaceId, meetingId, text);
-    } else if (activeTab === 'upload' && file) {
-      result = await uploadTranscriptFile(workspaceId, meetingId, file);
-    } else {
-      setIsUploading(false);
-      return;
-    }
-
-    if (result.error || !result.path) {
-      setStatus('error');
-      setErrorMessage(result.error?.message || 'Failed to upload transcript');
-    } else {
+    try {
+      await onSubmit(input);
       setStatus('success');
-      onUploadSuccess(result.path);
+    } catch (err) {
+      setStatus('error');
+      setErrorMessage((err as Error).message || 'Failed to submit transcript');
+    } finally {
+      setIsUploading(false);
     }
-    
-    setIsUploading(false);
   };
 
+  const tabClass = (tab: 'paste' | 'upload') =>
+    `flex flex-1 items-center justify-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+      activeTab === tab ? 'border-white text-white' : 'border-transparent text-neutral-500 hover:text-white'
+    }`;
+
   return (
-    <div className="w-full max-w-2xl bg-card border border-border rounded-lg shadow-sm overflow-hidden mt-6">
-      <div className="flex border-b border-border">
-        <button
-          onClick={() => setActiveTab('paste')}
-          className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${activeTab === 'paste' ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-        >
-          <div className="flex items-center justify-center gap-2">
-            <FileText className="w-4 h-4" />
-            Paste Text
-          </div>
+    <div className="overflow-hidden rounded-md border border-white/10 bg-black">
+      <div role="tablist" className="flex border-b border-white/10">
+        <button type="button" role="tab" aria-selected={activeTab === 'paste'} onClick={() => setActiveTab('paste')} className={tabClass('paste')}>
+          <FileText className="size-4" />
+          Paste text
         </button>
-        <button
-          onClick={() => setActiveTab('upload')}
-          className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${activeTab === 'upload' ? 'border-b-2 border-primary text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-        >
-          <div className="flex items-center justify-center gap-2">
-            <Upload className="w-4 h-4" />
-            Upload File
-          </div>
+        <button type="button" role="tab" aria-selected={activeTab === 'upload'} onClick={() => setActiveTab('upload')} className={tabClass('upload')}>
+          <Upload className="size-4" />
+          Upload file
         </button>
       </div>
 
-      <div className="p-6">
+      <div className="p-5">
         {activeTab === 'paste' ? (
-          <div className="space-y-4">
+          <div>
             <textarea
-              className="w-full h-48 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Meeting transcript"
+              className="field h-48 resize-y font-mono text-xs leading-6"
               placeholder="Paste your meeting transcript here..."
               value={text}
               onChange={handleTextChange}
             />
-            <div className="flex justify-between items-center text-xs text-muted-foreground">
-              <span>{text.length} characters</span>
-            </div>
+            <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+              {text.length} characters
+            </p>
           </div>
         ) : (
           <div
-            className={`border-2 border-dashed rounded-lg p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-colors
-              ${file ? 'border-primary/50 bg-primary/5' : 'border-border hover:border-primary/30'}
-            `}
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed p-10 text-center transition-colors ${
+              file ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-white/15 hover:border-white/30 hover:bg-white/[0.02]'
+            }`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleFileDrop}
             onClick={() => fileInputRef.current?.click()}
@@ -131,45 +114,38 @@ export function TranscriptUploadModal({ workspaceId, meetingId, onUploadSuccess 
               accept=".vtt,.srt,.txt,.docx"
               onChange={handleFileSelect}
             />
-            <Upload className="w-10 h-10 text-muted-foreground mb-4" />
-            <p className="text-sm font-medium text-foreground">
+            <Upload className={`mb-4 size-8 ${file ? 'text-emerald-400' : 'text-neutral-500'}`} />
+            <p className="text-sm font-medium text-white">
               {file ? file.name : 'Click or drag file to this area to upload'}
             </p>
-            <p className="text-xs text-muted-foreground mt-2">
+            <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-neutral-500">
               Supports .vtt, .srt, .txt, .docx
             </p>
           </div>
         )}
 
-        {status === 'success' && (
-          <div className="mt-4 p-3 bg-verified/20 border border-verified/30 rounded-md flex items-center gap-2 text-verified">
-            <CheckCircle className="w-4 h-4" />
-            <span className="text-sm">Upload successful!</span>
-          </div>
-        )}
-        
-        {status === 'error' && (
-          <div className="mt-4 p-3 bg-destructive/20 border border-destructive/30 rounded-md flex items-center gap-2 text-destructive">
-            <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">{errorMessage}</span>
-          </div>
-        )}
+        <div className="mt-5 space-y-4">
+          {status === 'success' && <Notice tone="success">Done! Opening review...</Notice>}
+          {status === 'error' && <Notice tone="error">{errorMessage}</Notice>}
 
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={handleSubmit}
-            disabled={isUploading || (activeTab === 'paste' ? !text.trim() : !file)}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isUploading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                Uploading...
-              </>
-            ) : (
-              'Submit Transcript'
-            )}
-          </button>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isUploading || (activeTab === 'paste' ? !text.trim() : !file)}
+            >
+              {isUploading ? (
+                <>
+                  <LoaderCircle className="animate-spin" />
+                  {progress || 'Submitting...'}
+                </>
+              ) : (
+                <>
+                  Submit transcript <ArrowRight />
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

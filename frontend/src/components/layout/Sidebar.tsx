@@ -1,125 +1,61 @@
 import { NavLink } from "react-router-dom";
+import { CalendarPlus, LayoutDashboard, SquareKanban, Users, X } from "lucide-react";
 import { useWorkspace } from "../../context/WorkspaceContext";
+import { Button } from "../ui/button";
+import Brand from "./Brand";
 
 interface SidebarProps {
   onClose?: () => void;
 }
 
+const navItems = [
+  { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+  { label: "Meetings", path: "/meetings", icon: CalendarPlus },
+  { label: "Tasks", path: "/tasks", icon: SquareKanban },
+  { label: "Team", path: "/team", icon: Users },
+];
+
 export default function Sidebar({ onClose }: SidebarProps) {
   const { currentRole } = useWorkspace();
 
-  const navItems = [
-    {
-      label: "Dashboard",
-      path: "/dashboard",
-      icon: "▦",
-    },
-    {
-      label: "Meetings",
-      path: "/meetings",
-      icon: "◉",
-    },
-    {
-      label: "Tasks",
-      path: "/tasks",
-      icon: "✓",
-    },
-    {
-      label: "Team",
-      path: "/team",
-      icon: "♟",
-    },
-  ];
-
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-slate-200 bg-white text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
-
-      <div className="flex h-16 items-center justify-between border-b border-slate-200 px-5 dark:border-slate-800">
-        <div>
-          <h2 className="font-semibold text-slate-900 dark:text-slate-100">
-            Workspace
-          </h2>
-
-          <p className="text-xs capitalize text-slate-500 dark:text-slate-400">
-            {currentRole || "member"}
-          </p>
+    <div className="flex h-full flex-col bg-black">
+      {/* Mobile drawer header */}
+      {onClose && (
+        <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
+          <Brand to="/dashboard" />
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close menu">
+            <X />
+          </Button>
         </div>
+      )}
 
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 lg:hidden"
-            aria-label="Close menu"
-          >
-            ✕
-          </button>
-        )}
-      </div>
+      <nav aria-label="App navigation" className="flex-1 space-y-0.5 p-3">
+        <p className="eyebrow px-3 pb-2 pt-2">Workspace</p>
 
-      <nav className="flex-1 space-y-1 p-3">
-        {navItems.map((item) => (
+        {navItems.map(({ label, path, icon: Icon }) => (
           <NavLink
-            key={item.path}
-            to={item.path}
+            key={path}
+            to={path}
             onClick={onClose}
             className={({ isActive }) =>
-              [
-                "flex items-center gap-3 rounded-lg px-3 py-2.5",
-                "text-sm font-medium transition",
+              `flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
                 isActive
-                  ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100",
-              ].join(" ")
+                  ? "bg-white/[0.07] font-medium text-white"
+                  : "text-neutral-400 hover:bg-white/[0.04] hover:text-white"
+              }`
             }
           >
-            <span className="flex w-6 justify-center text-base">
-              {item.icon}
-            </span>
-
-            <span>{item.label}</span>
+            <Icon className="size-4 shrink-0" />
+            {label}
           </NavLink>
         ))}
-
-        {currentRole === "admin" && (
-          <div className="pt-5">
-            <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-600">
-              Administration
-            </p>
-
-            <NavLink
-              to="/settings"
-              onClick={onClose}
-              className={({ isActive }) =>
-                [
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5",
-                  "text-sm font-medium transition",
-                  isActive
-                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100",
-                ].join(" ")
-              }
-            >
-              <span className="flex w-6 justify-center">
-                ⚙
-              </span>
-
-              <span>Settings</span>
-            </NavLink>
-          </div>
-        )}
       </nav>
 
-      <div className="border-t border-slate-200 p-4 dark:border-slate-800">
-        <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
-          <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
-            ActionPulse
-          </p>
-
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Turn meetings into actions.
-          </p>
-        </div>
+      <div className="border-t border-white/10 p-4">
+        <p className="eyebrow">Your role</p>
+        <p className="mt-1 text-sm capitalize text-neutral-300">{currentRole || "member"}</p>
       </div>
-    </aside>
+    </div>
   );
 }

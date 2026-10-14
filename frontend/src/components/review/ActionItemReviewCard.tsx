@@ -1,19 +1,20 @@
 import React, { useState } from 'react';
-import { 
-  Check, 
-  X, 
-  User, 
-  Calendar, 
-  Clock, 
-  AlertTriangle, 
-  Edit3, 
-  Sparkles, 
-  RotateCcw, 
-  Save, 
+import {
+  Check,
+  X,
+  User,
+  Calendar,
+  Clock,
+  AlertTriangle,
+  Edit3,
+  Sparkles,
+  RotateCcw,
+  Save,
   ExternalLink,
   Tag
 } from 'lucide-react';
 import type { ActionItemCandidate, WorkspaceMember } from '../../types/review';
+import { Button } from '../ui/button';
 
 interface ActionItemReviewCardProps {
   item: ActionItemCandidate;
@@ -84,50 +85,47 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
 
   const confidencePercent = Math.round(item.confidence_score * 100);
 
-  const cardBorder = 
-    item.status === 'approved' 
-      ? 'border-emerald-300 bg-emerald-50/20 ring-1 ring-emerald-200'
+  const cardState =
+    item.status === 'approved'
+      ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
       : item.status === 'rejected'
-      ? 'border-slate-300 bg-slate-50/60 opacity-80'
+      ? 'border-white/10 bg-transparent opacity-60'
       : isSelected
-      ? 'border-indigo-400 bg-indigo-50/20 ring-2 ring-indigo-200 shadow-md'
-      : 'border-slate-200 hover:border-slate-300 bg-white shadow-xs';
+      ? 'border-white/30 bg-white/[0.04] ring-1 ring-white/15'
+      : 'border-white/10 bg-[#08080c] hover:border-white/20';
 
   return (
-    <div className={`rounded-xl border p-4 transition-all duration-200 ${cardBorder}`}>
-      <div className="flex items-center justify-between gap-2 mb-2.5">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span 
-            className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${
-              confidencePercent >= 90 
-                ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-            }`}
+    <div className={`rounded-lg border p-4 transition-all duration-200 ${cardState}`}>
+      <div className="mb-2.5 flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-neutral-300"
             title={`AI extraction confidence: ${confidencePercent}%`}
           >
-            <Sparkles className="w-3 h-3 text-purple-600" />
-            {confidencePercent}% AI Confidence
+            <Sparkles className="size-3 text-white" />
+            {confidencePercent}% AI confidence
           </span>
 
           <button
+            type="button"
             onClick={() => onJumpToTranscript?.(item.transcript_timestamp, item.transcript_segment_id)}
-            className="inline-flex items-center gap-1 text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+            className="inline-flex items-center gap-1 rounded border border-white/10 bg-black px-2 py-0.5 font-mono text-[11px] text-neutral-400 transition-colors hover:border-white/25 hover:text-white"
             title="Click to locate this exact segment in the transcript"
           >
-            <Clock className="w-3 h-3 text-slate-500" />
+            <Clock className="size-3" />
             <span>Transcript @ {item.transcript_timestamp}</span>
-            <ExternalLink className="w-2.5 h-2.5 opacity-60 ml-0.5" />
+            <ExternalLink className="ml-0.5 size-2.5 opacity-60" />
           </button>
 
           {item.status === 'approved' && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-              <Check className="w-3 h-3" />
+            <span className="inline-flex items-center gap-1 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400">
+              <Check className="size-3" />
               Approved
             </span>
           )}
           {item.status === 'rejected' && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-              <X className="w-3 h-3" />
+            <span className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-neutral-400">
+              <X className="size-3" />
               Rejected
             </span>
           )}
@@ -135,82 +133,78 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
 
         {item.status === 'pending' && !isEditing && (
           <button
+            type="button"
             onClick={() => setIsEditing(true)}
-            className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition"
+            className="rounded-md p-1 text-neutral-500 transition-colors hover:bg-white/10 hover:text-white"
             title="Inline edit action item title, description or date"
+            aria-label="Edit action item"
           >
-            <Edit3 className="w-3.5 h-3.5" />
+            <Edit3 className="size-3.5" />
           </button>
         )}
       </div>
 
       {isEditing ? (
-        <div className="space-y-3 my-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+        <div className="my-2 space-y-3 rounded-md border border-white/10 bg-black p-3">
           <div>
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-              Title <span className="text-rose-500">*</span>
+            <label htmlFor={`title-${item.id}`} className="field-label text-[11px]">
+              Title <span className="text-red-400">*</span>
             </label>
             <input
+              id={`title-${item.id}`}
               type="text"
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
               placeholder="Action item title..."
-              className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-800"
+              className="field py-1.5 text-xs font-medium"
             />
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-              Description & Context
+            <label htmlFor={`description-${item.id}`} className="field-label text-[11px]">
+              Description & context
             </label>
             <textarea
+              id={`description-${item.id}`}
               value={editDescription}
               onChange={(e) => setEditDescription(e.target.value)}
               rows={2}
               placeholder="Detailed description..."
-              className="w-full text-xs px-2.5 py-1.5 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700"
+              className="field py-1.5 text-xs"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                Due Date
+              <label htmlFor={`due-${item.id}`} className="field-label text-[11px]">
+                Due date
               </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={editDueDate}
-                  onChange={(e) => setEditDueDate(e.target.value)}
-                  className="w-full text-xs px-2.5 py-1 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-slate-700"
-                />
-              </div>
+              <input
+                id={`due-${item.id}`}
+                type="date"
+                value={editDueDate}
+                onChange={(e) => setEditDueDate(e.target.value)}
+                className="field py-1 text-xs"
+              />
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-200/60">
-            <button
-              onClick={handleCancelEdit}
-              className="px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-200/70 rounded font-medium transition"
-            >
+          <div className="flex items-center justify-end gap-2 border-t border-white/10 pt-3">
+            <Button type="button" variant="ghost" size="sm" onClick={handleCancelEdit}>
               Cancel
-            </button>
-            <button
-              onClick={handleSaveInlineEdit}
-              disabled={!editTitle.trim()}
-              className="px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition flex items-center gap-1 shadow-xs disabled:opacity-50"
-            >
-              <Save className="w-3 h-3" />
-              Save Changes
-            </button>
+            </Button>
+            <Button type="button" size="sm" onClick={handleSaveInlineEdit} disabled={!editTitle.trim()}>
+              <Save />
+              Save changes
+            </Button>
           </div>
         </div>
       ) : (
-        <div className="space-y-1.5 my-1">
-          <h4 
+        <div className="my-1 space-y-1.5">
+          <h4
             onClick={() => item.status === 'pending' && setIsEditing(true)}
-            className={`text-sm font-semibold text-slate-900 leading-snug cursor-pointer ${
-              item.status === 'pending' ? 'hover:text-indigo-600' : ''
+            className={`text-sm font-medium leading-snug text-white ${
+              item.status === 'pending' ? 'cursor-pointer hover:text-neutral-300' : ''
             }`}
             title={item.status === 'pending' ? 'Click to inline edit title' : undefined}
           >
@@ -218,19 +212,19 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
           </h4>
 
           {item.description && (
-            <p className="text-xs text-slate-600 leading-relaxed">
+            <p className="text-xs leading-relaxed text-neutral-400">
               {item.description}
             </p>
           )}
 
           {item.suggested_tags && item.suggested_tags.length > 0 && (
-            <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
               {item.suggested_tags.map(tag => (
-                <span 
+                <span
                   key={tag}
-                  className="inline-flex items-center gap-0.5 text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded"
+                  className="inline-flex items-center gap-1 rounded border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500"
                 >
-                  <Tag className="w-2.5 h-2.5 opacity-60" />
+                  <Tag className="size-2.5" />
                   {tag}
                 </span>
               ))}
@@ -239,108 +233,105 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
         </div>
       )}
 
-      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-slate-500 flex items-center gap-1">
-            <User className="w-3.5 h-3.5 text-slate-400" />
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor={`owner-${item.id}`} className="flex items-center gap-1 text-xs text-neutral-500">
+            <User className="size-3.5" />
             <span>Owner:</span>
           </label>
 
-          <div className="relative">
-            <select
-              value={item.assignee_id || 'unassigned'}
-              disabled={item.status !== 'pending'}
-              onChange={(e) => handleOwnerChange(e.target.value)}
-              className={`text-xs pl-2 pr-7 py-1 rounded-lg border font-medium transition appearance-none cursor-pointer focus:outline-none focus:ring-2 ${
-                isUnassigned
-                  ? 'border-amber-300 bg-amber-50 text-amber-900 focus:ring-amber-400/30'
-                  : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 focus:ring-indigo-500/20'
-              } ${item.status !== 'pending' ? 'opacity-70 cursor-not-allowed bg-slate-50' : ''}`}
-            >
-              <option value="unassigned">-- Unassigned --</option>
-              {members.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.full_name} ({m.role.replace('_', ' ')})
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-slate-400 text-xs">
-              ▼
-            </div>
-          </div>
+          <select
+            id={`owner-${item.id}`}
+            value={item.assignee_id || 'unassigned'}
+            disabled={item.status !== 'pending'}
+            onChange={(e) => handleOwnerChange(e.target.value)}
+            className={`field h-7 w-auto cursor-pointer py-0 pl-2 text-xs font-medium ${
+              isUnassigned ? 'border-amber-500/40 text-amber-300' : ''
+            }`}
+          >
+            <option value="unassigned">-- Unassigned --</option>
+            {members.map(m => (
+              <option key={m.id} value={m.id}>
+                {m.full_name} ({m.role.replace('_', ' ')})
+              </option>
+            ))}
+          </select>
 
           {isUnassigned && (
-            <span 
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${
+            <span
+              className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium ${
                 assigneeError
-                  ? 'bg-rose-100 text-rose-800 border-rose-300 animate-bounce'
-                  : 'bg-amber-100 text-amber-900 border-amber-300'
+                  ? 'animate-bounce border-red-500/30 bg-red-500/10 text-red-400'
+                  : 'border-amber-500/25 bg-amber-500/10 text-amber-400'
               }`}
               title="This candidate item cannot be approved without assigning an owner"
             >
-              <AlertTriangle className="w-3 h-3 text-amber-600" />
-              Assignee Required
+              <AlertTriangle className="size-3" />
+              Assignee required
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-slate-600">
-          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+        <div className="flex items-center gap-1.5 text-xs text-neutral-400">
+          <Calendar className="size-3.5 text-neutral-500" />
           {item.status === 'pending' ? (
             <input
               type="date"
+              aria-label="Due date"
               value={item.due_date || ''}
               onChange={(e) => onUpdate(item.id, { due_date: e.target.value || null })}
-              className="text-xs bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="field h-7 w-auto cursor-pointer px-2 py-0 text-xs"
               title="Change due date"
             />
           ) : (
-            <span className="font-medium text-slate-700">
+            <span className="font-medium text-neutral-300">
               {item.due_date ? new Date(item.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No due date'}
             </span>
           )}
         </div>
       </div>
 
-      <div className="mt-3 pt-2.5 border-t border-slate-100/90 flex items-center justify-between">
-        <div className="text-[11px] text-slate-400">
-          {item.status === 'pending' ? 'Review & staging action' : `Status: ${item.status}`}
+      <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-2.5">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
+          {item.status === 'pending' ? 'Awaiting review' : `Status: ${item.status}`}
         </div>
 
         <div className="flex items-center gap-2">
           {item.status === 'pending' ? (
             <>
-              <button
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
                 onClick={() => onReject(item.id)}
-                className="px-2.5 py-1.5 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 border border-rose-200 rounded-lg transition flex items-center gap-1 shadow-xs"
                 title="Reject and dismiss this candidate action item"
               >
-                <X className="w-3.5 h-3.5 text-rose-600" />
-                <span>Reject</span>
-              </button>
+                <X />
+                Reject
+              </Button>
 
-              <button
+              <Button
+                type="button"
+                size="sm"
                 onClick={handleApproveClick}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 shadow-xs ${
-                  isUnassigned 
-                    ? 'bg-emerald-600/70 hover:bg-emerald-600 text-white' 
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                }`}
-                title={isUnassigned ? 'Please select an assignee first' : 'Approve and publish to Kanban board'}
+                className={isUnassigned ? 'opacity-60' : ''}
+                title={isUnassigned ? 'Please select an assignee first' : 'Approve and publish to the task board'}
               >
-                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Approve</span>
-              </button>
+                <Check />
+                Approve
+              </Button>
             </>
           ) : (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => onRevert?.(item.id)}
-              className="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition flex items-center gap-1"
               title="Revert back to pending staging review"
             >
-              <RotateCcw className="w-3 h-3" />
-              <span>Undo Status</span>
-            </button>
+              <RotateCcw />
+              Undo status
+            </Button>
           )}
         </div>
       </div>

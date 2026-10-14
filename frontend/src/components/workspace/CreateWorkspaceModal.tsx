@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { useWorkspace } from "../../context/WorkspaceContext";
+import { Button } from "../ui/button";
+import { Notice } from "../ui/notice";
 
 interface CreateWorkspaceModalProps {
   isOpen: boolean;
@@ -53,59 +55,48 @@ export default function CreateWorkspaceModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-workspace-title"
+        className="panel w-full max-w-md p-6 shadow-2xl"
+      >
         <div className="mb-5">
-          <h2 className="text-xl font-bold text-slate-900">
-            Create Workspace
+          <p className="eyebrow">New workspace</p>
+          <h2 id="create-workspace-title" className="mt-1.5 text-lg font-medium tracking-tight text-white">
+            Create workspace
           </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-neutral-400">
             Create a workspace to start using ActionPulse.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <label
-            htmlFor="workspace-name"
-            className="mb-2 block text-sm font-medium text-slate-700"
-          >
-            Workspace name
-          </label>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="workspace-name" className="field-label">
+              Workspace name
+            </label>
+            <input
+              id="workspace-name"
+              type="text"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="e.g. Software Engineering Team"
+              className="field"
+              autoFocus
+            />
+          </div>
 
-          <input
-            id="workspace-name"
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="e.g. Software Engineering Team"
-            className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            autoFocus
-          />
+          {error && <Notice tone="error">{error}</Notice>}
 
-          {error && (
-            <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-              {error}
-            </p>
-          )}
-
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
               Cancel
-            </button>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Creating..." : "Create Workspace"}
-            </button>
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Creating…" : "Create workspace"}
+            </Button>
           </div>
         </form>
       </div>

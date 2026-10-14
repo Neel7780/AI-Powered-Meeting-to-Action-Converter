@@ -9,6 +9,23 @@ import { getApiUrl } from '../lib/api';
 
 const STORAGE_KEY_ITEMS = 'staging_gate_candidate_items';
 
+/** POST JSON or FormData to the FastAPI backend with the user's Supabase JWT; throws the backend's `detail` on failure. */
+export async function postApi(path: string, body: unknown): Promise<any> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const isForm = body instanceof FormData;
+  const res = await fetch(getApiUrl(path), {
+    method: 'POST',
+    headers: {
+      ...(isForm ? {} : { 'Content-Type': 'application/json' }),
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: isForm ? body : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`);
+  return data;
+}
+
 export const INITIAL_MEMBERS: WorkspaceMember[] = [
   {
     id: 'mem-1',
@@ -382,7 +399,7 @@ export const reviewApi = {
       try {
         const { data, error } = await supabase
           .from('meetings')
-          .select('*, organiser:profiles!organiser_id(display_name)')
+          .select('*')
           .eq('id', meetingId)
           .maybeSingle();
 
@@ -394,7 +411,7 @@ export const reviewApi = {
             date: data.starts_at || data.created_at,
             timezone: data.timezone || 'Asia/Kolkata',
             duration: '45 mins',
-            organiser_name: data.organiser?.display_name || 'Organiser',
+            organiser_name: 'Organiser',
             status: data.status === 'ready' ? 'review_ready' : data.status,
             candidate_count: 0
           };
@@ -499,7 +516,7 @@ export const reviewApi = {
           .eq('type', 'action')
           .order('created_at', { ascending: true });
 
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
           const members = INITIAL_MEMBERS;
           return data.map((item: any) => {
             const startMs = item.source_start_ms ? Number(item.source_start_ms) : 0;
@@ -578,160 +595,40 @@ export const reviewApi = {
     return updated;
   },
 
-  /**
-   * Approves candidate item via FastAPI backend endpoint POST /api/meetings/{id}/approve
-   * Enforces backend review gate & RLS boundary.
-   */
-  async approveActionItem(
-    itemId: string, 
-    meetingId?: string, 
-    updates?: Partial<ActionItemCandidate>
+  /** Local edit only: extracted_items is backend-owned, edits are sent with the approve call. */
+  async editActionItem(
+    item: ActionItemCandidate,
+    updates: Partial<ActionItemCandidate>,
+    members: WorkspaceMember[]
   ): Promise<ActionItemCandidate> {
-    const items = getStoredCandidateItems();
-    const current = items.find(i => i.id === itemId);
-    const targetMeetingId = meetingId || current?.meeting_id || 'mtg-sprint-102';
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (session?.access_token) {
-          headers['Authorization'] = `Bearer ${session.access_token}`;
-        }
-
-        const res = await fetch(getApiUrl(`/meetings/${targetMeetingId}/approve`), {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            items: [
-              {
-                id: itemId,
-                task: updates?.title || current?.title,
-                owner_user_id: updates?.assignee_id !== undefined ? updates.assignee_id : current?.assignee_id,
-                priority: 'normal'
-              }
-            ]
-          })
-        });
-
-        if (!res.ok) {
-          console.warn(`[reviewApi] Backend approve returned HTTP ${res.status}`);
-        }
-      } catch (err) {
-        console.warn('[reviewApi] Backend approve network fallback:', err);
-      }
+    if (!isSupabaseConfigured) return this.updateActionItem(item.id, updates);
+    const updated = { ...item, ...updates, updated_at: new Date().toISOString() };
+    if (updates.assignee_id !== undefined) {
+      updated.assignee = members.find(m => m.user_id === updates.assignee_id) || null;
     }
-
-    return this.updateActionItem(itemId, { status: 'approved', ...updates });
+    return updated;
   },
 
-  /**
-   * Rejects candidate item via FastAPI backend endpoint POST /api/meetings/{id}/reject
-   * Enforces backend review gate & RLS boundary.
-   */
-  async rejectActionItem(
-    itemId: string, 
-    meetingId?: string, 
-    reason?: string
-  ): Promise<ActionItemCandidate> {
-    const items = getStoredCandidateItems();
-    const current = items.find(i => i.id === itemId);
-    const targetMeetingId = meetingId || current?.meeting_id || 'mtg-sprint-102';
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (session?.access_token) {
-          headers['Authorization'] = `Bearer ${session.access_token}`;
-        }
-
-        const res = await fetch(getApiUrl(`/meetings/${targetMeetingId}/reject`), {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            item_ids: [itemId],
-            reason: reason || 'Rejected by organiser'
-          })
-        });
-
-        if (!res.ok) {
-          console.warn(`[reviewApi] Backend reject returned HTTP ${res.status}`);
-        }
-      } catch (err) {
-        console.warn('[reviewApi] Backend reject network fallback:', err);
-      }
+  /** Review gate: POST /api/meetings/{id}/approve (creates tasks + sends assignment emails). */
+  async approveActionItems(meetingId: string, items: ActionItemCandidate[]): Promise<ActionItemCandidate[]> {
+    if (!isSupabaseConfigured) {
+      return Promise.all(items.map(i => this.updateActionItem(i.id, { status: 'approved' })));
     }
+    await postApi(`/api/meetings/${meetingId}/approve`, {
+      items: items.map(i => ({ id: i.id, task: i.title, owner_user_id: i.assignee_id ?? null })),
+    });
+    return items.map(i => ({ ...i, status: 'approved' as const }));
+  },
 
-    return this.updateActionItem(itemId, { status: 'rejected' });
+  async rejectActionItem(meetingId: string, item: ActionItemCandidate): Promise<ActionItemCandidate> {
+    if (!isSupabaseConfigured) return this.updateActionItem(item.id, { status: 'rejected' });
+    await postApi(`/api/meetings/${meetingId}/reject`, { item_ids: [item.id] });
+    return { ...item, status: 'rejected' };
   },
 
   async revertActionItem(itemId: string): Promise<ActionItemCandidate> {
+    if (isSupabaseConfigured) throw new Error('Reviewed items are final');
     return this.updateActionItem(itemId, { status: 'pending' });
-  },
-
-  /**
-   * Batch approves items via FastAPI backend endpoint POST /api/meetings/{id}/approve
-   */
-  async approveAllActionItems(
-    meetingId: string, 
-    itemIds?: string[]
-  ): Promise<ActionItemCandidate[]> {
-    const items = getStoredCandidateItems();
-    const targetIds = itemIds && itemIds.length > 0 
-      ? itemIds 
-      : items.filter(i => i.status === 'pending').map(i => i.id);
-
-    if (isSupabaseConfigured && supabase && targetIds.length > 0) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (session?.access_token) {
-          headers['Authorization'] = `Bearer ${session.access_token}`;
-        }
-
-        const payloadItems = targetIds.map(id => {
-          const it = items.find(x => x.id === id);
-          return {
-            id,
-            task: it?.title,
-            owner_user_id: it?.assignee_id,
-            priority: 'normal'
-          };
-        });
-
-        const res = await fetch(getApiUrl(`/meetings/${meetingId}/approve`), {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ items: payloadItems })
-        });
-
-        if (!res.ok) {
-          console.warn(`[reviewApi] Backend batch approve returned HTTP ${res.status}`);
-        }
-      } catch (err) {
-        console.warn('[reviewApi] Backend batch approve network fallback:', err);
-      }
-    }
-
-    const targetSet = new Set(targetIds);
-    const updatedItems = items.map(item => {
-      if (targetSet.has(item.id)) {
-        return {
-          ...item,
-          status: 'approved' as const,
-          updated_at: new Date().toISOString()
-        };
-      }
-      return item;
-    });
-
-    saveStoredCandidateItems(updatedItems);
-    const members = INITIAL_MEMBERS;
-    return updatedItems.map(item => ({
-      ...item,
-      assignee: item.assignee_id ? members.find(m => m.id === item.assignee_id) || null : null
-    }));
   },
 
   async resetToInitialData(): Promise<ActionItemCandidate[]> {

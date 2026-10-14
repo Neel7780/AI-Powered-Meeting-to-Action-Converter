@@ -1,10 +1,15 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import AuthShell from "../components/auth/AuthShell";
+import { Button } from "../components/ui/button";
+import { Notice } from "../components/ui/notice";
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -21,7 +26,7 @@ export default function Login() {
 
     try {
       await signIn(email, password);
-      navigate("/dashboard");
+      navigate(location.state?.from || "/dashboard");
     } catch (err) {
       const message =
         err instanceof Error
@@ -35,74 +40,58 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-slate-900">
-            Welcome back
-          </h1>
-
-          <p className="mt-2 text-slate-500">
-            Sign in to your workspace
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Email
-            </label>
-
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
-              Password
-            </label>
-
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="••••••••"
-              className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-indigo-500"
-            />
-          </div>
-
-          {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-slate-500">
+    <AuthShell
+      eyebrow="Sign in"
+      title="Welcome back"
+      subtitle="Sign in to your workspace"
+      footer={
+        <>
           Don't have an account?{" "}
-          <Link
-            to="/signup"
-            className="font-semibold text-indigo-600 hover:underline"
-          >
+          <Link to="/signup" className="font-medium text-white underline-offset-4 hover:underline">
             Create one
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label htmlFor="email" className="field-label">
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="you@example.com"
+            className="field"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="password" className="field-label">
+            Password
+          </label>
+          <input
+            id="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="••••••••"
+            className="field"
+          />
+        </div>
+
+        {error && <Notice tone="error">{error}</Notice>}
+
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading ? "Signing in…" : <>Sign in <ArrowRight /></>}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

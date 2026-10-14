@@ -22,13 +22,13 @@ export function TimezoneSelector({ value, onChange }: TimezoneSelectorProps) {
       'Asia/Tokyo',
       'Australia/Sydney'
     ];
-    
+
     // Automatically get the user's local timezone if not provided
     const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (!commonTimezones.includes(userTimezone)) {
       commonTimezones.push(userTimezone);
     }
-    
+
     setTimezones(commonTimezones.sort());
 
     if (!value && userTimezone) {
@@ -37,12 +37,13 @@ export function TimezoneSelector({ value, onChange }: TimezoneSelectorProps) {
   }, [value, onChange]);
 
   return (
-    <div className="flex flex-col space-y-1.5">
-      <label className="text-sm font-medium text-foreground">Timezone</label>
+    <div>
+      <label htmlFor="timezone" className="field-label">Timezone</label>
       <select
+        id="timezone"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="flex h-10 w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        className="field cursor-pointer"
       >
         <option value="" disabled>Select Timezone</option>
         {timezones.map((tz) => (
