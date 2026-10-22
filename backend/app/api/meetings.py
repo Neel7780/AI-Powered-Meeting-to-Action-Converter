@@ -24,8 +24,18 @@ from app.core.supabase import get_supabase_client
 from app.parsers import TranscriptParseError, parse_transcript, to_canonical_text
 from app.schemas.meetings import (
     CreateMeetingRequest,
+    MeetingChaptersResponse,
+    MeetingChapterItem,
     MeetingResponse,
+    MeetingSummaryResponse,
+    SpeakerInsightItem,
+    SummaryDecisionItem,
+    SummaryDiscussionPointItem,
     TranscriptUploadResponse,
+)
+from app.services.llm.summary_service import (
+    generate_meeting_chapters,
+    generate_meeting_summary,
 )
 from app.utils.dates import is_valid_timezone
 
@@ -344,3 +354,117 @@ def submit_transcript(
         segment_count=len(segments),
         word_count=word_count
     )
+
+
+@router.get(
+    "/meetings/{meeting_id}/summary",
+    response_model=MeetingSummaryResponse,
+    summary="Get concise meeting summary highlighting discussion points, decisions and outcomes"
+)
+def get_meeting_summary(
+    meeting_id: UUID,
+    user: CurrentUser = Depends(get_current_user)
+) -> MeetingSummaryResponse:
+    """Retrieve grounded summary for a meeting. Allowed roles: admin, organiser, member."""
+    meeting = require_meeting_role(meeting_id, {"admin", "organiser", "member"}, user)
+    mid = str(meeting_id)
+
+    client = get_supabase_client()
+
+    # 1. Fetch transcript record
+    transcript_resp = (
+        client.table("transcripts")
+        .select("id, canonical_text")
+        .eq("meeting_id", mid)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    transcript_record = transcript_resp.data[0] if transcript_resp.data else None
+
+    # 2. Fetch transcript segments
+    segments = []
+    if transcript_record:
+        seg_resp = (
+            client.table("transcript_segments")
+            .select("id, speaker_name, text, start_ms, end_ms, segment_index")
+            .eq("transcript_id", transcript_record["id"])
+            .order("segment_index", desc=False)
+            .execute()
+        )
+        segments = seg_resp.data or []
+
+    # 3. Fetch extracted items (both decisions and action items)
+    items_resp = (
+        client.table("extracted_items")
+        .select("id, task, type, source_excerpt, source_start_ms, owner_name")
+        .eq("meeting_id", mid)
+        .execute()
+    )
+    extracted_items = items_resp.data or []
+
+    # 4. Generate grounded summary (LLM with deterministic fallback)
+    return generate_meeting_summary(
+        meeting=meeting,
+        transcript_record=transcript_record,
+        segments=segments,
+        extracted_items=extracted_items,
+    )
+
+
+@router.get(
+    "/meetings/{meeting_id}/chapters",
+    response_model=MeetingChaptersResponse,
+    summary="Get meaningful chapters and topic-based sections for navigating long meetings"
+)
+def get_meeting_chapters(
+    meeting_id: UUID,
+    user: CurrentUser = Depends(get_current_user)
+) -> MeetingChaptersResponse:
+    """Retrieve topic-based chapters for a meeting. Allowed roles: admin, organiser, member."""
+    meeting = require_meeting_role(meeting_id, {"admin", "organiser", "member"}, user)
+    mid = str(meeting_id)
+
+    client = get_supabase_client()
+
+    # 1. Fetch transcript record
+    transcript_resp = (
+        client.table("transcripts")
+        .select("id, canonical_text")
+        .eq("meeting_id", mid)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    transcript_record = transcript_resp.data[0] if transcript_resp.data else None
+
+    # 2. Fetch transcript segments
+    segments = []
+    if transcript_record:
+        seg_resp = (
+            client.table("transcript_segments")
+            .select("id, speaker_name, text, start_ms, end_ms, segment_index")
+            .eq("transcript_id", transcript_record["id"])
+            .order("segment_index", desc=False)
+            .execute()
+        )
+        segments = seg_resp.data or []
+
+    # 3. Fetch extracted items
+    items_resp = (
+        client.table("extracted_items")
+        .select("id, task, type, source_excerpt, source_start_ms, owner_name")
+        .eq("meeting_id", mid)
+        .execute()
+    )
+    extracted_items = items_resp.data or []
+
+    # 4. Generate grounded chapters
+    return generate_meeting_chapters(
+        meeting=meeting,
+        transcript_record=transcript_record,
+        segments=segments,
+        extracted_items=extracted_items,
+    )
+
+

@@ -20,6 +20,11 @@ export default function Sidebar({ onClose }: SidebarProps) {
       icon: "◉",
     },
     {
+      label: "Meeting Studio",
+      path: "/meeting-details",
+      icon: "✨",
+    },
+    {
       label: "Tasks",
       path: "/tasks",
       icon: "✓",

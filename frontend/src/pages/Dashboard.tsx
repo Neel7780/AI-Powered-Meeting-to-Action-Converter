@@ -280,6 +280,26 @@ export default function Dashboard() {
                       </div>
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() => navigate("/meeting-details")}
+                      className="flex w-full items-center rounded-xl border border-teal-200 bg-teal-50/50 p-4 text-left transition hover:border-teal-300 hover:bg-teal-50 dark:border-teal-800/60 dark:bg-teal-950/20 dark:hover:bg-teal-950/40"
+                    >
+                      <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-lg bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-300">
+                        ✨
+                      </span>
+
+                      <div>
+                        <p className="text-sm font-semibold text-teal-950 dark:text-teal-200">
+                          Design Sprint Review (Studio)
+                        </p>
+
+                        <p className="text-xs text-teal-700/80 dark:text-teal-400">
+                          Summary, Chapters & Transcript Explorer
+                        </p>
+                      </div>
+                    </button>
+
                     {isAdmin && (
                       <button
                         type="button"

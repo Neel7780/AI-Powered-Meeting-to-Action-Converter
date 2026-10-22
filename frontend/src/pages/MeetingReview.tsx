@@ -324,6 +324,15 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
               </button>
 
               <button
+                onClick={() => navigate('/meeting-details')}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 flex items-center gap-1 transition shadow-xs"
+                title="View Meeting Summary, Chapters & Video Studio"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                <span>Studio View</span>
+              </button>
+
+              <button
                 onClick={goKanban}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1 transition"
                 title="View published tasks on Kanban board"

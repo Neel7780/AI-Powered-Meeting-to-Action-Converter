@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import MeetingReview from "./pages/MeetingReview";
+import MeetingDetailsPage from "./pages/MeetingDetailsPage";
 
 function App() {
   return (
@@ -18,6 +19,9 @@ function App() {
         <Route path="/create-meeting" element={<Navigate to="/meetings" replace />} />
         <Route path="/meeting-review" element={<MeetingReview />} />
         <Route path="/meetings/:id/review" element={<MeetingReview />} />
+        <Route path="/meeting-details" element={<MeetingDetailsPage />} />
+        <Route path="/meetings/:id" element={<MeetingDetailsPage />} />
+        <Route path="/meetings/design-sprint-review" element={<MeetingDetailsPage />} />
 
         <Route
           path="/dashboard"
