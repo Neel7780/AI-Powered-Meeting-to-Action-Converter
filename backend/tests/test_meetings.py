@@ -395,3 +395,360 @@ def test_submit_transcript_unsupported_file_extension():
             assert "unsupported file format" in resp.json()["detail"].lower()
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_get_meeting_summary_success():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="member@example.com")
+
+    db = MagicMock()
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[{
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Design Sprint Review",
+        "status": "ready",
+        "created_at": "2026-10-22T10:00:00Z",
+        "updated_at": "2026-10-22T11:00:00Z"
+    }])
+
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+
+    transcripts_mock = MagicMock()
+    transcripts_mock.select.return_value = transcripts_mock
+    transcripts_mock.eq.return_value = transcripts_mock
+    transcripts_mock.order.return_value = transcripts_mock
+    transcripts_mock.limit.return_value = transcripts_mock
+    transcripts_mock.execute.return_value = MagicMock(data=[{
+        "id": "trans-101",
+        "canonical_text": "Karthik: Welcome everyone. Asha: Let's discuss action items."
+    }])
+
+    segments_mock = MagicMock()
+    segments_mock.select.return_value = segments_mock
+    segments_mock.eq.return_value = segments_mock
+    segments_mock.order.return_value = segments_mock
+    segments_mock.execute.return_value = MagicMock(data=[
+        {"id": "seg-1", "speaker_name": "Karthik", "text": "Welcome to the sprint review.", "start_ms": 0, "end_ms": 285000, "segment_index": 0},
+        {"id": "seg-2", "speaker_name": "Asha", "text": "We need a dedicated action items tab.", "start_ms": 312000, "end_ms": 760000, "segment_index": 1},
+    ])
+
+    decisions_mock = MagicMock()
+    decisions_mock.select.return_value = decisions_mock
+    decisions_mock.eq.return_value = decisions_mock
+    decisions_mock.execute.return_value = MagicMock(data=[{
+        "id": "dec-101",
+        "task": "Adopt teal accent theme",
+        "type": "decision",
+        "source_excerpt": "Adopt teal accent theme",
+        "source_start_ms": 145000,
+        "owner_name": "Karthik"
+    }])
+
+    def table_mock(name: str):
+        if name == "meetings":
+            return meetings_mock
+        if name == "workspace_members":
+            return wm_mock
+        if name == "transcripts":
+            return transcripts_mock
+        if name == "transcript_segments":
+            return segments_mock
+        if name == "extracted_items":
+            return decisions_mock
+        return MagicMock()
+
+    db.table.side_effect = table_mock
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+            resp = client.get(f"/api/meetings/{meeting_id}/summary")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["meeting_id"] == str(meeting_id)
+            assert "Design Sprint Review" in data["overview"]
+            assert len(data["key_discussion_points"]) > 0
+            assert len(data["decisions"]) == 1
+            assert data["decisions"][0]["id"] == "dec-101"
+            assert data["decisions"][0]["speaker"] == "Karthik"
+            assert len(data["speaker_insights"]) == 2
+            assert data["speaker_insights"][0]["speaker"] in ["Karthik", "Asha"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_get_meeting_summary_empty_transcript():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="member@example.com")
+
+    db = MagicMock()
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[{
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Empty Transcript Meeting",
+        "status": "ready"
+    }])
+
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+
+    empty_mock = MagicMock()
+    empty_mock.select.return_value = empty_mock
+    empty_mock.eq.return_value = empty_mock
+    empty_mock.order.return_value = empty_mock
+    empty_mock.limit.return_value = empty_mock
+    empty_mock.execute.return_value = MagicMock(data=[])
+
+    def table_mock(name: str):
+        if name == "meetings":
+            return meetings_mock
+        if name == "workspace_members":
+            return wm_mock
+        return empty_mock
+
+    db.table.side_effect = table_mock
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+            resp = client.get(f"/api/meetings/{meeting_id}/summary")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["meeting_id"] == str(meeting_id)
+            assert "No transcript has been submitted yet" in data["overview"]
+            assert data["key_discussion_points"] == []
+            assert data["decisions"] == []
+            assert data["outcomes"] == []
+            assert data["speaker_insights"] == []
+            assert data["model_used"] == "none"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_get_meeting_summary_forbidden_for_non_member():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="stranger@example.com")
+
+    db = MagicMock()
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[{
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Private Strategic Review",
+        "status": "ready"
+    }])
+
+    # Not a member of the workspace
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[])
+
+    db.table.side_effect = lambda name: meetings_mock if name == "meetings" else wm_mock
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+            resp = client.get(f"/api/meetings/{meeting_id}/summary")
+            assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_get_meeting_chapters_success():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="member@example.com")
+
+    db = MagicMock()
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[{
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Design Sprint Review",
+        "status": "ready"
+    }])
+
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+
+    transcripts_mock = MagicMock()
+    transcripts_mock.select.return_value = transcripts_mock
+    transcripts_mock.eq.return_value = transcripts_mock
+    transcripts_mock.order.return_value = transcripts_mock
+    transcripts_mock.limit.return_value = transcripts_mock
+    transcripts_mock.execute.return_value = MagicMock(data=[{
+        "id": "trans-101",
+        "canonical_text": "Karthik: Intro. Asha: Sidebar design. Vikram: API latency."
+    }])
+
+    segments_mock = MagicMock()
+    segments_mock.select.return_value = segments_mock
+    segments_mock.eq.return_value = segments_mock
+    segments_mock.order.return_value = segments_mock
+    segments_mock.execute.return_value = MagicMock(data=[
+        {"id": "seg-1", "speaker_name": "Karthik", "text": "Welcome to the sprint review.", "start_ms": 0, "end_ms": 300000, "segment_index": 0},
+        {"id": "seg-2", "speaker_name": "Asha", "text": "Here is the sidebar redesign.", "start_ms": 312000, "end_ms": 750000, "segment_index": 1},
+        {"id": "seg-3", "speaker_name": "Vikram", "text": "API response is sub-second.", "start_ms": 760000, "end_ms": 1200000, "segment_index": 2},
+    ])
+
+    items_mock = MagicMock()
+    items_mock.select.return_value = items_mock
+    items_mock.eq.return_value = items_mock
+    items_mock.execute.return_value = MagicMock(data=[
+        {
+            "id": "ai-101",
+            "task": "Update accent styling",
+            "type": "action",
+            "source_excerpt": "Update accent styling",
+            "source_start_ms": 320000,
+            "owner_name": "Karthik"
+        }
+    ])
+
+    def table_mock(name: str):
+        if name == "meetings":
+            return meetings_mock
+        if name == "workspace_members":
+            return wm_mock
+        if name == "transcripts":
+            return transcripts_mock
+        if name == "transcript_segments":
+            return segments_mock
+        if name == "extracted_items":
+            return items_mock
+        return MagicMock()
+
+    db.table.side_effect = table_mock
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+            resp = client.get(f"/api/meetings/{meeting_id}/chapters")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["meeting_id"] == str(meeting_id)
+            assert data["chapter_count"] > 0
+            assert len(data["chapters"]) == data["chapter_count"]
+            assert data["chapters"][0]["timestamp"] == "00:00"
+            # Action item at 320000ms (5m20s) should link to the corresponding chapter
+            all_linked_actions = [ai for ch in data["chapters"] for ai in ch["action_item_ids"]]
+            assert "ai-101" in all_linked_actions
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_get_meeting_chapters_empty_transcript():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="member@example.com")
+
+    db = MagicMock()
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[{
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Empty Chapters Meeting",
+        "status": "ready"
+    }])
+
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+
+    empty_mock = MagicMock()
+    empty_mock.select.return_value = empty_mock
+    empty_mock.eq.return_value = empty_mock
+    empty_mock.order.return_value = empty_mock
+    empty_mock.limit.return_value = empty_mock
+    empty_mock.execute.return_value = MagicMock(data=[])
+
+    def table_mock(name: str):
+        if name == "meetings":
+            return meetings_mock
+        if name == "workspace_members":
+            return wm_mock
+        return empty_mock
+
+    db.table.side_effect = table_mock
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+            resp = client.get(f"/api/meetings/{meeting_id}/chapters")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["meeting_id"] == str(meeting_id)
+            assert data["chapter_count"] == 0
+            assert data["chapters"] == []
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_get_meeting_chapters_forbidden_for_non_member():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="outsider@example.com")
+
+    db = MagicMock()
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[{
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Restricted Meeting",
+        "status": "ready"
+    }])
+
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[])
+
+    db.table.side_effect = lambda name: meetings_mock if name == "meetings" else wm_mock
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+            resp = client.get(f"/api/meetings/{meeting_id}/chapters")
+            assert resp.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
