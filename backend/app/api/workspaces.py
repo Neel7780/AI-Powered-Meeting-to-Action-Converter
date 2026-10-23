@@ -115,12 +115,16 @@ def create_invite(
             link=invite_link
         )
     except Exception as e:
-        # If sending fails, delete the row and return 502
-        db.table("workspace_invites").delete().eq("id", invite_id).execute()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, 
-            detail="Failed to send invite email"
-        )
+        logger.warning("Failed to send invite email to %s: %s", clean_email, e)
+        logger.info("[INVITE LINK] %s", invite_link)
+        # In production when email provider is explicitly configured, rollback and 502
+        if settings.ENVIRONMENT == "production" and (settings.BREVO_API_KEY or settings.SMTP_HOST):
+            db.table("workspace_invites").delete().eq("id", invite_id).execute()
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY, 
+                detail="Failed to send invite email"
+            )
+        # Otherwise keep the invite row in DB so teammates can still join via invite link
         
     return InviteCreateResponse(
         id=invite_id,
