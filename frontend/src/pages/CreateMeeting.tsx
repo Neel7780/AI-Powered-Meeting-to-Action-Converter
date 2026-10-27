@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase';
 import { postApi } from '../services/reviewApi';
 import { TimezoneSelector } from '../components/meetings/TimezoneSelector';
 import { TranscriptUploadModal } from '../components/meetings/TranscriptUploadModal';
+import { CalendarImportPicker } from '../components/meetings/CalendarImportPicker';
+import type { CalendarEventItem } from '../services/calendarApi';
 
 export function CreateMeeting() {
   const [title, setTitle] = useState('');
@@ -13,10 +15,32 @@ export function CreateMeeting() {
   const [participants, setParticipants] = useState<string>('');
   const [attested, setAttested] = useState(false);
   const [progress, setProgress] = useState('');
+  const [selectedEventId, setSelectedEventId] = useState<string | undefined>();
+  const [conferenceUrl, setConferenceUrl] = useState<string | undefined>();
 
   const { currentWorkspace } = useWorkspace();
   const workspaceId = currentWorkspace?.id;
   const navigate = useNavigate();
+
+  const handleSelectCalendarEvent = (ev: CalendarEventItem) => {
+    setSelectedEventId(ev.id);
+    setTitle(ev.title);
+    setConferenceUrl(ev.conference_url || undefined);
+    if (ev.timezone) setTimezone(ev.timezone);
+
+    try {
+      const d = new Date(ev.starts_at);
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const localStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      setDate(localStr);
+    } catch {
+      // Fallback
+    }
+
+    if (ev.attendees && ev.attendees.length > 0) {
+      setParticipants(ev.attendees.map(a => a.email).join(', '));
+    }
+  };
 
   // create meeting -> submit transcript (backend parses + stores) -> extract -> poll -> review
   const handleSubmit = async (input: { text?: string; file?: File }) => {
@@ -32,6 +56,9 @@ export function CreateMeeting() {
       external_participants: participants.split(',').map(p => p.trim()).filter(Boolean),
       ai_processing: true,
       ai_attestation: true,
+      calendar_event_id: selectedEventId || undefined,
+      calendar_provider: selectedEventId ? 'google' : undefined,
+      conference_url: conferenceUrl || undefined,
     });
 
     setProgress('Uploading transcript...');
@@ -63,6 +90,14 @@ export function CreateMeeting() {
           Schedule a new meeting and upload transcripts to generate actionable insights.
         </p>
       </div>
+
+      {workspaceId && (
+        <CalendarImportPicker
+          workspaceId={workspaceId}
+          onSelectEvent={handleSelectCalendarEvent}
+          selectedEventId={selectedEventId}
+        />
+      )}
 
       <section className="panel space-y-5 p-6">
         <div>
