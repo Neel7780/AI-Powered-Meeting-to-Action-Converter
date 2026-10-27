@@ -12,11 +12,13 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
+from app.core.config import settings
 from app.core.supabase import get_supabase_client
 
 security = HTTPBearer(auto_error=True)
 
 ORGANISER_ROLES: set[str] = {"admin", "organiser"}
+DEV_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 class CurrentUser(BaseModel):
@@ -37,6 +39,13 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # In development mode, allow instant one-click dev testing token
+    if settings.ENVIRONMENT == "development" and token.startswith("dev-token"):
+        return CurrentUser(
+            id=DEV_USER_ID,
+            email="dev@actionpulse.app"
         )
 
     client = get_supabase_client()
@@ -74,6 +83,10 @@ def require_role(
     Raises 404 if not a member (avoids leaking workspace existence).
     Raises 403 if role is not allowed.
     """
+    # In development mode, bypass role check for dev testing user
+    if settings.ENVIRONMENT == "development" and user.id == DEV_USER_ID:
+        return "admin"
+
     client = get_supabase_client()
     resp = (
         client.table("workspace_members")
@@ -108,6 +121,14 @@ def require_meeting_role(
     Raises 404 if meeting doesn't exist or user is not in workspace.
     Raises 403 if user doesn't have an allowed role.
     """
+    if settings.ENVIRONMENT == "development" and user.id == DEV_USER_ID:
+        return {
+            "id": str(meeting_id),
+            "workspace_id": "00000000-0000-0000-0000-000000000002",
+            "title": "Sprint 1 Architecture Review",
+            "status": "ready"
+        }
+
     client = get_supabase_client()
     resp = (
         client.table("meetings")

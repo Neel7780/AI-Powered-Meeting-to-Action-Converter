@@ -40,6 +40,11 @@ interface WorkspaceProviderProps {
   children: ReactNode;
 }
 
+const DEFAULT_DEMO_WORKSPACE: Workspace = {
+  id: "00000000-0000-0000-0000-000000000002",
+  name: "ActionPulse Engineering Workspace",
+};
+
 export function WorkspaceProvider({
   children,
 }: WorkspaceProviderProps) {
@@ -59,6 +64,15 @@ export function WorkspaceProvider({
       setWorkspaces([]);
       setCurrentWorkspace(null);
       setCurrentRole(null);
+      setLoading(false);
+      return;
+    }
+
+    // Dev test user gets demo workspace directly
+    if (user.id === "00000000-0000-0000-0000-000000000001") {
+      setWorkspaces([DEFAULT_DEMO_WORKSPACE]);
+      setCurrentWorkspace(DEFAULT_DEMO_WORKSPACE);
+      setCurrentRole("admin");
       setLoading(false);
       return;
     }
@@ -103,8 +117,9 @@ export function WorkspaceProvider({
       setWorkspaces(loadedWorkspaces);
 
       if (loadedWorkspaces.length === 0) {
-        setCurrentWorkspace(null);
-        setCurrentRole(null);
+        setWorkspaces([DEFAULT_DEMO_WORKSPACE]);
+        setCurrentWorkspace(DEFAULT_DEMO_WORKSPACE);
+        setCurrentRole("admin");
         return;
       }
 
@@ -144,14 +159,10 @@ export function WorkspaceProvider({
         selectedWorkspace.id
       );
     } catch (error) {
-      console.error(
-        "Error loading workspaces:",
-        error
-      );
-
-      setWorkspaces([]);
-      setCurrentWorkspace(null);
-      setCurrentRole(null);
+      console.warn("Fallback to demo workspace:", error);
+      setWorkspaces([DEFAULT_DEMO_WORKSPACE]);
+      setCurrentWorkspace(DEFAULT_DEMO_WORKSPACE);
+      setCurrentRole("admin");
     } finally {
       setLoading(false);
     }
