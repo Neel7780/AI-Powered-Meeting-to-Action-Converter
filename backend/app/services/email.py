@@ -455,3 +455,483 @@ def notify_tasks_assigned(meeting_id: UUID | str, task_ids: List[UUID | str]) ->
     except Exception as exc:
         # Crucial: background job must never raise
         logger.error("notify_tasks_assigned: Unexpected error in background job: %s", exc, exc_info=True)
+
+
+def send_meeting_reminder_email(
+    to: str,
+    user_name: str,
+    meeting_title: str,
+    starts_at_str: str,
+    tz_name: str = "Asia/Kolkata",
+    conference_url: Optional[str] = None,
+    meeting_link: str = "",
+) -> None:
+    """Send an upcoming meeting reminder email with call details."""
+    safe_name = html.escape(user_name)
+    safe_title = html.escape(meeting_title)
+    formatted_time = _format_deadline(starts_at_str, tz_name)
+    safe_time = html.escape(formatted_time)
+    safe_meeting_link = html.escape(meeting_link, quote=True) if meeting_link else ""
+    safe_conf_url = html.escape(conference_url, quote=True) if conference_url else ""
+
+    subject = f"[ActionPulse] Upcoming Meeting: {meeting_title}"
+
+    text_body = (
+        f"Hello {user_name},\n\n"
+        f"This is a reminder that your meeting \"{meeting_title}\" is starting soon:\n"
+        f"Scheduled: {formatted_time}\n"
+    )
+    if conference_url:
+        text_body += f"Join Call: {conference_url}\n"
+    if meeting_link:
+        text_body += f"View in ActionPulse: {meeting_link}\n"
+    text_body += (
+        f"\nAfter the meeting, upload your notes or transcript to ActionPulse "
+        f"to extract grounded action items and sync with your task board.\n\n"
+        f"— The ActionPulse Team"
+    )
+
+    conf_button = ""
+    if safe_conf_url:
+        conf_button = (
+            f'<a href="{safe_conf_url}" style="background-color: #059669; color: #ffffff; padding: 11px 22px; '
+            f'text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; '
+            f'margin-right: 12px;">Join Video Call</a>'
+        )
+
+    actionpulse_button = ""
+    if safe_meeting_link:
+        actionpulse_button = (
+            f'<a href="{safe_meeting_link}" style="background-color: #4f46e5; color: #ffffff; padding: 11px 22px; '
+            f'text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block;">'
+            f'Open in ActionPulse</a>'
+        )
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upcoming Meeting Reminder</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <tr>
+      <td style="padding: 28px; background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">ActionPulse</h1>
+        <p style="color: #c7d2fe; margin: 4px 0 0 0; font-size: 13px;">Upcoming Meeting Reminder</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 28px;">
+        <h2 style="font-size: 18px; margin-top: 0; color: #0f172a;">Hello {safe_name},</h2>
+        <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+          You have an upcoming meeting scheduled:
+        </p>
+        <div style="margin: 20px 0; padding: 18px; background: #f8fafc; border-left: 4px solid #4f46e5; border-radius: 6px;">
+          <h3 style="margin: 0 0 8px 0; font-size: 16px; color: #0f172a;">{safe_title}</h3>
+          <p style="margin: 0; font-size: 14px; color: #475569;">
+            <strong>Scheduled:</strong> {safe_time}
+          </p>
+        </div>
+        <div style="margin: 24px 0;">
+          {conf_button}
+          {actionpulse_button}
+        </div>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 24px;">
+          Tip: After the meeting concludes, upload the transcript to ActionPulse to automatically extract action items, owners, and deadlines.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 28px; background-color: #f1f5f9; text-align: center; border-top: 1px solid #e2e8f0;">
+        <p style="margin: 0; font-size: 12px; color: #94a3b8;">ActionPulse Notification System &bull; Zero-Budget Meeting Automation</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    send_email(to=to, subject=subject, html_body=html_body, text_body=text_body)
+
+
+def send_meeting_transcript_nudge_email(
+    to: str,
+    organiser_name: str,
+    meeting_title: str,
+    upload_link: str,
+) -> None:
+    """Send a post-meeting nudge to the organiser to upload notes/transcript."""
+    safe_name = html.escape(organiser_name)
+    safe_title = html.escape(meeting_title)
+    safe_upload_link = html.escape(upload_link, quote=True)
+
+    subject = f"[ActionPulse] Action Required: Upload notes for \"{meeting_title}\""
+
+    text_body = (
+        f"Hello {organiser_name},\n\n"
+        f"Your meeting \"{meeting_title}\" recently concluded. Don't let action items get lost in unstructured chat!\n\n"
+        f"Upload your transcript (.vtt, .srt, .docx, .txt) or paste your meeting notes to extract action items with AI grounding:\n"
+        f"{upload_link}\n\n"
+        f"— The ActionPulse Team"
+    )
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Meeting Notes</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <tr>
+      <td style="padding: 28px; background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">ActionPulse</h1>
+        <p style="color: #c7d2fe; margin: 4px 0 0 0; font-size: 13px;">Post-Meeting Action Required</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 28px;">
+        <h2 style="font-size: 18px; margin-top: 0; color: #0f172a;">Hello {safe_name},</h2>
+        <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+          Your meeting <strong>"{safe_title}"</strong> has finished. Don't let key commitments and tasks get lost in chat groups or forgotten notes.
+        </p>
+        <div style="margin: 20px 0; padding: 18px; background: #fdf4ff; border-left: 4px solid #a855f7; border-radius: 6px;">
+          <p style="margin: 0; font-size: 14px; color: #581c87; font-weight: 500;">
+            Upload your notes or transcript to extract action items, owners, and deadlines backed by verbatim transcript quotes.
+          </p>
+        </div>
+        <div style="margin: 28px 0; text-align: center;">
+          <a href="{safe_upload_link}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block;">Upload Transcript & Extract Tasks</a>
+        </div>
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+          Once extracted, you can quickly review, approve, and automatically dispatch tasks directly to your team's Kanban board.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 28px; background-color: #f1f5f9; text-align: center; border-top: 1px solid #e2e8f0;">
+        <p style="margin: 0; font-size: 12px; color: #94a3b8;">ActionPulse Notification System &bull; Zero-Budget Meeting Automation</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    send_email(to=to, subject=subject, html_body=html_body, text_body=text_body)
+
+
+def process_pre_meeting_reminders(window_minutes: int = 60) -> int:
+    """Find meetings starting within window_minutes and notify participants.
+    
+    Ensures idempotency via unique key in notifications table.
+    """
+    try:
+        supabase = get_supabase_client()
+    except Exception as exc:
+        logger.error("process_pre_meeting_reminders: Supabase connection failed: %s", exc)
+        return 0
+
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(minutes=window_minutes)
+
+    try:
+        meetings_resp = (
+            supabase.table("meetings")
+            .select("id, title, starts_at, timezone, organiser_id, workspace_id, conference_url")
+            .gte("starts_at", now.isoformat())
+            .lte("starts_at", window_end.isoformat())
+            .eq("lifecycle", "active")
+            .neq("status", "archived")
+            .execute()
+        )
+        meetings = meetings_resp.data or []
+        if not meetings:
+            return 0
+
+        total_reminders_sent = 0
+
+        for m in meetings:
+            m_id = m["id"]
+            m_title = m.get("title") or "Meeting"
+            starts_at_str = m.get("starts_at")
+            tz = m.get("timezone") or "Asia/Kolkata"
+            conf_url = m.get("conference_url")
+            meeting_link = f"{settings.APP_URL.rstrip('/')}/meetings/{m_id}/review"
+
+            # Gather participants
+            user_ids_to_notify: set[str] = set()
+            if m.get("organiser_id"):
+                user_ids_to_notify.add(str(m["organiser_id"]))
+
+            parts_resp = (
+                supabase.table("meeting_participants")
+                .select("user_id")
+                .eq("meeting_id", m_id)
+                .not_.is_("user_id", "null")
+                .execute()
+            )
+            for p in (parts_resp.data or []):
+                if p.get("user_id"):
+                    user_ids_to_notify.add(str(p["user_id"]))
+
+            if not user_ids_to_notify:
+                continue
+
+            # Verify active workspace membership
+            wm_resp = (
+                supabase.table("workspace_members")
+                .select("user_id")
+                .eq("workspace_id", m["workspace_id"])
+                .in_("user_id", list(user_ids_to_notify))
+                .execute()
+            )
+            active_ids = {row["user_id"] for row in (wm_resp.data or [])}
+            if not active_ids:
+                continue
+
+            # Fetch profiles
+            prof_resp = (
+                supabase.table("profiles")
+                .select("id, email, display_name, timezone")
+                .in_("id", list(active_ids))
+                .execute()
+            )
+            profiles_map = {row["id"]: row for row in (prof_resp.data or [])}
+
+            for uid in active_ids:
+                prof = profiles_map.get(uid)
+                if not prof or not prof.get("email"):
+                    continue
+
+                user_email = prof["email"]
+                user_name = prof.get("display_name") or user_email.split("@")[0]
+                user_tz = prof.get("timezone") or tz
+
+                key = f"meeting_reminder:email:{m_id}:{uid}"
+                now_iso = datetime.now(timezone.utc).isoformat()
+
+                # Idempotent insert in notifications table
+                try:
+                    payload = {
+                        "user_id": uid,
+                        "channel": "email",
+                        "event_type": "meeting_reminder",
+                        "status": "pending",
+                        "attempt": 0,
+                        "idempotency_key": key,
+                    }
+                    try:
+                        payload["meeting_id"] = str(m_id)
+                        supabase.table("notifications").insert(payload).execute()
+                    except Exception:
+                        # Fallback if meeting_id column isn't migrated yet
+                        payload.pop("meeting_id", None)
+                        supabase.table("notifications").insert(payload).execute()
+                except Exception as insert_err:
+                    # Duplicate key or already present -> skip
+                    continue
+
+                # In-app notification
+                in_app_key = f"meeting_reminder:in_app:{m_id}:{uid}"
+                try:
+                    in_app_payload = {
+                        "user_id": uid,
+                        "channel": "in_app",
+                        "event_type": "meeting_reminder",
+                        "status": "sent",
+                        "sent_at": now_iso,
+                        "idempotency_key": in_app_key,
+                    }
+                    try:
+                        in_app_payload["meeting_id"] = str(m_id)
+                        supabase.table("notifications").insert(in_app_payload).execute()
+                    except Exception:
+                        in_app_payload.pop("meeting_id", None)
+                        supabase.table("notifications").insert(in_app_payload).execute()
+                except Exception:
+                    pass
+
+                # Dispatch email
+                try:
+                    send_meeting_reminder_email(
+                        to=user_email,
+                        user_name=user_name,
+                        meeting_title=m_title,
+                        starts_at_str=starts_at_str,
+                        tz_name=user_tz,
+                        conference_url=conf_url,
+                        meeting_link=meeting_link,
+                    )
+                    supabase.table("notifications").update({
+                        "status": "sent",
+                        "sent_at": now_iso,
+                    }).eq("idempotency_key", key).execute()
+                    total_reminders_sent += 1
+                except Exception as send_err:
+                    logger.error("Failed to send pre-meeting reminder to %s: %s", user_email, send_err)
+                    supabase.table("notifications").update({
+                        "status": "failed",
+                        "last_error": str(send_err)[:500],
+                        "attempt": 1,
+                    }).eq("idempotency_key", key).execute()
+
+        return total_reminders_sent
+    except Exception as exc:
+        logger.error("process_pre_meeting_reminders error: %s", exc, exc_info=True)
+        return 0
+
+
+def process_post_meeting_nudges(min_age_minutes: int = 15, max_age_hours: int = 24) -> int:
+    """Find ended meetings without transcripts and nudge the organiser."""
+    try:
+        supabase = get_supabase_client()
+    except Exception as exc:
+        logger.error("process_post_meeting_nudges: Supabase connection failed: %s", exc)
+        return 0
+
+    now = datetime.now(timezone.utc)
+    min_time = now - timedelta(hours=max_age_hours)
+    max_time = now - timedelta(minutes=min_age_minutes)
+
+    try:
+        meetings_resp = (
+            supabase.table("meetings")
+            .select("id, title, starts_at, organiser_id, workspace_id")
+            .gte("starts_at", min_time.isoformat())
+            .lte("starts_at", max_time.isoformat())
+            .eq("status", "draft")
+            .eq("lifecycle", "active")
+            .execute()
+        )
+        meetings = meetings_resp.data or []
+        if not meetings:
+            return 0
+
+        # Check which of these already have transcripts
+        meeting_ids = [m["id"] for m in meetings]
+        transcripts_resp = (
+            supabase.table("transcripts")
+            .select("meeting_id")
+            .in_("meeting_id", meeting_ids)
+            .execute()
+        )
+        transcribed_ids = {row["meeting_id"] for row in (transcripts_resp.data or [])}
+
+        total_nudges_sent = 0
+
+        for m in meetings:
+            m_id = m["id"]
+            if m_id in transcribed_ids:
+                continue
+
+            organiser_id = str(m.get("organiser_id"))
+            if not organiser_id:
+                continue
+
+            # Verify organiser is still an active workspace member
+            wm_resp = (
+                supabase.table("workspace_members")
+                .select("user_id")
+                .eq("workspace_id", m["workspace_id"])
+                .eq("user_id", organiser_id)
+                .execute()
+            )
+            if not (wm_resp.data or []):
+                continue
+
+            # Fetch organiser profile
+            prof_resp = (
+                supabase.table("profiles")
+                .select("email, display_name")
+                .eq("id", organiser_id)
+                .execute()
+            )
+            profiles = prof_resp.data or []
+            if not profiles or not profiles[0].get("email"):
+                continue
+
+            organiser_email = profiles[0]["email"]
+            organiser_name = profiles[0].get("display_name") or organiser_email.split("@")[0]
+            m_title = m.get("title") or "Meeting"
+            upload_link = f"{settings.APP_URL.rstrip('/')}/meetings/{m_id}/review"
+
+            key = f"meeting_transcript_nudge:email:{m_id}:{organiser_id}"
+            now_iso = datetime.now(timezone.utc).isoformat()
+
+            # Idempotent insert
+            try:
+                payload = {
+                    "user_id": organiser_id,
+                    "channel": "email",
+                    "event_type": "meeting_transcript_nudge",
+                    "status": "pending",
+                    "attempt": 0,
+                    "idempotency_key": key,
+                }
+                try:
+                    payload["meeting_id"] = str(m_id)
+                    supabase.table("notifications").insert(payload).execute()
+                except Exception:
+                    payload.pop("meeting_id", None)
+                    supabase.table("notifications").insert(payload).execute()
+            except Exception:
+                # Already nudged -> skip
+                continue
+
+            # In-app notification
+            in_app_key = f"meeting_transcript_nudge:in_app:{m_id}:{organiser_id}"
+            try:
+                in_app_payload = {
+                    "user_id": organiser_id,
+                    "channel": "in_app",
+                    "event_type": "meeting_transcript_nudge",
+                    "status": "sent",
+                    "sent_at": now_iso,
+                    "idempotency_key": in_app_key,
+                }
+                try:
+                    in_app_payload["meeting_id"] = str(m_id)
+                    supabase.table("notifications").insert(in_app_payload).execute()
+                except Exception:
+                    in_app_payload.pop("meeting_id", None)
+                    supabase.table("notifications").insert(in_app_payload).execute()
+            except Exception:
+                pass
+
+            # Dispatch email
+            try:
+                send_meeting_transcript_nudge_email(
+                    to=organiser_email,
+                    organiser_name=organiser_name,
+                    meeting_title=m_title,
+                    upload_link=upload_link,
+                )
+                supabase.table("notifications").update({
+                    "status": "sent",
+                    "sent_at": now_iso,
+                }).eq("idempotency_key", key).execute()
+                total_nudges_sent += 1
+            except Exception as send_err:
+                logger.error("Failed to send post-meeting nudge to %s: %s", organiser_email, send_err)
+                supabase.table("notifications").update({
+                    "status": "failed",
+                    "last_error": str(send_err)[:500],
+                    "attempt": 1,
+                }).eq("idempotency_key", key).execute()
+
+        return total_nudges_sent
+    except Exception as exc:
+        logger.error("process_post_meeting_nudges error: %s", exc, exc_info=True)
+        return 0
+
+
+def process_all_meeting_notifications() -> dict[str, int]:
+    """Execute both pre-meeting reminders and post-meeting transcript nudges safely."""
+    reminders = process_pre_meeting_reminders()
+    nudges = process_post_meeting_nudges()
+    return {
+        "pre_meeting_reminders_sent": reminders,
+        "post_meeting_nudges_sent": nudges,
+    }

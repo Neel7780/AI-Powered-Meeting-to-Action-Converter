@@ -7,6 +7,7 @@ import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import MeetingReview from "./pages/MeetingReview";
 import AcceptInvite from "./pages/AcceptInvite";
+import CalendarCallback from "./pages/CalendarCallback";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/create-meeting" element={<Navigate to="/meetings" replace />} />
         <Route path="/meeting-review" element={<MeetingReview />} />
         <Route path="/invite/:token" element={<ProtectedRoute><AcceptInvite /></ProtectedRoute>} />
+        <Route path="/calendar/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
         <Route path="/meetings/:id/review" element={<MeetingReview />} />
 
         <Route
