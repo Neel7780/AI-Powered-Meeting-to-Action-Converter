@@ -36,6 +36,10 @@ def create_mock_supabase(tables: dict):
 class TestEmailDelivery:
     """Unit tests for low-level send_email and invite templates."""
 
+    @pytest.fixture(autouse=True)
+    def reset_brevo_key(self, monkeypatch):
+        monkeypatch.setattr(settings, "BREVO_API_KEY", "")
+
     @patch("smtplib.SMTP")
     def test_send_email_success(self, mock_smtp_cls):
         mock_server = MagicMock()
