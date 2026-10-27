@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api import extraction, health, meetings, review, workspaces
+from app.api import chat, extraction, health, meetings, review, workspaces
 
 api_router = APIRouter()
 
@@ -18,3 +18,6 @@ api_router.include_router(review.router, tags=["Review & Approval"])
 
 # AI extraction (BE-3)
 api_router.include_router(extraction.router, tags=["Extraction"])
+
+# Meeting Chatbot API
+api_router.include_router(chat.router, prefix="/chat", tags=["Meeting Chatbot"])
