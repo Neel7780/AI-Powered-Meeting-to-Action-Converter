@@ -10,7 +10,7 @@ api_router = APIRouter()
 api_router.include_router(health.router, tags=["Health"])
 
 # Sprint 1 Vertical Slice routers
-api_router.include_router(workspaces.router, tags=["Workspaces"])
+api_router.include_router(workspaces.router, prefix="/workspaces", tags=["Workspaces"])
 api_router.include_router(meetings.router, tags=["Meetings"])
 api_router.include_router(review.router, tags=["Review & Approval"])
 
