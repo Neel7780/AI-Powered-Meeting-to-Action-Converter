@@ -69,6 +69,15 @@ function App() {
           }
         />
 
+        <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

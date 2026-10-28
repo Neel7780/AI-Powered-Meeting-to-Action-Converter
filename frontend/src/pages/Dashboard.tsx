@@ -6,6 +6,7 @@ import {
   CalendarPlus,
   ListChecks,
   LoaderCircle,
+  Sparkles,
   SquareKanban,
   UserPlus,
   Users,
@@ -15,10 +16,12 @@ import Navbar from "../components/layout/Navbar";
 import Sidebar from "../components/layout/Sidebar";
 import AddMemberModal from "../components/workspace/AddMemberModal";
 import CreateWorkspaceModal from "../components/workspace/CreateWorkspaceModal";
+import FloatingChatWidget from "../components/chat/FloatingChatWidget";
 import { Button } from "../components/ui/button";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { supabase } from "../lib/supabase";
 import CreateMeeting from "../pages/CreateMeeting";
+import ChatPage from "../pages/ChatPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
 
@@ -49,9 +52,10 @@ export default function Dashboard() {
     loading,
   } = useWorkspace();
 
+  const isChatPage = location.pathname === "/chat";
   const isTasksPage = location.pathname === "/tasks" || location.pathname === "/kanban";
   const isMeetingsPage = location.pathname === "/meetings";
-  const isOverview = !isTasksPage && !isMeetingsPage;
+  const isOverview = !isTasksPage && !isMeetingsPage && !isChatPage;
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
@@ -112,6 +116,13 @@ export default function Dashboard() {
       onClick: () => navigate("/meetings"),
     },
     {
+      label: "Ask AI Copilot",
+      hint: "Query meetings, decisions & tasks",
+      icon: Sparkles,
+      tint: tints.indigo,
+      onClick: () => navigate("/chat"),
+    },
+    {
       label: "View tasks",
       hint: "Check your action items",
       icon: SquareKanban,
@@ -160,7 +171,9 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <main className="min-w-0 flex-1">
-          {isTasksPage ? (
+          {isChatPage ? (
+            <ChatPage />
+          ) : isTasksPage ? (
             <KanbanBoard workspaceId={currentWorkspace?.id} />
           ) : isMeetingsPage ? (
             <div className="p-4 sm:p-6 lg:p-8">
@@ -309,6 +322,11 @@ export default function Dashboard() {
             onClose={() => setShowAddMember(false)}
             onAddMember={handleAddMember}
           />
+
+          {/* Global Floating Chat Widget (available across all workspace views except /chat) */}
+          {!isChatPage && currentWorkspace && (
+            <FloatingChatWidget workspaceId={currentWorkspace.id} />
+          )}
         </main>
       </div>
     </div>
