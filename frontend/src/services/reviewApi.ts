@@ -481,7 +481,7 @@ export const reviewApi = {
         const byId = new Map((profiles || []).map(p => [p.id, p]));
         return data.map((m) => {
           const profile = byId.get(m.user_id);
-          const name = profile?.display_name || profile?.email || 'Member';
+          const name = profile?.display_name || profile?.email?.split('@')[0] || 'Member';
           const initials = name
             .split(' ')
             .map((p: string) => p[0])

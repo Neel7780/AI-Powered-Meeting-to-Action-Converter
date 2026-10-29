@@ -22,6 +22,7 @@ import { useWorkspace } from "../context/WorkspaceContext";
 import { supabase } from "../lib/supabase";
 import CreateMeeting from "../pages/CreateMeeting";
 import ChatPage from "../pages/ChatPage";
+import TeamPage from "../pages/TeamPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
 
@@ -55,7 +56,8 @@ export default function Dashboard() {
   const isChatPage = location.pathname === "/chat";
   const isTasksPage = location.pathname === "/tasks" || location.pathname === "/kanban";
   const isMeetingsPage = location.pathname === "/meetings";
-  const isOverview = !isTasksPage && !isMeetingsPage && !isChatPage;
+  const isTeamPage = location.pathname === "/team";
+  const isOverview = !isTasksPage && !isMeetingsPage && !isChatPage && !isTeamPage;
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
@@ -102,9 +104,9 @@ export default function Dashboard() {
   };
 
   const statCards = [
-    { label: "Meetings", value: stats?.meetings, icon: CalendarPlus, tint: tints.indigo },
-    { label: "Open tasks", value: stats?.openTasks, icon: ListChecks, tint: tints.amber },
-    { label: "Team members", value: stats?.members, icon: Users, tint: tints.emerald },
+    { label: "Meetings", value: stats?.meetings, icon: CalendarPlus, tint: tints.indigo, onClick: () => navigate("/meetings") },
+    { label: "Open tasks", value: stats?.openTasks, icon: ListChecks, tint: tints.amber, onClick: () => navigate("/tasks") },
+    { label: "Team members", value: stats?.members, icon: Users, tint: tints.emerald, onClick: () => navigate("/team") },
   ];
 
   const quickActions = [
@@ -179,6 +181,8 @@ export default function Dashboard() {
             <div className="p-4 sm:p-6 lg:p-8">
               <CreateMeeting />
             </div>
+          ) : isTeamPage ? (
+            <TeamPage />
           ) : loading ? (
             <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-neutral-500">
               <LoaderCircle className="size-4 animate-spin" />
@@ -215,8 +219,20 @@ export default function Dashboard() {
 
               {/* Stats row */}
               <div className="grid gap-3 sm:grid-cols-3">
-                {statCards.map(({ label, value, icon: Icon, tint }) => (
-                  <div key={label} className="panel flex items-center justify-between p-5">
+                {statCards.map(({ label, value, icon: Icon, tint, onClick }) => (
+                  <div
+                    key={label}
+                    onClick={onClick}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onClick();
+                      }
+                    }}
+                    className="panel flex items-center justify-between p-5 cursor-pointer hover:border-white/20 transition-colors"
+                  >
                     <div>
                       <p className="eyebrow">{label}</p>
                       <p className="mt-2 text-3xl font-medium tracking-tight text-white">{value ?? "—"}</p>
