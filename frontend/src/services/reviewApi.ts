@@ -474,17 +474,26 @@ export const reviewApi = {
   async fetchWorkspaceMembers(_workspaceId: string): Promise<WorkspaceMember[]> {
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
+        const { data: memberRows, error: memberErr } = await supabase
           .from('workspace_members')
-          .select('role, user_id, profiles:user_id(id, display_name, email)')
+          .select('role, user_id')
           .eq('workspace_id', _workspaceId);
 
-        if (!error && data && data.length > 0) {
-          return data.map((m: any) => {
-            const name = m.profiles?.display_name || m.profiles?.email || 'Member';
+        if (!memberErr && memberRows && memberRows.length > 0) {
+          const userIds = memberRows.map((m: any) => m.user_id);
+          const { data: profileRows } = await supabase
+            .from('profiles')
+            .select('id, display_name, email')
+            .in('id', userIds);
+
+          const profileMap = new Map((profileRows || []).map((p: any) => [p.id, p]));
+
+          return memberRows.map((m: any) => {
+            const p = profileMap.get(m.user_id);
+            const name = p?.display_name || p?.email?.split('@')[0] || 'Member';
             const initials = name
               .split(' ')
-              .map((p: string) => p[0])
+              .map((part: string) => part[0])
               .join('')
               .toUpperCase()
               .slice(0, 2);
@@ -492,7 +501,7 @@ export const reviewApi = {
               id: m.user_id,
               user_id: m.user_id,
               full_name: name,
-              email: m.profiles?.email || '',
+              email: p?.email || '',
               role: m.role === 'admin' ? 'admin' : m.role === 'organiser' ? 'meeting_organiser' : 'team_member',
               initials
             };
