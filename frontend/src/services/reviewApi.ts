@@ -396,44 +396,39 @@ function saveStoredCandidateItems(items: ActionItemCandidate[]) {
 export const reviewApi = {
   async fetchMeetingDetails(meetingId: string): Promise<MeetingDetails> {
     if (isSupabaseConfigured && supabase) {
-      try {
         const { data, error } = await supabase
           .from('meetings')
           .select('*')
           .eq('id', meetingId)
           .maybeSingle();
 
-        if (!error && data) {
-          return {
-            id: data.id,
-            workspace_id: data.workspace_id,
-            title: data.title,
-            date: data.starts_at || data.created_at,
-            timezone: data.timezone || 'Asia/Kolkata',
-            duration: '45 mins',
-            organiser_name: 'Organiser',
-            status: data.status === 'ready' ? 'review_ready' : data.status,
-            candidate_count: 0
-          };
-        }
-      } catch (err) {
-        console.warn('Error fetching meeting details from Supabase:', err);
-      }
+        if (error) throw error;
+        if (!data) throw new Error('Meeting not found');
+        return {
+          id: data.id,
+          workspace_id: data.workspace_id,
+          title: data.title,
+          date: data.starts_at || data.created_at,
+          timezone: data.timezone || 'Asia/Kolkata',
+          duration: '45 mins',
+          organiser_name: 'Organiser',
+          status: data.status === 'ready' ? 'review_ready' : data.status,
+          candidate_count: 0
+        };
     }
     return INITIAL_MEETING;
   },
 
   async fetchTranscript(meetingId: string): Promise<TranscriptSegment[]> {
     if (isSupabaseConfigured && supabase) {
-      try {
         // Look up the transcript associated with this meeting
         const { data: transcript, error: tError } = await supabase
           .from('transcripts')
           .select('id')
           .eq('meeting_id', meetingId)
           .maybeSingle();
-
-        if (!tError && transcript) {
+        if (tError) throw tError;
+        if (transcript) {
           // Schema alignment: transcript_segments uses transcript_id, start_ms, and end_ms
           const { data: segments, error: sError } = await supabase
             .from('transcript_segments')
@@ -441,7 +436,8 @@ export const reviewApi = {
             .eq('transcript_id', transcript.id)
             .order('segment_index', { ascending: true });
 
-          if (!sError && segments && segments.length > 0) {
+          if (sError) throw sError;
+          if (segments && segments.length > 0) {
             return segments.map((seg) => {
               const startMs = Number(seg.start_ms || 0);
               const startSec = Math.floor(startMs / 1000);
@@ -464,60 +460,50 @@ export const reviewApi = {
             });
           }
         }
-      } catch (err) {
-        console.warn('Error fetching transcript segments from Supabase:', err);
-      }
+        return [];
     }
     return INITIAL_TRANSCRIPT_SEGMENTS;
   },
 
-  async fetchWorkspaceMembers(_workspaceId: string): Promise<WorkspaceMember[]> {
+  async fetchWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
     if (isSupabaseConfigured && supabase) {
-      try {
-        const { data: memberRows, error: memberErr } = await supabase
+        const { data, error } = await supabase
           .from('workspace_members')
           .select('role, user_id')
-          .eq('workspace_id', _workspaceId);
-
-        if (!memberErr && memberRows && memberRows.length > 0) {
-          const userIds = memberRows.map((m: any) => m.user_id);
-          const { data: profileRows } = await supabase
-            .from('profiles')
-            .select('id, display_name, email')
-            .in('id', userIds);
-
-          const profileMap = new Map((profileRows || []).map((p: any) => [p.id, p]));
-
-          return memberRows.map((m: any) => {
-            const p = profileMap.get(m.user_id);
-            const name = p?.display_name || p?.email?.split('@')[0] || 'Member';
-            const initials = name
-              .split(' ')
-              .map((part: string) => part[0])
-              .join('')
-              .toUpperCase()
-              .slice(0, 2);
-            return {
-              id: m.user_id,
-              user_id: m.user_id,
-              full_name: name,
-              email: p?.email || '',
-              role: m.role === 'admin' ? 'admin' : m.role === 'organiser' ? 'meeting_organiser' : 'team_member',
-              initials
-            };
-          });
-        }
-      } catch (err) {
-        console.warn('Error fetching workspace members from Supabase:', err);
-      }
+          .eq('workspace_id', workspaceId);
+        if (error) throw error;
+        if (!data?.length) return [];
+        const { data: profiles, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, display_name, email')
+          .in('id', data.map(m => m.user_id));
+        if (profileError) throw profileError;
+        const byId = new Map((profiles || []).map(p => [p.id, p]));
+        return data.map((m) => {
+          const profile = byId.get(m.user_id);
+          const name = profile?.display_name || profile?.email?.split('@')[0] || 'Member';
+          const initials = name
+            .split(' ')
+            .map((p: string) => p[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2);
+          return {
+            id: m.user_id,
+            user_id: m.user_id,
+            full_name: name,
+            email: profile?.email || '',
+            role: m.role === 'admin' ? 'admin' : m.role === 'organiser' ? 'meeting_organiser' : 'team_member',
+            initials
+          };
+        });
     }
     return INITIAL_MEMBERS;
   },
 
-  async fetchActionItemCandidates(meetingId: string): Promise<ActionItemCandidate[]> {
+  async fetchActionItemCandidates(meetingId: string, members: WorkspaceMember[]): Promise<ActionItemCandidate[]> {
     // Schema alignment: Candidate items live in extracted_items
     if (isSupabaseConfigured && supabase) {
-      try {
         const { data, error } = await supabase
           .from('extracted_items')
           .select('*')
@@ -525,9 +511,8 @@ export const reviewApi = {
           .eq('type', 'action')
           .order('created_at', { ascending: true });
 
-        if (!error && data) {
-          const members = INITIAL_MEMBERS;
-          return data.map((item: any) => {
+        if (error) throw error;
+        return (data || []).map((item: any) => {
             const startMs = item.source_start_ms ? Number(item.source_start_ms) : 0;
             const startSec = Math.floor(startMs / 1000);
             const mins = Math.floor(startSec / 60);
@@ -538,14 +523,9 @@ export const reviewApi = {
             if (item.review_status === 'approved') status = 'approved';
             else if (item.review_status === 'rejected') status = 'rejected';
 
-            const assignee = item.owner_user_id 
-              ? members.find(m => m.user_id === item.owner_user_id || m.id === item.owner_user_id) || {
-                  id: item.owner_user_id,
-                  user_id: item.owner_user_id,
-                  full_name: item.owner_name || 'Assigned Member',
-                  email: '',
-                  role: 'team_member' as const
-                }
+            const assignee = members.find(m => m.user_id === item.owner_user_id) || null;
+            const dueDate = item.deadline_utc
+              ? new Intl.DateTimeFormat('sv-SE', { timeZone: item.deadline_timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(item.deadline_utc))
               : null;
 
             return {
@@ -553,8 +533,9 @@ export const reviewApi = {
               meeting_id: item.meeting_id,
               title: item.task || item.source_excerpt || 'Action Item',
               description: item.source_excerpt || item.task || '',
-              due_date: item.deadline_utc ? item.deadline_utc.split('T')[0] : (item.deadline_raw || null),
-              assignee_id: item.owner_user_id || null,
+              due_date: dueDate,
+              extracted_due_date: dueDate,
+              assignee_id: assignee?.user_id || null,
               assignee,
               status,
               confidence_score: item.confidence !== null && item.confidence !== undefined ? Number(item.confidence) : 0.9,
@@ -562,14 +543,9 @@ export const reviewApi = {
               created_at: item.created_at,
               updated_at: item.updated_at
             };
-          });
-        }
-      } catch (err) {
-        console.warn('Error fetching extracted items from Supabase:', err);
-      }
+        });
     }
     
-    const members = INITIAL_MEMBERS;
     const items = getStoredCandidateItems().map(item => ({
       ...item,
       assignee: item.assignee_id ? members.find(m => m.id === item.assignee_id) || null : null
@@ -624,7 +600,10 @@ export const reviewApi = {
       return Promise.all(items.map(i => this.updateActionItem(i.id, { status: 'approved' })));
     }
     await postApi(`/api/meetings/${meetingId}/approve`, {
-      items: items.map(i => ({ id: i.id, task: i.title, owner_user_id: i.assignee_id ?? null })),
+      items: items.map(i => ({
+        id: i.id, task: i.title, owner_user_id: i.assignee_id ?? null,
+        ...(i.due_date !== i.extracted_due_date ? { deadline_date: i.due_date } : {}),
+      })),
     });
     return items.map(i => ({ ...i, status: 'approved' as const }));
   },

@@ -25,6 +25,7 @@ from app.schemas.review import (
     RejectResponse,
 )
 from app.services.email import notify_tasks_assigned
+from app.utils.dates import to_utc
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,13 @@ def approve_items(
         final_task = dumped.get("task", db_item.get("task"))
         final_owner = dumped.get("owner_user_id", db_item.get("owner_user_id"))
         final_deadline = dumped.get("deadline_utc", db_item.get("deadline_utc"))
+        if "deadline_date" in dumped:
+            final_deadline = (
+                to_utc(dumped["deadline_date"].isoformat(), None, meeting["timezone"])
+                if dumped["deadline_date"] else None
+            )
+            if dumped["deadline_date"] and final_deadline is None:
+                raise HTTPException(status_code=422, detail="Invalid meeting timezone for due date")
         final_priority = dumped.get("priority", db_item.get("priority") or "normal")
 
         # Step 4a: Update extracted_items (enforce extracted_review_chk: status + reviewed_by + reviewed_at)
@@ -135,10 +143,11 @@ def approve_items(
             update_item_payload["task"] = dumped["task"]
         if "owner_user_id" in dumped:
             update_item_payload["owner_user_id"] = str(dumped["owner_user_id"]) if dumped["owner_user_id"] else None
-        if "deadline_utc" in dumped:
+        if "deadline_utc" in dumped or "deadline_date" in dumped:
             update_item_payload["deadline_utc"] = (
-                dumped["deadline_utc"].isoformat() if dumped["deadline_utc"] else None
+                final_deadline.isoformat() if isinstance(final_deadline, datetime) else final_deadline
             )
+            update_item_payload["deadline_timezone"] = meeting["timezone"] if final_deadline else None
         if "priority" in dumped:
             update_item_payload["priority"] = dumped["priority"]
 

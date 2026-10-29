@@ -98,6 +98,27 @@ def test_unknown_ref_clears_owner_keeps_name_and_flags():
     assert row["uncertainty_flag"] is True
 
 
+def test_unique_workspace_name_resolves_owner_when_model_ref_is_missing():
+    rows = validate_items(
+        [item(owner_name="Rahul", owner_ref=None)], canonical_text=SAMPLE,
+        segments=[{"text": "I will fix the login bug on Safari by Wednesday.",
+                   "speaker_name": "Rahul", "start_ms": 1000, "end_ms": 1900}],
+        roster_refs=REFS, roster_names={"M1": "Aman Shah", "M2": "Priya Nair", "M3": "Rahul Mehta"},
+        timezone=TZ, meeting_starts_at=STARTS,
+    )
+    assert rows[0]["owner_user_id"] == "rahul-id"
+
+
+def test_ambiguous_workspace_name_is_not_assigned():
+    rows = validate_items(
+        [item(owner_name="Rahul", owner_ref=None)], canonical_text=SAMPLE, segments=SEGMENTS,
+        roster_refs={"M1": "first", "M2": "second"},
+        roster_names={"M1": "Rahul Mehta", "M2": "Rahul Shah"},
+        timezone=TZ, meeting_starts_at=STARTS,
+    )
+    assert rows[0]["owner_user_id"] is None
+
+
 @pytest.mark.parametrize("overrides", [
     {"deadline_date": None},  # no deadline
     {"deadline_date": "2026-10-01"},  # deadline before the meeting

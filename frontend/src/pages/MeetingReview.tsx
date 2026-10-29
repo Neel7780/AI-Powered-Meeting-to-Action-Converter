@@ -64,12 +64,12 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
   const loadData = async () => {
     try {
       setLoading(true);
-      const [mtgData, transData, candData] = await Promise.all([
+      const [mtgData, transData] = await Promise.all([
         reviewApi.fetchMeetingDetails(meetingId),
-        reviewApi.fetchTranscript(meetingId),
-        reviewApi.fetchActionItemCandidates(meetingId)
+        reviewApi.fetchTranscript(meetingId)
       ]);
       const memData = await reviewApi.fetchWorkspaceMembers(mtgData.workspace_id);
+      const candData = await reviewApi.fetchActionItemCandidates(meetingId, memData);
 
       setMeeting(mtgData);
       setTranscript(transData);
