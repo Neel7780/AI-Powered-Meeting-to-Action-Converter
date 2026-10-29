@@ -44,13 +44,14 @@ def run_extraction(meeting_id: UUID | str) -> None:
         transcript = db.table("transcripts").select("id, canonical_text").eq("meeting_id", mid).execute().data[0]
         segments = (
             db.table("transcript_segments")
-            .select("text, start_ms, end_ms")
+            .select("text, speaker_name, start_ms, end_ms")
             .eq("transcript_id", transcript["id"])
             .order("segment_index")
             .execute()
             .data
         )
-        roster_text, refs = build_roster(_load_members(db, meeting["workspace_id"]))
+        members = _load_members(db, meeting["workspace_id"])
+        roster_text, refs = build_roster(members)
 
         starts_at = datetime.fromisoformat(meeting["starts_at"])
         local_start = starts_at.astimezone(ZoneInfo(meeting["timezone"]))
@@ -91,6 +92,8 @@ def run_extraction(meeting_id: UUID | str) -> None:
             canonical_text=canonical_text,
             segments=segments,
             roster_refs=refs,
+            roster_names={ref: member.get("display_name") or (member.get("email") or "").split("@")[0]
+                          for ref, member in zip(refs, members)},
             timezone=meeting["timezone"],
             meeting_starts_at=starts_at,
         )

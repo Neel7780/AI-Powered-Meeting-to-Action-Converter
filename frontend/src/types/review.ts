@@ -33,6 +33,7 @@ export interface ActionItemCandidate {
   title: string;
   description: string;
   due_date: string | null; // ISO YYYY-MM-DD
+  extracted_due_date?: string | null;
   assignee_id: string | null;
   assignee?: WorkspaceMember | null;
   status: ActionItemStatus;

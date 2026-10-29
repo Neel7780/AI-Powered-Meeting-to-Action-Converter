@@ -34,6 +34,7 @@ def validate_items(
     roster_refs: dict[str, str],
     timezone: str,
     meeting_starts_at: datetime,
+    roster_names: dict[str, str] | None = None,
 ) -> list[dict]:
     """Return extracted_items rows (without meeting_id/provider/model_version).
 
@@ -56,6 +57,21 @@ def validate_items(
         )
 
         owner_user_id = roster_refs.get(item.owner_ref) if item.owner_ref else None
+        if item.type == "action" and item.owner_name and roster_names:
+            name = normalise(item.owner_name).casefold()
+            matches = [ref for ref, full_name in roster_names.items()
+                       if name == normalise(full_name).casefold()
+                       or name == normalise(full_name).split(" ")[0].casefold()]
+            if len(matches) != 1:
+                owner_user_id = None
+            if len(matches) == 1:
+                speaker = normalise(seg.get("speaker_name") or "").casefold() if seg else ""
+                named_in_quote = re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", needle.casefold())
+                matched_user_id = roster_refs[matches[0]]
+                if named_in_quote or speaker in (name, normalise(roster_names[matches[0]]).casefold()):
+                    owner_user_id = matched_user_id
+                elif owner_user_id != matched_user_id:
+                    owner_user_id = None
         deadline = to_utc(item.deadline_date, item.deadline_time, timezone)
         owner_conf = _clamp(item.owner_confidence)
         confidence = _clamp(item.confidence)
