@@ -6,13 +6,17 @@ import { postApi } from '../services/reviewApi';
 import { TimezoneSelector } from '../components/meetings/TimezoneSelector';
 import { TranscriptUploadModal } from '../components/meetings/TranscriptUploadModal';
 import { CalendarImportPicker } from '../components/meetings/CalendarImportPicker';
+import { ParticipantPicker } from '../components/meetings/ParticipantPicker';
 import type { CalendarEventItem } from '../services/calendarApi';
+import type { WorkspaceMember } from '../types/review';
 
 export function CreateMeeting() {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   const [timezone, setTimezone] = useState('');
-  const [participants, setParticipants] = useState<string>('');
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [externalParticipants, setExternalParticipants] = useState<string[]>([]);
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
   const [attested, setAttested] = useState(false);
   const [progress, setProgress] = useState('');
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>();
@@ -38,7 +42,21 @@ export function CreateMeeting() {
     }
 
     if (ev.attendees && ev.attendees.length > 0) {
-      setParticipants(ev.attendees.map(a => a.email).join(', '));
+      const matchedIds: string[] = [];
+      const extList: string[] = [];
+      ev.attendees.forEach((a) => {
+        const email = a.email?.trim().toLowerCase();
+        const member = workspaceMembers.find(
+          (m) => m.email?.trim().toLowerCase() === email
+        );
+        if (member) {
+          matchedIds.push(member.user_id || member.id);
+        } else if (email) {
+          extList.push(email);
+        }
+      });
+      if (matchedIds.length > 0) setSelectedMemberIds((prev) => Array.from(new Set([...prev, ...matchedIds])));
+      if (extList.length > 0) setExternalParticipants((prev) => Array.from(new Set([...prev, ...extList])));
     }
   };
 
@@ -53,7 +71,8 @@ export function CreateMeeting() {
       title: title.trim(),
       starts_at: zonedToUtc(date, timezone),
       timezone,
-      external_participants: participants.split(',').map(p => p.trim()).filter(Boolean),
+      participant_user_ids: selectedMemberIds,
+      external_participants: externalParticipants,
       ai_processing: true,
       ai_attestation: true,
       calendar_event_id: selectedEventId || undefined,
@@ -139,19 +158,16 @@ export function CreateMeeting() {
           />
         </div>
 
-        <div>
-          <label htmlFor="participants" className="field-label">
-            Participants <span className="font-normal text-neutral-500">(comma-separated)</span>
-          </label>
-          <input
-            id="participants"
-            type="text"
-            placeholder="e.g. alice@example.com, bob@example.com"
-            value={participants}
-            onChange={(e) => setParticipants(e.target.value)}
-            className="field"
+        {workspaceId && (
+          <ParticipantPicker
+            workspaceId={workspaceId}
+            selectedMemberIds={selectedMemberIds}
+            onSelectedMemberIdsChange={setSelectedMemberIds}
+            externalParticipants={externalParticipants}
+            onExternalParticipantsChange={setExternalParticipants}
+            onMembersLoaded={setWorkspaceMembers}
           />
-        </div>
+        )}
       </section>
 
       <section className="panel space-y-4 p-6">
