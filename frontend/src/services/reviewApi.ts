@@ -9,6 +9,12 @@ import { getApiUrl } from '../lib/api';
 
 const STORAGE_KEY_ITEMS = 'staging_gate_candidate_items';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidUuid(val: unknown): val is string {
+  return typeof val === 'string' && UUID_REGEX.test(val);
+}
+
 /** POST JSON or FormData to the FastAPI backend with the user's Supabase JWT; throws the backend's `detail` on failure. */
 export async function postApi(path: string, body: unknown): Promise<any> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -22,50 +28,55 @@ export async function postApi(path: string, body: unknown): Promise<any> {
     body: isForm ? body : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`);
+  let detailMsg = `HTTP ${res.status}`;
+  if (typeof data.detail === 'string') {
+    detailMsg = data.detail;
+  } else if (Array.isArray(data.detail)) {
+    detailMsg = data.detail
+      .map((d: any) => {
+        const field = Array.isArray(d.loc) ? d.loc.filter((x: any) => x !== 'body').join('.') : '';
+        return field ? `${field}: ${d.msg}` : d.msg;
+      })
+      .join('; ');
+  } else if (typeof data.message === 'string') {
+    detailMsg = data.message;
+  }
+  if (!res.ok) throw new Error(detailMsg);
   return data;
 }
 
 export const INITIAL_MEMBERS: WorkspaceMember[] = [
   {
-    id: 'mem-1',
-    user_id: 'usr-1',
-    full_name: 'Arnav Pandita',
-    email: 'arnav.pandita@workspace.io',
+    id: '00000000-0000-0000-0000-000000000001',
+    user_id: '00000000-0000-0000-0000-000000000001',
+    full_name: 'Neel Khatri',
+    email: 'neelkhatri7780@gmail.com',
     role: 'admin',
-    initials: 'AP'
+    initials: 'NK'
   },
   {
-    id: 'mem-2',
-    user_id: 'usr-2',
-    full_name: 'Bharat Odedara',
-    email: 'bharat.odedara@workspace.io',
+    id: '00000000-0000-0000-0000-000000000002',
+    user_id: '00000000-0000-0000-0000-000000000002',
+    full_name: 'Manali Malani',
+    email: 'manali.malani@actionpulse.io',
     role: 'team_member',
-    initials: 'BO'
+    initials: 'MM'
   },
   {
-    id: 'mem-3',
-    user_id: 'usr-3',
-    full_name: 'Yuvraj Katara',
-    email: 'yuvraj.katara@workspace.io',
+    id: '00000000-0000-0000-0000-000000000003',
+    user_id: '00000000-0000-0000-0000-000000000003',
+    full_name: 'Krishna Parmar',
+    email: 'krishna.parmar@actionpulse.io',
     role: 'meeting_organiser',
-    initials: 'YK'
+    initials: 'KP'
   },
   {
-    id: 'mem-4',
-    user_id: 'usr-4',
-    full_name: 'Madhav Chauhan',
-    email: 'madhav.chauhan@workspace.io',
-    role: 'meeting_organiser',
-    initials: 'MC'
-  },
-  {
-    id: 'mem-5',
-    user_id: 'usr-5',
-    full_name: 'Harshil Patel',
-    email: 'harshil.patel@workspace.io',
+    id: '00000000-0000-0000-0000-000000000004',
+    user_id: '00000000-0000-0000-0000-000000000004',
+    full_name: 'Bhagy Parmar',
+    email: 'bhagy.parmar@actionpulse.io',
     role: 'team_member',
-    initials: 'HP'
+    initials: 'BP'
   }
 ];
 
@@ -523,7 +534,7 @@ export const reviewApi = {
             if (item.review_status === 'approved') status = 'approved';
             else if (item.review_status === 'rejected') status = 'rejected';
 
-            const assignee = members.find(m => m.user_id === item.owner_user_id) || null;
+            const assignee = members.find(m => m.user_id === item.owner_user_id || m.id === item.owner_user_id) || null;
             const dueDate = item.deadline_utc
               ? new Intl.DateTimeFormat('sv-SE', { timeZone: item.deadline_timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(item.deadline_utc))
               : null;
@@ -535,7 +546,7 @@ export const reviewApi = {
               description: item.source_excerpt || item.task || '',
               due_date: dueDate,
               extracted_due_date: dueDate,
-              assignee_id: assignee?.user_id || null,
+              assignee_id: item.owner_user_id || assignee?.user_id || null,
               assignee,
               status,
               confidence_score: item.confidence !== null && item.confidence !== undefined ? Number(item.confidence) : 0.9,
@@ -596,14 +607,40 @@ export const reviewApi = {
 
   /** Review gate: POST /api/meetings/{id}/approve (creates tasks + sends assignment emails). */
   async approveActionItems(meetingId: string, items: ActionItemCandidate[]): Promise<ActionItemCandidate[]> {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured || !isValidUuid(meetingId) || items.some(i => !isValidUuid(i.id))) {
       return Promise.all(items.map(i => this.updateActionItem(i.id, { status: 'approved' })));
     }
+
+    const payloadItems = items.map((i) => {
+      const ownerId = isValidUuid(i.assignee_id) ? i.assignee_id : null;
+      const payloadItem: Record<string, any> = {
+        id: i.id,
+        task: i.title,
+        owner_user_id: ownerId,
+      };
+
+      if (i.due_date !== i.extracted_due_date) {
+        if (i.due_date) {
+          payloadItem.deadline_date = i.due_date;
+          try {
+            const d = new Date(i.due_date.includes('T') ? i.due_date : `${i.due_date}T23:59:59Z`);
+            if (!isNaN(d.getTime())) {
+              payloadItem.deadline_utc = d.toISOString();
+            }
+          } catch {
+            // ignore unparseable date
+          }
+        } else {
+          payloadItem.deadline_date = null;
+          payloadItem.deadline_utc = null;
+        }
+      }
+
+      return payloadItem;
+    });
+
     await postApi(`/api/meetings/${meetingId}/approve`, {
-      items: items.map(i => ({
-        id: i.id, task: i.title, owner_user_id: i.assignee_id ?? null,
-        ...(i.due_date !== i.extracted_due_date ? { deadline_date: i.due_date } : {}),
-      })),
+      items: payloadItems,
     });
     return items.map(i => ({ ...i, status: 'approved' as const }));
   },

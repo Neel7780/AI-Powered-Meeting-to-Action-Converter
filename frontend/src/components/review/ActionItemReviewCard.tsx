@@ -71,7 +71,7 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
   const handleOwnerChange = (memberId: string) => {
     setAssigneeError(false);
     onUpdate(item.id, {
-      assignee_id: memberId === 'unassigned' ? null : memberId
+      assignee_id: memberId === 'unassigned' || !memberId ? null : memberId
     });
   };
 
@@ -250,11 +250,19 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
             }`}
           >
             <option value="unassigned">-- Unassigned --</option>
-            {members.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.full_name} ({m.role.replace('_', ' ')})
+            {item.assignee_id && !members.some(m => (m.user_id || m.id) === item.assignee_id) && (
+              <option value={item.assignee_id}>
+                {item.assignee?.full_name || 'Assigned Member'}
               </option>
-            ))}
+            )}
+            {members.map(m => {
+              const val = m.user_id || m.id;
+              return (
+                <option key={val} value={val}>
+                  {m.full_name} ({m.role.replace('_', ' ')})
+                </option>
+              );
+            })}
           </select>
 
           {isUnassigned && (
