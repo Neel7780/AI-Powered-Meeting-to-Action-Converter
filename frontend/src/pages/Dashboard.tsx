@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
+  BarChart3,
   Building2,
   CalendarPlus,
   ListChecks,
@@ -23,6 +24,7 @@ import { supabase } from "../lib/supabase";
 import CreateMeeting from "../pages/CreateMeeting";
 import ChatPage from "../pages/ChatPage";
 import TeamPage from "../pages/TeamPage";
+import AnalyticsPage from "../pages/AnalyticsPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
 
@@ -57,7 +59,8 @@ export default function Dashboard() {
   const isTasksPage = location.pathname === "/tasks" || location.pathname === "/kanban";
   const isMeetingsPage = location.pathname === "/meetings";
   const isTeamPage = location.pathname === "/team";
-  const isOverview = !isTasksPage && !isMeetingsPage && !isChatPage && !isTeamPage;
+  const isAnalyticsPage = location.pathname === "/analytics";
+  const isOverview = !isTasksPage && !isMeetingsPage && !isChatPage && !isTeamPage && !isAnalyticsPage;
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
@@ -125,6 +128,13 @@ export default function Dashboard() {
       onClick: () => navigate("/chat"),
     },
     {
+      label: "Workspace Analytics",
+      hint: "Bottlenecks, turnaround & scorecard",
+      icon: BarChart3,
+      tint: tints.indigo,
+      onClick: () => navigate("/analytics"),
+    },
+    {
       label: "View tasks",
       hint: "Check your action items",
       icon: SquareKanban,
@@ -183,6 +193,8 @@ export default function Dashboard() {
             </div>
           ) : isTeamPage ? (
             <TeamPage />
+          ) : isAnalyticsPage ? (
+            <AnalyticsPage />
           ) : loading ? (
             <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-neutral-500">
               <LoaderCircle className="size-4 animate-spin" />

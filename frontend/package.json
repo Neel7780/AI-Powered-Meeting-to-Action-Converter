@@ -32,14 +32,12 @@
     "three-globe": "^2.45.5"
   },
   "devDependencies": {
-    "@oxlint/binding-linux-x64-gnu": "^1.86.0",
-    "@rolldown/binding-linux-x64-gnu": "^1.2.11",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.6.1",
-    "lightningcss-linux-x64-gnu": "^1.33.0",
+    "lightningcss-darwin-arm64": "^1.33.0",
     "oxlint": "^1.81.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.19",

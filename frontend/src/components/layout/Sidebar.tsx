@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { CalendarPlus, LayoutDashboard, Sparkles, SquareKanban, Users, X } from "lucide-react";
+import { BarChart3, CalendarPlus, LayoutDashboard, Sparkles, SquareKanban, Users, X } from "lucide-react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { Button } from "../ui/button";
 import Brand from "./Brand";
@@ -12,6 +12,7 @@ const navItems = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
   { label: "Meetings", path: "/meetings", icon: CalendarPlus },
   { label: "Tasks", path: "/tasks", icon: SquareKanban },
+  { label: "Analytics", path: "/analytics", icon: BarChart3 },
   { label: "AI Assistant", path: "/chat", icon: Sparkles },
   { label: "Team", path: "/team", icon: Users },
 ];
