@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api import calendar, chat, extraction, health, meetings, review, workspaces
+from app.api import analytics, calendar, chat, extraction, health, meetings, review, workspaces
 
 api_router = APIRouter()
 
@@ -13,6 +13,9 @@ api_router.include_router(health.router, tags=["Health"])
 api_router.include_router(workspaces.router, prefix="/workspaces", tags=["Workspaces"])
 api_router.include_router(meetings.router, tags=["Meetings"])
 api_router.include_router(review.router, tags=["Review & Approval"])
+
+# Sprint 2 Analytics (Task 7)
+api_router.include_router(analytics.router, prefix="/workspaces", tags=["Workspace Analytics"])
 
 # Calendar integration endpoints
 api_router.include_router(calendar.router, prefix="/calendar", tags=["Calendar"])
