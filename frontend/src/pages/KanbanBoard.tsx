@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useWorkspace } from '@/context/WorkspaceContext';
 import { KanbanColumn } from '@/components/kanban/KanbanColumn';
+import { TaskDependencyModal } from '@/components/kanban/TaskDependencyModal';
+import { WorkflowChainsView } from '@/components/kanban/WorkflowChainsView';
 import type { KanbanTaskItem, TaskStatus } from '@/components/kanban/KanbanCard';
 import {
   Users,
@@ -13,6 +15,10 @@ import {
   Plus,
   CheckCircle2,
   AlertTriangle,
+  GitFork,
+  LayoutGrid,
+  Bot,
+  User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -22,7 +28,7 @@ interface MeetingOption {
   starts_at?: string;
 }
 
-// Fallback seed tasks for zero-configuration demo testing
+// Fallback seed tasks for zero-configuration demo testing & Sprint 2 Dependency Chains
 const DEMO_TASKS: KanbanTaskItem[] = [
   {
     id: 'demo-task-1',
@@ -33,6 +39,8 @@ const DEMO_TASKS: KanbanTaskItem[] = [
     deadline_utc: new Date(Date.now() + 86400000 * 2).toISOString(),
     priority: 'urgent',
     status: 'in_progress',
+    blocked_by: null,
+    execution_type: 'human',
     source_excerpt: 'We need to switch our database connection strings to the transaction pooler on port 6543 before Friday.',
     external_owner_label: null,
     created_at: new Date().toISOString(),
@@ -63,6 +71,8 @@ const DEMO_TASKS: KanbanTaskItem[] = [
     deadline_utc: new Date(Date.now() + 86400000 * 4).toISOString(),
     priority: 'high',
     status: 'done',
+    blocked_by: null,
+    execution_type: 'human',
     source_excerpt: 'The WhatsApp sharing link must be one-tap and generated purely via wa.me to stay in zero-cost free tier.',
     external_owner_label: null,
     created_at: new Date().toISOString(),
@@ -93,6 +103,8 @@ const DEMO_TASKS: KanbanTaskItem[] = [
     deadline_utc: new Date(Date.now() + 86400000 * 1).toISOString(),
     priority: 'normal',
     status: 'todo',
+    blocked_by: null,
+    execution_type: 'human',
     source_excerpt: 'Action items extracted by Gemini must be grounded with a verbatim source quote from the transcript.',
     external_owner_label: null,
     created_at: new Date().toISOString(),
@@ -124,8 +136,63 @@ const DEMO_TASKS: KanbanTaskItem[] = [
     priority: 'high',
     status: 'blocked',
     blocked_by: 'demo-task-1',
+    execution_type: 'agent',
     source_excerpt: 'Email notification service needs to stay well within Brevo 300 emails per day limit.',
-    external_owner_label: 'External SMTP Provider',
+    external_owner_label: 'Automated SMTP Checker',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    meetings: {
+      id: 'mtg-product-review',
+      title: 'Weekly Sprint Review',
+      starts_at: new Date().toISOString(),
+    },
+    task_assignees: [],
+  },
+  {
+    id: 'demo-task-5',
+    workspace_id: 'default-workspace',
+    meeting_id: 'mtg-q3-planning',
+    title: 'Schedule automated daily digest cron job for overdue action items',
+    description: 'Trigger daily digest emails at 09:00 AM UTC once Brevo SMTP limits are verified.',
+    deadline_utc: new Date(Date.now() + 86400000 * 5).toISOString(),
+    priority: 'normal',
+    status: 'blocked',
+    blocked_by: 'demo-task-4',
+    execution_type: 'human',
+    source_excerpt: 'The daily digest email job should run every morning after we confirm SMTP limits.',
+    external_owner_label: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    meetings: {
+      id: 'mtg-q3-planning',
+      title: 'Q3 Infra Architecture Sync',
+      starts_at: new Date().toISOString(),
+    },
+    task_assignees: [
+      {
+        user_id: 'current-user',
+        is_primary: true,
+        profiles: {
+          id: 'current-user',
+          display_name: 'You (Me)',
+          email: 'lead@actionpulse.io',
+        },
+      },
+    ],
+  },
+  {
+    id: 'demo-task-6',
+    workspace_id: 'default-workspace',
+    meeting_id: 'mtg-product-review',
+    title: 'Agent: Research competitor action-item schemas and draft benchmark report',
+    description: 'AI agent will crawl open schemas, summarize extraction formats, and prepare a comparison document.',
+    deadline_utc: new Date(Date.now() + 86400000 * 3).toISOString(),
+    priority: 'high',
+    status: 'blocked',
+    blocked_by: 'demo-task-3',
+    execution_type: 'agent',
+    source_excerpt: 'Let an AI agent research competitor tools and prepare the initial benchmarking report.',
+    external_owner_label: 'ActionPulse AI Agent',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     meetings: {
@@ -153,8 +220,13 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<string>>(new Set());
 
+  // Sprint 2 Feature State: Active View & Dependency Modal
+  const [activeView, setActiveView] = useState<'kanban' | 'chains'>('kanban');
+  const [selectedTaskForDependency, setSelectedTaskForDependency] = useState<KanbanTaskItem | null>(null);
+
   // Filter states
   const [filterType, setFilterType] = useState<'all' | 'assigned'>('all');
+  const [executionFilter, setExecutionFilter] = useState<'all' | 'human' | 'agent'>('all');
   const [selectedMeetingId, setSelectedMeetingId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -166,7 +238,6 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
         if (user) {
           setCurrentUserId(user.id);
         } else {
-          // Fallback to demo user ID so "Assigned to Me" can be previewed
           setCurrentUserId('current-user');
         }
       } catch {
@@ -186,7 +257,6 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     setErrorMsg(null);
 
     try {
-      // Query tasks with meetings & assignees scoped to activeWorkspaceId
       let taskQuery = supabase
         .from('tasks')
         .select(`
@@ -228,7 +298,6 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
 
       const { data: taskData, error: taskError } = await taskQuery;
 
-      // Fetch distinct meetings for the filter dropdown scoped to activeWorkspaceId
       let meetingQuery = supabase
         .from('meetings')
         .select('id, title, starts_at')
@@ -246,24 +315,14 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
 
       if (taskError) {
         console.warn('Supabase tasks fetch warning, using demo dataset:', taskError.message);
-        // If Supabase has no tasks or RLS returned empty/error during development, show demo tasks
         setTasks(DEMO_TASKS);
-        setMeetings([
-          { id: 'mtg-q3-planning', title: 'Q3 Infra Architecture Sync' },
-          { id: 'mtg-product-review', title: 'Weekly Sprint Review' },
-        ]);
       } else if (taskData && taskData.length > 0) {
         setTasks(taskData as unknown as KanbanTaskItem[]);
       } else {
-        // Table is empty in fresh database
         setTasks(DEMO_TASKS);
-        setMeetings([
-          { id: 'mtg-q3-planning', title: 'Q3 Infra Architecture Sync' },
-          { id: 'mtg-product-review', title: 'Weekly Sprint Review' },
-        ]);
       }
     } catch (err: unknown) {
-      console.warn('Error fetching tasks from Supabase:', err);
+      console.warn('Network exception while fetching tasks, using fallback dataset:', err);
       setTasks(DEMO_TASKS);
     } finally {
       setIsLoading(false);
@@ -275,27 +334,25 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     fetchData();
   }, [fetchData]);
 
-  // 3. Supabase Realtime Subscription scoped to activeWorkspaceId
+  // 3. Setup Supabase Realtime subscription
   useEffect(() => {
+    if (!activeWorkspaceId) return;
+
     const channel = supabase
-      .channel(`kanban-tasks-${activeWorkspaceId || 'all'}`)
+      .channel(`realtime:tasks:${activeWorkspaceId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'tasks',
-          ...(activeWorkspaceId ? { filter: `workspace_id=eq.${activeWorkspaceId}` } : {}),
+          filter: `workspace_id=eq.${activeWorkspaceId}`,
         },
         (payload) => {
           if (payload.eventType === 'UPDATE') {
-            const updatedRow = payload.new as { id: string; status: TaskStatus; updated_at?: string };
+            const updatedRow = payload.new as KanbanTaskItem;
             setTasks((prev) =>
-              prev.map((t) =>
-                t.id === updatedRow.id
-                  ? { ...t, status: updatedRow.status, updated_at: updatedRow.updated_at || new Date().toISOString() }
-                  : t
-              )
+              prev.map((t) => (t.id === updatedRow.id ? { ...t, ...updatedRow } : t))
             );
           } else if (payload.eventType === 'INSERT') {
             fetchData(true);
@@ -321,7 +378,16 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
 
     // Optimistic UI update
     setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+      prev.map((t) => {
+        if (t.id === taskId) {
+          return { ...t, status: newStatus };
+        }
+        // If this task is completed ('done'), automatically unblock any downstream tasks!
+        if (newStatus === 'done' && t.blocked_by === taskId && t.status === 'blocked') {
+          return { ...t, status: 'todo' };
+        }
+        return t;
+      })
     );
 
     if (taskId.startsWith('demo-')) return; // sample cards only live in memory
@@ -329,7 +395,8 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     setUpdatingTaskIds((prev) => new Set(prev).add(taskId));
 
     try {
-      // Direct update of status column allowed by RLS for assignees & admins
+      // Column-level security grants UPDATE (status) to authenticated users;
+      // updated_at is handled automatically by the tasks_set_updated_at trigger.
       const { error } = await supabase
         .from('tasks')
         .update({ status: newStatus })
@@ -337,11 +404,17 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
 
       if (error) {
         console.error('Supabase status update error:', error.message);
-        // Rollback on error
         setTasks((prev) =>
           prev.map((t) => (t.id === taskId ? { ...t, status: previousStatus } : t))
         );
         setErrorMsg(`Failed to move task: ${error.message}`);
+      } else if (newStatus === 'done') {
+        // Automatically persist unblocking of downstream dependent tasks
+        await supabase
+          .from('tasks')
+          .update({ status: 'todo' })
+          .eq('blocked_by', taskId)
+          .eq('status', 'blocked');
       }
     } catch (err: unknown) {
       console.warn('Update threw exception, running in local/demo mode:', err);
@@ -354,44 +427,94 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     }
   };
 
-  // 5. Filter & Search Logic
+  // 5. Sprint 2: Handle Task Dependency & Execution Routing Update
+  const handleUpdateDependency = async (
+    taskId: string,
+    blockedById: string | null,
+    executionType?: 'human' | 'agent'
+  ) => {
+    let resolvedNewStatus: TaskStatus | undefined;
+
+    setTasks((prev) => {
+      const prerequisite = blockedById ? prev.find((t) => t.id === blockedById) : null;
+      return prev.map((t) => {
+        if (t.id === taskId) {
+          // If a prerequisite is set that is not 'done', auto-mark this task as 'blocked'
+          let newStatus = t.status;
+          if (blockedById && prerequisite && prerequisite.status !== 'done') {
+            newStatus = 'blocked';
+          } else if (!blockedById && t.status === 'blocked') {
+            newStatus = 'todo';
+          }
+          resolvedNewStatus = newStatus;
+          return {
+            ...t,
+            blocked_by: blockedById,
+            status: newStatus,
+            execution_type: executionType || t.execution_type,
+          };
+        }
+        return t;
+      });
+    });
+
+    if (taskId.startsWith('demo-')) return;
+
+    try {
+      // Update task status if dependency state altered it
+      if (resolvedNewStatus) {
+        await supabase
+          .from('tasks')
+          .update({ status: resolvedNewStatus })
+          .eq('id', taskId);
+      }
+
+      await supabase
+        .from('tasks')
+        .update({ blocked_by: blockedById })
+        .eq('id', taskId);
+    } catch (err) {
+      console.warn('Dependency updated in local/demo mode:', err);
+    }
+  };
+
+  // 6. Filter & Search Logic
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
       // Assignment filter: "All Workspace Tasks" vs "Assigned to Me"
       if (filterType === 'assigned') {
-        const isAssigned = task.task_assignees?.some(
-          (a) => a.user_id === currentUserId
-        );
+        const isAssigned = task.task_assignees?.some((a) => a.user_id === currentUserId);
         if (!isAssigned) return false;
       }
 
+      // Execution type filter
+      if (executionFilter === 'agent' && task.execution_type !== 'agent') return false;
+      if (executionFilter === 'human' && task.execution_type === 'agent') return false;
+
       // Meeting filter
-      if (selectedMeetingId !== 'all' && task.meeting_id !== selectedMeetingId) {
-        return false;
+      if (selectedMeetingId !== 'all') {
+        if (task.meeting_id !== selectedMeetingId) return false;
       }
 
-      // Keyword Search
+      // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = task.title.toLowerCase().includes(q);
-        const matchesDesc = task.description?.toLowerCase().includes(q) ?? false;
-        const matchesExcerpt = task.source_excerpt.toLowerCase().includes(q);
-        if (!matchesTitle && !matchesDesc && !matchesExcerpt) {
-          return false;
-        }
+        const matchesDesc = task.description?.toLowerCase().includes(q) || false;
+        const matchesQuote = task.source_excerpt.toLowerCase().includes(q);
+        if (!matchesTitle && !matchesDesc && !matchesQuote) return false;
       }
 
       return true;
     });
-  }, [tasks, filterType, currentUserId, selectedMeetingId, searchQuery]);
+  }, [tasks, filterType, executionFilter, currentUserId, selectedMeetingId, searchQuery]);
 
-  // Tasks partitioned into the 4 kanban columns
+  // 7. Group into Kanban columns
   const todoTasks = useMemo(() => filteredTasks.filter((t) => t.status === 'todo'), [filteredTasks]);
   const inProgressTasks = useMemo(() => filteredTasks.filter((t) => t.status === 'in_progress'), [filteredTasks]);
   const blockedTasks = useMemo(() => filteredTasks.filter((t) => t.status === 'blocked'), [filteredTasks]);
   const doneTasks = useMemo(() => filteredTasks.filter((t) => t.status === 'done'), [filteredTasks]);
 
-  // Metrics summary
   const totalCount = filteredTasks.length;
   const doneCount = doneTasks.length;
   const blockedCount = blockedTasks.length;
@@ -404,15 +527,15 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
 
   return (
     <div className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
-      {/* Page header */}
+      {/* Page header with View Switcher (Kanban Board vs Workflow Chains) */}
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Task board</p>
+          <p className="eyebrow">Task Management & Orchestration</p>
           <h1 className="mt-2 flex flex-wrap items-center gap-3 text-3xl font-medium tracking-tight text-white">
-            Tasks
+            Tasks & Workflow Chains
             {isDemo ? (
               <span className="rounded border border-white/15 bg-white/5 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-neutral-400">
-                Sample data / not saved
+                Sample dataset / active demo
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-emerald-400">
@@ -421,10 +544,45 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
               </span>
             )}
           </h1>
-          <p className="mt-2 text-sm text-neutral-400">Approved action items from your workspace meetings.</p>
+          <p className="mt-2 text-sm text-neutral-400">
+            Approved action items, multi-step dependencies, and AI agent execution routing.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Sprint 2 View Switcher Tabs: Kanban vs Workflow Chains */}
+          <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.04] p-1">
+            <button
+              type="button"
+              onClick={() => setActiveView('kanban')}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                activeView === 'kanban'
+                  ? 'bg-white text-black shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="size-3.5" />
+              <span>Kanban Board</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveView('chains')}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                activeView === 'chains'
+                  ? 'bg-white text-black shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <GitFork className="size-3.5 text-indigo-400" />
+              <span>Workflow Chains</span>
+              {blockedCount > 0 && (
+                <span className="ml-1 rounded-full bg-red-500/20 px-1.5 py-0.2 text-[10px] text-red-400 font-mono">
+                  {blockedCount}
+                </span>
+              )}
+            </button>
+          </div>
+
           <Button
             variant="ghost"
             size="sm"
@@ -457,7 +615,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
               className={segmentClass(filterType === 'all')}
             >
               <Users className="size-3.5" />
-              All workspace tasks
+              All tasks
             </button>
             <button
               type="button"
@@ -470,7 +628,36 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             </button>
           </div>
 
-          {/* Filter 2: Filter by Meeting */}
+          {/* Filter 2: Execution Mode (Human vs Agent) */}
+          <div className="inline-flex rounded-md border border-white/10 bg-white/[0.02] p-0.5">
+            <button
+              type="button"
+              onClick={() => setExecutionFilter('all')}
+              className={segmentClass(executionFilter === 'all')}
+            >
+              All types
+            </button>
+            <button
+              type="button"
+              onClick={() => setExecutionFilter('human')}
+              className={segmentClass(executionFilter === 'human')}
+              title="Tasks assigned to human team members"
+            >
+              <User className="size-3 text-slate-400" />
+              Human
+            </button>
+            <button
+              type="button"
+              onClick={() => setExecutionFilter('agent')}
+              className={segmentClass(executionFilter === 'agent')}
+              title="Automated tasks executed by AI Agents"
+            >
+              <Bot className="size-3 text-purple-400" />
+              Agent
+            </button>
+          </div>
+
+          {/* Filter 3: Filter by Meeting */}
           <div className="relative">
             <Calendar className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
             <select
@@ -494,15 +681,15 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             <input
               type="text"
               aria-label="Search tasks"
-              placeholder="Search tasks or quotes..."
+              placeholder="Search tasks, chains, or quotes..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="field h-8 w-44 py-0 pl-8 text-xs sm:w-60"
+              className="field h-8 w-44 py-0 pl-8 text-xs sm:w-56"
             />
           </div>
         </div>
 
-        {/* Summary */}
+        {/* Summary Counter */}
         <div className="flex items-center gap-3 font-mono text-[11px] uppercase tracking-wider text-neutral-500">
           <span>
             Total <span className="text-white">{totalCount}</span>
@@ -538,7 +725,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
         </div>
       )}
 
-      {/* Main Kanban Board Layout: 4 Columns */}
+      {/* Main Content Area */}
       {isLoading ? (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
@@ -552,49 +739,71 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             </div>
           ))}
         </div>
+      ) : activeView === 'chains' ? (
+        /* Sprint 2 View: Interactive Workflow Chains & Dependency Graph */
+        <WorkflowChainsView
+          tasks={tasks}
+          onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
+          onStatusChange={handleStatusChange}
+        />
       ) : (
+        /* Sprint 1 View: 4-Column Kanban Board */
         <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-2 lg:grid-cols-4">
-          {/* Column 1: To Do */}
           <KanbanColumn
             status="todo"
             title="To Do"
             tasks={todoTasks}
+            allTasks={tasks}
             onStatusChange={handleStatusChange}
             onDropTask={handleStatusChange}
+            onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
             updatingTaskIds={updatingTaskIds}
           />
 
-          {/* Column 2: In Progress */}
           <KanbanColumn
             status="in_progress"
             title="In Progress"
             tasks={inProgressTasks}
+            allTasks={tasks}
             onStatusChange={handleStatusChange}
             onDropTask={handleStatusChange}
+            onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
             updatingTaskIds={updatingTaskIds}
           />
 
-          {/* Column 3: Blocked */}
           <KanbanColumn
             status="blocked"
             title="Blocked"
             tasks={blockedTasks}
+            allTasks={tasks}
             onStatusChange={handleStatusChange}
             onDropTask={handleStatusChange}
+            onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
             updatingTaskIds={updatingTaskIds}
           />
 
-          {/* Column 4: Done */}
           <KanbanColumn
             status="done"
             title="Done"
             tasks={doneTasks}
+            allTasks={tasks}
             onStatusChange={handleStatusChange}
             onDropTask={handleStatusChange}
+            onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
             updatingTaskIds={updatingTaskIds}
           />
         </div>
       )}
+
+      {/* Task Dependency & Workflow Chain Modal */}
+      <TaskDependencyModal
+        isOpen={Boolean(selectedTaskForDependency)}
+        onClose={() => setSelectedTaskForDependency(null)}
+        task={selectedTaskForDependency}
+        allTasks={tasks}
+        onUpdateDependency={handleUpdateDependency}
+        onStatusChange={handleStatusChange}
+      />
     </div>
   );
 }
