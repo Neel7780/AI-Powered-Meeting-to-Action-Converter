@@ -5,6 +5,7 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { KanbanColumn } from '@/components/kanban/KanbanColumn';
 import { TaskDependencyModal } from '@/components/kanban/TaskDependencyModal';
 import { WorkflowChainsView } from '@/components/kanban/WorkflowChainsView';
+import { reviewApi } from '@/services/reviewApi';
 import type { KanbanTaskItem, TaskStatus } from '@/components/kanban/KanbanCard';
 import {
   Users,
@@ -433,8 +434,6 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     blockedById: string | null,
     executionType?: 'human' | 'agent'
   ) => {
-    let resolvedNewStatus: TaskStatus | undefined;
-
     setTasks((prev) => {
       const prerequisite = blockedById ? prev.find((t) => t.id === blockedById) : null;
       return prev.map((t) => {
@@ -446,7 +445,6 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           } else if (!blockedById && t.status === 'blocked') {
             newStatus = 'todo';
           }
-          resolvedNewStatus = newStatus;
           return {
             ...t,
             blocked_by: blockedById,
@@ -461,20 +459,19 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     if (taskId.startsWith('demo-')) return;
 
     try {
-      // Update task status if dependency state altered it
-      if (resolvedNewStatus) {
-        await supabase
-          .from('tasks')
-          .update({ status: resolvedNewStatus })
-          .eq('id', taskId);
+      if (activeWorkspaceId) {
+        await reviewApi.updateTaskDependency(
+          activeWorkspaceId,
+          taskId,
+          blockedById,
+          executionType
+        );
       }
-
-      await supabase
-        .from('tasks')
-        .update({ blocked_by: blockedById })
-        .eq('id', taskId);
-    } catch (err) {
-      console.warn('Dependency updated in local/demo mode:', err);
+    } catch (err: any) {
+      console.warn('Backend dependency update warning, falling back to local state:', err);
+      if (err?.message) {
+        setErrorMsg(`Failed to update dependency: ${err.message}`);
+      }
     }
   };
 
@@ -740,9 +737,9 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           ))}
         </div>
       ) : activeView === 'chains' ? (
-        /* Sprint 2 View: Interactive Workflow Chains & Dependency Graph */
+        /* Sprint 2 View: Interactive Workflow Chains & Dependency Graph (Meeting-Aware) */
         <WorkflowChainsView
-          tasks={tasks}
+          tasks={filteredTasks}
           onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
           onStatusChange={handleStatusChange}
         />

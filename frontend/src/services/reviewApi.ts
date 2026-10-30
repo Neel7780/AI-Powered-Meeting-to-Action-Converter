@@ -45,6 +45,34 @@ export async function postApi(path: string, body: unknown): Promise<any> {
   return data;
 }
 
+export async function patchApi(path: string, body: unknown): Promise<any> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(getApiUrl(path), {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  let detailMsg = `HTTP ${res.status}`;
+  if (typeof data.detail === 'string') {
+    detailMsg = data.detail;
+  } else if (Array.isArray(data.detail)) {
+    detailMsg = data.detail
+      .map((d: any) => {
+        const field = Array.isArray(d.loc) ? d.loc.filter((x: any) => x !== 'body').join('.') : '';
+        return field ? `${field}: ${d.msg}` : d.msg;
+      })
+      .join('; ');
+  } else if (typeof data.message === 'string') {
+    detailMsg = data.message;
+  }
+  if (!res.ok) throw new Error(detailMsg);
+  return data;
+}
+
 export const INITIAL_MEMBERS: WorkspaceMember[] = [
   {
     id: '00000000-0000-0000-0000-000000000001',
@@ -539,6 +567,11 @@ export const reviewApi = {
               ? new Intl.DateTimeFormat('sv-SE', { timeZone: item.deadline_timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(item.deadline_utc))
               : null;
 
+            let blockedById: string | null = null;
+            if (typeof item.rejection_reason === 'string' && item.rejection_reason.startsWith('depends_on:')) {
+              blockedById = item.rejection_reason.split('depends_on:')[1]?.trim() || null;
+            }
+
             return {
               id: item.id,
               meeting_id: item.meeting_id,
@@ -548,6 +581,7 @@ export const reviewApi = {
               extracted_due_date: dueDate,
               assignee_id: item.owner_user_id || assignee?.user_id || null,
               assignee,
+              blocked_by_id: blockedById,
               status,
               confidence_score: item.confidence !== null && item.confidence !== undefined ? Number(item.confidence) : 0.9,
               transcript_timestamp: timestamp,
@@ -619,6 +653,13 @@ export const reviewApi = {
         owner_user_id: ownerId,
       };
 
+      if (isValidUuid(i.blocked_by_id)) {
+        payloadItem.blocked_by_id = i.blocked_by_id;
+      }
+      if (i.execution_type) {
+        payloadItem.execution_type = i.execution_type;
+      }
+
       if (i.due_date !== i.extracted_due_date) {
         if (i.due_date) {
           payloadItem.deadline_date = i.due_date;
@@ -649,6 +690,21 @@ export const reviewApi = {
     if (!isSupabaseConfigured) return this.updateActionItem(item.id, { status: 'rejected' });
     await postApi(`/api/meetings/${meetingId}/reject`, { item_ids: [item.id] });
     return { ...item, status: 'rejected' };
+  },
+
+  async updateTaskDependency(
+    workspaceId: string,
+    taskId: string,
+    blockedById: string | null,
+    executionType?: 'human' | 'agent'
+  ): Promise<any> {
+    if (!isSupabaseConfigured || !isValidUuid(workspaceId) || !isValidUuid(taskId)) {
+      return { id: taskId, blocked_by: blockedById, status: blockedById ? 'blocked' : 'todo' };
+    }
+    return patchApi(`/api/workspaces/${workspaceId}/tasks/${taskId}/dependency`, {
+      blocked_by: isValidUuid(blockedById) ? blockedById : null,
+      execution_type: executionType || null,
+    });
   },
 
   async revertActionItem(itemId: string): Promise<ActionItemCandidate> {

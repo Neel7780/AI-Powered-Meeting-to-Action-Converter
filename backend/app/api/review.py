@@ -114,6 +114,7 @@ def approve_items(
 
     now_utc_str = datetime.now(UTC).isoformat()
     new_task_ids: list[UUID] = []
+    candidate_to_task: dict[str, UUID] = {}
 
     # 4. Process each item in order
     for item_update in payload.items:
@@ -165,6 +166,20 @@ def approve_items(
             deadline_val = (
                 final_deadline.isoformat() if isinstance(final_deadline, datetime) else final_deadline
             )
+
+            # Resolve prerequisite task dependency (Task Chains / Sprint 2)
+            blocked_by_id = None
+            raw_blocked = dumped.get("blocked_by_id")
+            if not raw_blocked and (db_item.get("rejection_reason") or "").startswith("depends_on:"):
+                raw_blocked = db_item.get("rejection_reason").split(":", 1)[1]
+
+            if raw_blocked:
+                raw_str = str(raw_blocked)
+                if raw_str in candidate_to_task:
+                    blocked_by_id = str(candidate_to_task[raw_str])
+                else:
+                    blocked_by_id = raw_str
+
             task_insert = {
                 "workspace_id": str(workspace_id),
                 "meeting_id": str(meeting_id),
@@ -172,10 +187,14 @@ def approve_items(
                 "title": (final_task or db_item.get("task") or "Untitled Action")[:500],
                 "deadline_utc": deadline_val,
                 "priority": final_priority,
-                "status": "todo",
+                "status": "blocked" if blocked_by_id else "todo",
+                "blocked_by": blocked_by_id,
                 "source_excerpt": db_item["source_excerpt"],  # Must match verbatim per validate_task_source trigger
                 "created_by": str(user.id),
-                "external_owner_label": db_item.get("owner_name") if not final_owner else None,
+                "external_owner_label": (
+                    "AI Agent" if dumped.get("execution_type") == "agent" and not final_owner
+                    else (db_item.get("owner_name") if not final_owner else None)
+                ),
             }
 
             try:
@@ -185,6 +204,7 @@ def approve_items(
                 task_record = t_resp.data[0]
                 task_id = UUID(str(task_record["id"]))
                 new_task_ids.append(task_id)
+                candidate_to_task[str_id] = task_id
             except Exception as exc:
                 err_str = str(exc).lower()
                 if "unique" in err_str or "conflict" in err_str or "extracted_item_id" in err_str:

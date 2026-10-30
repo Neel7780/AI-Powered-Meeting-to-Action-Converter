@@ -9,17 +9,18 @@ from pydantic import BaseModel
 
 class LLMItem(BaseModel):
     type: Literal["action", "decision", "information"]
-    task: str | None
-    owner_name: str | None  # the name as it appears in the transcript
-    owner_ref: str | None  # "M2" from the roster, or null
-    owner_confidence: float | None
-    deadline_raw: str | None  # "by Friday"
-    deadline_date: str | None  # "YYYY-MM-DD"
-    deadline_time: str | None  # "HH:MM" (24 h), usually null
-    deadline_confidence: float | None
-    priority: Literal["low", "normal", "high", "urgent"]
+    task: str | None = None
+    owner_name: str | None = None  # the name as it appears in the transcript
+    owner_ref: str | None = None  # "M2" from the roster, or null
+    owner_confidence: float | None = None
+    deadline_raw: str | None = None  # "by Friday"
+    deadline_date: str | None = None  # "YYYY-MM-DD"
+    deadline_time: str | None = None  # "HH:MM" (24 h), usually null
+    deadline_confidence: float | None = None
+    priority: Literal["low", "normal", "high", "urgent"] = "normal"
     source_excerpt: str
     confidence: float
+    depends_on_task_index: int | None = None  # 0-based index of earlier item in items list this item depends on
 
 
 class LLMExtraction(BaseModel):
@@ -38,6 +39,7 @@ Rules:
   members match, set owner_ref to null and put the name you saw in owner_name.
 - deadline_raw: the original phrase ("by Friday"). deadline_date: YYYY-MM-DD only if the transcript
   supports it, resolved from the meeting date in the meeting timezone; otherwise null.
+- depends_on_task_index: if an action item explicitly depends on or must happen after another preceding action item from this meeting (e.g. 'after X is done', 'once Y is ready, then do Z'), set this to the 0-based index of that preceding action item in the items list; otherwise null. It must only point to an earlier item (lower index) to prevent cycles.
 - Use null for anything not stated. Give a confidence from 0 to 1 for the item, the owner and the deadline."""
 
 HUMAN_PROMPT = """Meeting title: {title}

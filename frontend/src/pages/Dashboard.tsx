@@ -21,10 +21,10 @@ import FloatingChatWidget from "../components/chat/FloatingChatWidget";
 import { Button } from "../components/ui/button";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { supabase } from "../lib/supabase";
-import CreateMeeting from "../pages/CreateMeeting";
 import ChatPage from "../pages/ChatPage";
 import TeamPage from "../pages/TeamPage";
 import AnalyticsPage from "../pages/AnalyticsPage";
+import MeetingsPage from "../pages/MeetingsPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
 
@@ -188,9 +188,7 @@ export default function Dashboard() {
           ) : isTasksPage ? (
             <KanbanBoard workspaceId={currentWorkspace?.id} />
           ) : isMeetingsPage ? (
-            <div className="p-4 sm:p-6 lg:p-8">
-              <CreateMeeting />
-            </div>
+            <MeetingsPage />
           ) : isTeamPage ? (
             <TeamPage />
           ) : isAnalyticsPage ? (

@@ -43,7 +43,7 @@ def validate_items(
     transcript = normalise(canonical_text)
     rows: list[dict] = []
 
-    for item in items:
+    for i, item in enumerate(items):
         excerpt = item.source_excerpt.strip()
         task = (item.task or "").strip() or None
         if not excerpt or (item.type == "action" and not task):
@@ -86,6 +86,17 @@ def validate_items(
                 or deadline < meeting_starts_at
             )
 
+        # Validate task sequential dependencies
+        depends_on_idx: int | None = None
+        if (
+            item.type == "action"
+            and item.depends_on_task_index is not None
+            and isinstance(item.depends_on_task_index, int)
+            and 0 <= item.depends_on_task_index < i
+            and items[item.depends_on_task_index].type == "action"
+        ):
+            depends_on_idx = item.depends_on_task_index
+
         rows.append({
             "type": item.type,
             "task": task,
@@ -102,6 +113,7 @@ def validate_items(
             "source_end_ms": seg["end_ms"] if seg else None,
             "confidence": confidence,
             "uncertainty_flag": flagged,
+            "depends_on_index": depends_on_idx,
         })
 
     return rows

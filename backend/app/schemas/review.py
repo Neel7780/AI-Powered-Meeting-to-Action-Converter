@@ -18,6 +18,12 @@ class ApproveItemUpdate(BaseModel):
     priority: Literal["low", "normal", "high", "urgent"] | None = Field(
         default=None, description="Task priority (low, normal, high, urgent)"
     )
+    blocked_by_id: UUID | None = Field(
+        default=None, description="Prerequisite candidate item UUID or existing task UUID"
+    )
+    execution_type: Literal["human", "agent"] | None = Field(
+        default=None, description="Execution routing: human team member or automated AI agent"
+    )
 
 
 class ApproveRequest(BaseModel):
