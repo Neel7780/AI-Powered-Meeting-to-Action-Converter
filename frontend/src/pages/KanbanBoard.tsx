@@ -395,9 +395,11 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     setUpdatingTaskIds((prev) => new Set(prev).add(taskId));
 
     try {
+      // Column-level security grants UPDATE (status) to authenticated users;
+      // updated_at is handled automatically by the tasks_set_updated_at trigger.
       const { error } = await supabase
         .from('tasks')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .update({ status: newStatus })
         .eq('id', taskId);
 
       if (error) {
@@ -406,6 +408,13 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           prev.map((t) => (t.id === taskId ? { ...t, status: previousStatus } : t))
         );
         setErrorMsg(`Failed to move task: ${error.message}`);
+      } else if (newStatus === 'done') {
+        // Automatically persist unblocking of downstream dependent tasks
+        await supabase
+          .from('tasks')
+          .update({ status: 'todo' })
+          .eq('blocked_by', taskId)
+          .eq('status', 'blocked');
       }
     } catch (err: unknown) {
       console.warn('Update threw exception, running in local/demo mode:', err);
@@ -424,6 +433,8 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     blockedById: string | null,
     executionType?: 'human' | 'agent'
   ) => {
+    let resolvedNewStatus: TaskStatus | undefined;
+
     setTasks((prev) => {
       const prerequisite = blockedById ? prev.find((t) => t.id === blockedById) : null;
       return prev.map((t) => {
@@ -435,6 +446,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           } else if (!blockedById && t.status === 'blocked') {
             newStatus = 'todo';
           }
+          resolvedNewStatus = newStatus;
           return {
             ...t,
             blocked_by: blockedById,
@@ -449,12 +461,17 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     if (taskId.startsWith('demo-')) return;
 
     try {
+      // Update task status if dependency state altered it
+      if (resolvedNewStatus) {
+        await supabase
+          .from('tasks')
+          .update({ status: resolvedNewStatus })
+          .eq('id', taskId);
+      }
+
       await supabase
         .from('tasks')
-        .update({
-          blocked_by: blockedById,
-          updated_at: new Date().toISOString(),
-        })
+        .update({ blocked_by: blockedById })
         .eq('id', taskId);
     } catch (err) {
       console.warn('Dependency updated in local/demo mode:', err);
