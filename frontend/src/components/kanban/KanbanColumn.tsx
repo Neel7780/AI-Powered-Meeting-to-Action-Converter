@@ -6,8 +6,10 @@ export interface KanbanColumnProps {
   status: TaskStatus;
   title: string;
   tasks: KanbanTaskItem[];
+  allTasks?: KanbanTaskItem[];
   onStatusChange: (taskId: string, newStatus: TaskStatus) => Promise<void> | void;
   onDropTask: (taskId: string, targetStatus: TaskStatus) => Promise<void> | void;
+  onOpenDependencyModal?: (task: KanbanTaskItem) => void;
   updatingTaskIds?: Set<string>;
 }
 
@@ -50,8 +52,10 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   status,
   title,
   tasks,
+  allTasks = [],
   onStatusChange,
   onDropTask,
+  onOpenDependencyModal,
   updatingTaskIds = new Set(),
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
@@ -113,7 +117,9 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
           <KanbanCard
             key={task.id}
             task={task}
+            allTasks={allTasks}
             onStatusChange={onStatusChange}
+            onOpenDependencyModal={onOpenDependencyModal}
             isUpdating={updatingTaskIds.has(task.id)}
           />
         ))}
