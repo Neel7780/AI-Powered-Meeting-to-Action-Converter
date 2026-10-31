@@ -10,6 +10,8 @@ import {
   LoaderCircle,
   Video,
   ListTodo,
+  Sparkles,
+  CheckCircle2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -32,6 +34,22 @@ interface MeetingItem {
   created_at: string;
 }
 
+interface ExtractedActionCandidate {
+  id: string;
+  meeting_id: string;
+  type: string;
+  task: string;
+  owner_name?: string | null;
+  owner_user_id?: string | null;
+  deadline_raw?: string | null;
+  deadline_utc?: string | null;
+  priority: string;
+  source_excerpt: string;
+  review_status: string;
+  rejection_reason?: string | null;
+  created_at: string;
+}
+
 export default function MeetingsPage() {
   const { currentWorkspace, currentRole } = useWorkspace();
   const workspaceId = currentWorkspace?.id;
@@ -42,18 +60,20 @@ export default function MeetingsPage() {
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [allTasks, setAllTasks] = useState<KanbanTaskItem[]>([]);
+  const [candidateItems, setCandidateItems] = useState<ExtractedActionCandidate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [approving, setApproving] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTaskForDependency, setSelectedTaskForDependency] = useState<KanbanTaskItem | null>(null);
   const [activeTab, setActiveTab] = useState<'workflows' | 'automation'>('workflows');
 
-  // 1. Fetch meetings and tasks for the active workspace
+  // 1. Fetch meetings, confirmed tasks, and candidate items dynamically from Supabase
   const loadWorkspaceMeetingData = useCallback(async () => {
     if (!workspaceId) return;
     setLoading(true);
 
     try {
-      const [meetingsRes, tasksRes] = await Promise.all([
+      const [meetingsRes, tasksRes, candidatesRes] = await Promise.all([
         supabase
           .from('meetings')
           .select('id, title, starts_at, timezone, status, organiser_id, conference_url, created_at')
@@ -94,20 +114,32 @@ export default function MeetingsPage() {
           `)
           .eq('workspace_id', workspaceId)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('extracted_items')
+          .select('id, meeting_id, type, task, owner_name, owner_user_id, deadline_raw, deadline_utc, priority, source_excerpt, review_status, rejection_reason, created_at')
+          .eq('type', 'action')
+          .order('created_at', { ascending: true }),
       ]);
 
       const meetingList = (meetingsRes.data || []) as MeetingItem[];
       setMeetings(meetingList);
 
-      const taskList = (tasksRes.data || []) as unknown as KanbanTaskItem[];
+      const rawTasks = (tasksRes.data || []) as any[];
+      const taskList: KanbanTaskItem[] = rawTasks.map((t) => ({
+        ...t,
+        execution_type: t.execution_type || (t.external_owner_label === 'AI Agent' ? 'agent' : 'human'),
+      }));
       setAllTasks(taskList);
+
+      const candidateList = (candidatesRes.data || []) as ExtractedActionCandidate[];
+      setCandidateItems(candidateList);
 
       // Default select the most recent meeting if none selected
       if (meetingList.length > 0 && !selectedMeetingId) {
         setSelectedMeetingId(meetingList[0].id);
       }
     } catch (err) {
-      console.error('Failed to load meetings data:', err);
+      console.error('Failed to load meetings data from Supabase:', err);
     } finally {
       setLoading(false);
     }
@@ -127,6 +159,84 @@ export default function MeetingsPage() {
     if (!selectedMeetingId) return [];
     return allTasks.filter((t) => t.meeting_id === selectedMeetingId);
   }, [allTasks, selectedMeetingId]);
+
+  // Candidate items extracted from the selected meeting's transcript (if not yet approved into tasks)
+  const candidateWorkflowTasks = useMemo(() => {
+    if (!selectedMeetingId) return [];
+    const cands = candidateItems.filter((c) => c.meeting_id === selectedMeetingId && c.review_status !== 'rejected');
+    return cands.map((c) => {
+      let blockedById: string | null = null;
+      if (c.rejection_reason && c.rejection_reason.startsWith('depends_on:')) {
+        blockedById = c.rejection_reason.split('depends_on:')[1]?.trim() || null;
+      }
+      return {
+        id: c.id,
+        workspace_id: workspaceId || '',
+        meeting_id: c.meeting_id,
+        title: c.task || c.source_excerpt || 'Action Item',
+        description: c.source_excerpt || '',
+        deadline_utc: c.deadline_utc || null,
+        priority: (c.priority as any) || 'normal',
+        status: (blockedById ? 'blocked' : 'todo') as TaskStatus,
+        blocked_by: blockedById,
+        execution_type: 'human' as const,
+        source_excerpt: c.source_excerpt || '',
+        external_owner_label: c.owner_name || null,
+        created_at: c.created_at,
+        updated_at: c.created_at,
+        meetings: activeMeeting ? { id: activeMeeting.id, title: activeMeeting.title, starts_at: activeMeeting.starts_at } : undefined,
+        task_assignees: c.owner_user_id
+          ? [
+              {
+                user_id: c.owner_user_id,
+                is_primary: true,
+                profiles: {
+                  id: c.owner_user_id,
+                  display_name: c.owner_name || 'Assigned Member',
+                  email: '',
+                },
+              },
+            ]
+          : [],
+      } as KanbanTaskItem;
+    });
+  }, [candidateItems, selectedMeetingId, workspaceId, activeMeeting]);
+
+  // 1-Click Approve all candidate chains for this meeting
+  const handleApproveAllCandidates = async () => {
+    if (!selectedMeetingId) return;
+    const cands = candidateItems.filter(
+      (c) => c.meeting_id === selectedMeetingId && c.review_status === 'needs_review'
+    );
+    if (cands.length === 0) return;
+    setApproving(true);
+    try {
+      const itemsToApprove = cands.map((c) => ({
+        id: c.id,
+        meeting_id: c.meeting_id,
+        title: c.task,
+        description: c.source_excerpt,
+        due_date: c.deadline_utc,
+        extracted_due_date: c.deadline_utc,
+        assignee_id: c.owner_user_id || null,
+        assignee: null,
+        blocked_by_id: c.rejection_reason?.startsWith('depends_on:')
+          ? c.rejection_reason.split('depends_on:')[1]?.trim() || null
+          : null,
+        status: 'pending' as const,
+        confidence_score: 0.95,
+        transcript_timestamp: '00:00',
+        created_at: c.created_at,
+        updated_at: c.created_at,
+      }));
+      await reviewApi.approveActionItems(selectedMeetingId, itemsToApprove as any);
+      await loadWorkspaceMeetingData();
+    } catch (err) {
+      console.error('Failed to approve workflow items:', err);
+    } finally {
+      setApproving(false);
+    }
+  };
 
   // Task status transition handler
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
@@ -418,32 +528,17 @@ export default function MeetingsPage() {
                 </div>
 
                 {/* Workflow Chains View for this specific meeting */}
-                {meetingTasks.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-10 text-center space-y-3">
-                    <GitFork className="mx-auto size-8 text-neutral-600" />
-                    <h3 className="text-sm font-semibold text-white">No tasks created yet for this meeting</h3>
-                    <p className="text-xs text-neutral-400 max-w-md mx-auto">
-                      AI has parsed candidate items, but they need to be approved in the Staging Gate before appearing as active workflow tasks.
-                    </p>
-                    <Button
-                      size="sm"
-                      onClick={() => navigate(`/meetings/${activeMeeting.id}/review`)}
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white"
-                    >
-                      Open Meeting Review Gate
-                    </Button>
-                  </div>
-                ) : (
+                {meetingTasks.length > 0 ? (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between px-1">
                       <div className="flex items-center gap-2">
                         <GitFork className="size-4 text-indigo-400" />
                         <h3 className="text-sm font-semibold text-white">
-                          Dependency Chains & Execution Sequences
+                          Confirmed Task Chains & Execution Sequences
                         </h3>
                       </div>
                       <span className="text-xs text-neutral-400">
-                        Step-by-step downstream task progression
+                        Live board tasks synced with Supabase
                       </span>
                     </div>
 
@@ -452,6 +547,60 @@ export default function MeetingsPage() {
                       onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
                       onStatusChange={handleStatusChange}
                     />
+                  </div>
+                ) : candidateWorkflowTasks.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex size-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400">
+                          <Sparkles className="size-4" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-semibold text-white flex items-center gap-1.5">
+                            AI-Parsed Action Sequences
+                            <span className="rounded-full bg-indigo-500/20 border border-indigo-500/30 px-2 py-0.5 text-[10px] text-indigo-300 font-mono">
+                              Staging Review Stage
+                            </span>
+                          </h4>
+                          <p className="text-[11px] text-neutral-300 mt-0.5">
+                            Gemini extracted these sequential dependency chains directly from the meeting transcript.
+                          </p>
+                        </div>
+                      </div>
+
+                      {isOrganiserOrAdmin && (
+                        <Button
+                          size="sm"
+                          disabled={approving}
+                          onClick={handleApproveAllCandidates}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 text-xs h-8"
+                        >
+                          <CheckCircle2 className="size-3.5 mr-1.5" />
+                          {approving ? 'Approving…' : 'Approve & Publish to Kanban'}
+                        </Button>
+                      )}
+                    </div>
+
+                    <WorkflowChainsView
+                      tasks={candidateWorkflowTasks}
+                      onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
+                      onStatusChange={handleStatusChange}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-10 text-center space-y-3">
+                    <GitFork className="mx-auto size-8 text-neutral-600" />
+                    <h3 className="text-sm font-semibold text-white">No tasks or transcripts recorded for this meeting yet</h3>
+                    <p className="text-xs text-neutral-400 max-w-md mx-auto">
+                      Upload or paste a meeting transcript in the Review Gate to automatically extract grounded action items and sequential dependencies.
+                    </p>
+                    <Button
+                      size="sm"
+                      onClick={() => navigate(`/meetings/${activeMeeting.id}/review`)}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                    >
+                      Open Meeting Review Gate & Upload
+                    </Button>
                   </div>
                 )}
               </>

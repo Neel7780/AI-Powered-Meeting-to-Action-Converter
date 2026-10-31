@@ -307,9 +307,13 @@ def simulate_online_meeting(
     extracted_items_count = 0
     if payload.auto_extract:
         # Realistic grounded action items with source excerpts from the automated transcript
+        task_1_id = str(uuid4())
+        task_2_id = str(uuid4())
+        task_3_id = str(uuid4())
+
         demo_extracted_items = [
             {
-                "id": str(uuid4()),
+                "id": task_1_id,
                 "meeting_id": str(meeting_id),
                 "type": "action",
                 "task": f"Finalize online meeting webhook receiver endpoints ({payload.provider.value})",
@@ -322,12 +326,13 @@ def simulate_online_meeting(
                 "confidence": 0.95,
                 "uncertainty_flag": False,
                 "review_status": "needs_review",
+                "rejection_reason": None,
                 "provider": payload.provider.value,
                 "model_version": "gemini-3.1-flash-lite",
                 "created_at": now.isoformat(),
             },
             {
-                "id": str(uuid4()),
+                "id": task_2_id,
                 "meeting_id": str(meeting_id),
                 "type": "action",
                 "task": "Prepare UI status indicators and dark theme integration",
@@ -340,12 +345,13 @@ def simulate_online_meeting(
                 "confidence": 0.91,
                 "uncertainty_flag": False,
                 "review_status": "needs_review",
+                "rejection_reason": f"depends_on:{task_1_id}",
                 "provider": payload.provider.value,
                 "model_version": "gemini-3.1-flash-lite",
                 "created_at": now.isoformat(),
             },
             {
-                "id": str(uuid4()),
+                "id": task_3_id,
                 "meeting_id": str(meeting_id),
                 "type": "decision",
                 "task": "ActionPulse will auto-fetch transcripts directly upon online meeting completion",
@@ -358,6 +364,7 @@ def simulate_online_meeting(
                 "confidence": 0.97,
                 "uncertainty_flag": False,
                 "review_status": "needs_review",
+                "rejection_reason": None,
                 "provider": payload.provider.value,
                 "model_version": "gemini-3.1-flash-lite",
                 "created_at": now.isoformat(),

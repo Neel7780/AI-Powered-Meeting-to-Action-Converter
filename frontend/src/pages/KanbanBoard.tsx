@@ -29,182 +29,6 @@ interface MeetingOption {
   starts_at?: string;
 }
 
-// Fallback seed tasks for zero-configuration demo testing & Sprint 2 Dependency Chains
-const DEMO_TASKS: KanbanTaskItem[] = [
-  {
-    id: 'demo-task-1',
-    workspace_id: 'default-workspace',
-    meeting_id: 'mtg-q3-planning',
-    title: 'Migrate PostgreSQL connection pool to Supabase transaction pooler',
-    description: 'Update DATABASE_URL to use Supabase port 6543 to prevent connection saturation during peak workloads.',
-    deadline_utc: new Date(Date.now() + 86400000 * 2).toISOString(),
-    priority: 'urgent',
-    status: 'in_progress',
-    blocked_by: null,
-    execution_type: 'human',
-    source_excerpt: 'We need to switch our database connection strings to the transaction pooler on port 6543 before Friday.',
-    external_owner_label: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    meetings: {
-      id: 'mtg-q3-planning',
-      title: 'Q3 Infra Architecture Sync',
-      starts_at: new Date().toISOString(),
-    },
-    task_assignees: [
-      {
-        user_id: 'current-user',
-        is_primary: true,
-        profiles: {
-          id: 'current-user',
-          display_name: 'You (Me)',
-          email: 'lead@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-2',
-    workspace_id: 'default-workspace',
-    meeting_id: 'mtg-q3-planning',
-    title: 'Implement 1-Tap WhatsApp share URL generator for assignee tasks',
-    description: 'Ensure prefilled wa.me/?text=... conforms to zero-cost WhatsApp constraint without paid APIs.',
-    deadline_utc: new Date(Date.now() + 86400000 * 4).toISOString(),
-    priority: 'high',
-    status: 'done',
-    blocked_by: null,
-    execution_type: 'human',
-    source_excerpt: 'The WhatsApp sharing link must be one-tap and generated purely via wa.me to stay in zero-cost free tier.',
-    external_owner_label: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    meetings: {
-      id: 'mtg-q3-planning',
-      title: 'Q3 Infra Architecture Sync',
-      starts_at: new Date().toISOString(),
-    },
-    task_assignees: [
-      {
-        user_id: 'current-user',
-        is_primary: true,
-        profiles: {
-          id: 'current-user',
-          display_name: 'You (Me)',
-          email: 'lead@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-3',
-    workspace_id: 'default-workspace',
-    meeting_id: 'mtg-product-review',
-    title: 'Configure ground-truth LLM prompt defense delimiters for Gemini',
-    description: 'Wrap raw transcript payloads inside xml tags to prevent prompt injection attacks.',
-    deadline_utc: new Date(Date.now() + 86400000 * 1).toISOString(),
-    priority: 'normal',
-    status: 'todo',
-    blocked_by: null,
-    execution_type: 'human',
-    source_excerpt: 'Action items extracted by Gemini must be grounded with a verbatim source quote from the transcript.',
-    external_owner_label: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    meetings: {
-      id: 'mtg-product-review',
-      title: 'Weekly Sprint Review',
-      starts_at: new Date().toISOString(),
-    },
-    task_assignees: [
-      {
-        user_id: 'teammate-neel',
-        is_primary: true,
-        profiles: {
-          id: 'teammate-neel',
-          display_name: 'Neel Khatri',
-          email: 'neel@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-4',
-    workspace_id: 'default-workspace',
-    meeting_id: 'mtg-product-review',
-    title: 'Verify Brevo SMTP rate limit before staging automated daily digests',
-    description: 'Check free tier 300 emails/day cap to ensure daily digest cron job does not bounce.',
-    deadline_utc: new Date(Date.now() - 86400000 * 1).toISOString(),
-    priority: 'high',
-    status: 'blocked',
-    blocked_by: 'demo-task-1',
-    execution_type: 'agent',
-    source_excerpt: 'Email notification service needs to stay well within Brevo 300 emails per day limit.',
-    external_owner_label: 'Automated SMTP Checker',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    meetings: {
-      id: 'mtg-product-review',
-      title: 'Weekly Sprint Review',
-      starts_at: new Date().toISOString(),
-    },
-    task_assignees: [],
-  },
-  {
-    id: 'demo-task-5',
-    workspace_id: 'default-workspace',
-    meeting_id: 'mtg-q3-planning',
-    title: 'Schedule automated daily digest cron job for overdue action items',
-    description: 'Trigger daily digest emails at 09:00 AM UTC once Brevo SMTP limits are verified.',
-    deadline_utc: new Date(Date.now() + 86400000 * 5).toISOString(),
-    priority: 'normal',
-    status: 'blocked',
-    blocked_by: 'demo-task-4',
-    execution_type: 'human',
-    source_excerpt: 'The daily digest email job should run every morning after we confirm SMTP limits.',
-    external_owner_label: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    meetings: {
-      id: 'mtg-q3-planning',
-      title: 'Q3 Infra Architecture Sync',
-      starts_at: new Date().toISOString(),
-    },
-    task_assignees: [
-      {
-        user_id: 'current-user',
-        is_primary: true,
-        profiles: {
-          id: 'current-user',
-          display_name: 'You (Me)',
-          email: 'lead@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-6',
-    workspace_id: 'default-workspace',
-    meeting_id: 'mtg-product-review',
-    title: 'Agent: Research competitor action-item schemas and draft benchmark report',
-    description: 'AI agent will crawl open schemas, summarize extraction formats, and prepare a comparison document.',
-    deadline_utc: new Date(Date.now() + 86400000 * 3).toISOString(),
-    priority: 'high',
-    status: 'blocked',
-    blocked_by: 'demo-task-3',
-    execution_type: 'agent',
-    source_excerpt: 'Let an AI agent research competitor tools and prepare the initial benchmarking report.',
-    external_owner_label: 'ActionPulse AI Agent',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    meetings: {
-      id: 'mtg-product-review',
-      title: 'Weekly Sprint Review',
-      starts_at: new Date().toISOString(),
-    },
-    task_assignees: [],
-  },
-];
-
 export interface KanbanBoardProps {
   workspaceId?: string;
 }
@@ -315,16 +139,21 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       }
 
       if (taskError) {
-        console.warn('Supabase tasks fetch warning, using demo dataset:', taskError.message);
-        setTasks(DEMO_TASKS);
-      } else if (taskData && taskData.length > 0) {
-        setTasks(taskData as unknown as KanbanTaskItem[]);
+        console.error('Supabase tasks fetch error:', taskError.message);
+        setErrorMsg(`Failed to load tasks: ${taskError.message}`);
+        setTasks([]);
+      } else if (taskData) {
+        const mapped = (taskData as any[]).map((t) => ({
+          ...t,
+          execution_type: t.execution_type || (t.external_owner_label === 'AI Agent' ? 'agent' : 'human'),
+        }));
+        setTasks(mapped);
       } else {
-        setTasks(DEMO_TASKS);
+        setTasks([]);
       }
     } catch (err: unknown) {
-      console.warn('Network exception while fetching tasks, using fallback dataset:', err);
-      setTasks(DEMO_TASKS);
+      console.error('Network exception while fetching tasks:', err);
+      setTasks([]);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -391,8 +220,6 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       })
     );
 
-    if (taskId.startsWith('demo-')) return; // sample cards only live in memory
-
     setUpdatingTaskIds((prev) => new Set(prev).add(taskId));
 
     try {
@@ -456,8 +283,6 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       });
     });
 
-    if (taskId.startsWith('demo-')) return;
-
     try {
       if (activeWorkspaceId) {
         await reviewApi.updateTaskDependency(
@@ -515,7 +340,6 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
   const totalCount = filteredTasks.length;
   const doneCount = doneTasks.length;
   const blockedCount = blockedTasks.length;
-  const isDemo = tasks.some((t) => t.id.startsWith('demo-'));
 
   const segmentClass = (on: boolean) =>
     `inline-flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -530,16 +354,10 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           <p className="eyebrow">Task Management & Orchestration</p>
           <h1 className="mt-2 flex flex-wrap items-center gap-3 text-3xl font-medium tracking-tight text-white">
             Tasks & Workflow Chains
-            {isDemo ? (
-              <span className="rounded border border-white/15 bg-white/5 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-neutral-400">
-                Sample dataset / active demo
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-emerald-400">
-                <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-                Live
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-emerald-400">
+              <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+              Live Supabase Data
+            </span>
           </h1>
           <p className="mt-2 text-sm text-neutral-400">
             Approved action items, multi-step dependencies, and AI agent execution routing.

@@ -115,6 +115,7 @@ def approve_items(
     now_utc_str = datetime.now(UTC).isoformat()
     new_task_ids: list[UUID] = []
     candidate_to_task: dict[str, UUID] = {}
+    pending_dependencies: dict[UUID, str] = {}
 
     # 4. Process each item in order
     for item_update in payload.items:
@@ -167,18 +168,10 @@ def approve_items(
                 final_deadline.isoformat() if isinstance(final_deadline, datetime) else final_deadline
             )
 
-            # Resolve prerequisite task dependency (Task Chains / Sprint 2)
-            blocked_by_id = None
+            # Record dependency requirement for resolution
             raw_blocked = dumped.get("blocked_by_id")
             if not raw_blocked and (db_item.get("rejection_reason") or "").startswith("depends_on:"):
                 raw_blocked = db_item.get("rejection_reason").split(":", 1)[1]
-
-            if raw_blocked:
-                raw_str = str(raw_blocked)
-                if raw_str in candidate_to_task:
-                    blocked_by_id = str(candidate_to_task[raw_str])
-                else:
-                    blocked_by_id = raw_str
 
             task_insert = {
                 "workspace_id": str(workspace_id),
@@ -187,8 +180,8 @@ def approve_items(
                 "title": (final_task or db_item.get("task") or "Untitled Action")[:500],
                 "deadline_utc": deadline_val,
                 "priority": final_priority,
-                "status": "blocked" if blocked_by_id else "todo",
-                "blocked_by": blocked_by_id,
+                "status": "todo",
+                "blocked_by": None,
                 "source_excerpt": db_item["source_excerpt"],  # Must match verbatim per validate_task_source trigger
                 "created_by": str(user.id),
                 "external_owner_label": (
@@ -205,6 +198,8 @@ def approve_items(
                 task_id = UUID(str(task_record["id"]))
                 new_task_ids.append(task_id)
                 candidate_to_task[str_id] = task_id
+                if raw_blocked:
+                    pending_dependencies[task_id] = str(raw_blocked)
             except Exception as exc:
                 err_str = str(exc).lower()
                 if "unique" in err_str or "conflict" in err_str or "extracted_item_id" in err_str:
@@ -234,6 +229,34 @@ def approve_items(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail=f"Failed to assign task: {exc}"
                     ) from exc
+
+    # Step 4c: Resolve inter-task dependencies dynamically across the batch & existing workspace tasks
+    for tid, raw_prereq in pending_dependencies.items():
+        prereq_task_id: str | None = None
+        if raw_prereq in candidate_to_task:
+            prereq_task_id = str(candidate_to_task[raw_prereq])
+        else:
+            try:
+                t_lookup = (
+                    client.table("tasks")
+                    .select("id, status")
+                    .or_(f"id.eq.{raw_prereq},extracted_item_id.eq.{raw_prereq}")
+                    .limit(1)
+                    .execute()
+                )
+                if t_lookup.data and len(t_lookup.data) > 0:
+                    prereq_task_id = str(t_lookup.data[0]["id"])
+            except Exception as exc:
+                logger.debug("Prerequisite task lookup error for %s: %s", raw_prereq, exc)
+
+        if prereq_task_id and prereq_task_id != str(tid):
+            try:
+                client.table("tasks").update({
+                    "blocked_by": prereq_task_id,
+                    "status": "blocked",
+                }).eq("id", str(tid)).execute()
+            except Exception as exc:
+                logger.warning("Failed to link resolved task dependency: %s", exc)
 
     # 5. Dispatch task assignment email in background
     if new_task_ids:
