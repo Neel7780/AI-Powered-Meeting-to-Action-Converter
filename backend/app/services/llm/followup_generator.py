@@ -103,7 +103,7 @@ def _get_demo_meeting_data(meeting_id: UUID | str) -> dict[str, Any]:
     }
 
 
-def _load_meeting_context(meeting_id: UUID) -> dict[str, Any]:
+def _load_meeting_context(meeting_id: UUID | str) -> dict[str, Any]:
     """Fetch meeting data from Supabase, falling back to demo fixtures if not yet persisted."""
     m_id_str = str(meeting_id)
     try:
@@ -115,14 +115,27 @@ def _load_meeting_context(meeting_id: UUID) -> dict[str, Any]:
         meeting = m_resp.data[0]
         workspace_id = meeting.get("workspace_id")
 
-        # 1. Fetch participants & profiles
+        # 1. Fetch participants
         parts_resp = supabase.table("meeting_participants").select("user_id, external_name").eq("meeting_id", m_id_str).execute()
         participants_data = parts_resp.data or []
-        user_ids = [p["user_id"] for p in participants_data if p.get("user_id")]
+        participant_user_ids = [p["user_id"] for p in participants_data if p.get("user_id")]
+
+        # 2. Fetch tasks and assignees
+        tasks_resp = supabase.table("tasks").select("id, title, deadline_utc, priority, source_excerpt").eq("meeting_id", m_id_str).execute()
+        raw_tasks = tasks_resp.data or []
+        task_ids = [t["id"] for t in raw_tasks]
+
+        assignees_map = {}
+        if task_ids:
+            ta_resp = supabase.table("task_assignees").select("task_id, user_id, is_primary").in_("task_id", task_ids).eq("is_primary", True).execute()
+            assignees_map = {a["task_id"]: a["user_id"] for a in (ta_resp.data or [])}
+
+        # 3. Union participant user IDs with assignee user IDs before querying profiles (Fix: issue 5)
+        all_user_ids = list(set(participant_user_ids + [uid for uid in assignees_map.values() if uid]))
 
         profiles_map = {}
-        if user_ids:
-            prof_resp = supabase.table("profiles").select("id, display_name, email").in_("id", user_ids).execute()
+        if all_user_ids:
+            prof_resp = supabase.table("profiles").select("id, display_name, email").in_("id", all_user_ids).execute()
             profiles_map = {p["id"]: p for p in (prof_resp.data or [])}
 
         participants: List[dict] = []
@@ -137,16 +150,6 @@ def _load_meeting_context(meeting_id: UUID) -> dict[str, Any]:
                 "email": email_addr,
                 "is_organiser": uid == meeting.get("organiser_id"),
             })
-
-        # 2. Fetch tasks
-        tasks_resp = supabase.table("tasks").select("id, title, deadline_utc, priority, source_excerpt").eq("meeting_id", m_id_str).execute()
-        raw_tasks = tasks_resp.data or []
-        task_ids = [t["id"] for t in raw_tasks]
-
-        assignees_map = {}
-        if task_ids:
-            ta_resp = supabase.table("task_assignees").select("task_id, user_id, is_primary").in_("task_id", task_ids).eq("is_primary", True).execute()
-            assignees_map = {a["task_id"]: a["user_id"] for a in (ta_resp.data or [])}
 
         tasks: List[dict] = []
         for t in raw_tasks:
@@ -188,6 +191,7 @@ def _load_meeting_context(meeting_id: UUID) -> dict[str, Any]:
     except Exception as exc:
         logger.warning("Falling back to demo fixtures for meeting context %s: %s", meeting_id, exc)
         return _get_demo_meeting_data(meeting_id)
+
 
 
 def _build_deterministic_followup(

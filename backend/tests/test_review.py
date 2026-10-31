@@ -29,6 +29,7 @@ def test_approve_action_item_creates_task_and_assignee():
     meetings_mock.execute.return_value = MagicMock(data=[{
         "id": str(meeting_id),
         "workspace_id": str(workspace_id),
+        "timezone": "Asia/Kolkata",
         "status": "ready"
     }])
 
@@ -96,7 +97,8 @@ def test_approve_action_item_creates_task_and_assignee():
                         "id": str(item_id),
                         "task": "Fix Safari login bug immediately",
                         "owner_user_id": str(owner_id),
-                        "priority": "urgent"
+                        "priority": "urgent",
+                        "deadline_date": "2026-10-21"
                     }
                 ]
             }
@@ -110,6 +112,8 @@ def test_approve_action_item_creates_task_and_assignee():
             task_call = tasks_mock.insert.call_args[0][0]
             assert task_call["title"] == "Fix Safari login bug immediately"
             assert task_call["priority"] == "urgent"
+            assert task_call["deadline_utc"] == "2026-10-21T18:29:59+00:00"
+            assert items_mock.update.call_args.args[0]["deadline_utc"] == task_call["deadline_utc"]
             assert task_call["source_excerpt"] == "I will fix the login bug on Safari by Wednesday."
             assert task_call["created_by"] == str(caller_id)
 

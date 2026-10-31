@@ -23,6 +23,12 @@ class Settings:
     AI_NOTICE_VERSION: str = os.getenv("AI_NOTICE_VERSION", "2026-09-v1")
     STORAGE_BUCKET_TRANSCRIPTS: str = "meeting-transcripts"
 
+    # Google Calendar Integration (OAuth 2.0)
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "")
+    CALENDAR_ENCRYPTION_SECRET: str = os.getenv("CALENDAR_ENCRYPTION_SECRET", "")
+
     # SMTP Configuration (Free tier: Gmail App Password or Brevo)
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))

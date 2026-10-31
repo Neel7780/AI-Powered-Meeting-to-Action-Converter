@@ -32,7 +32,7 @@ router = APIRouter()
     summary="1-Click personalized follow-up generation"
 )
 def draft_followup(
-    meeting_id: str,
+    meeting_id: UUID,
     payload: DraftFollowUpRequest,
     user: CurrentUser = Depends(get_current_user)
 ) -> DraftFollowUpResponse:
@@ -42,12 +42,7 @@ def draft_followup(
     Supports targeting a specific member or the whole team, with tone presets:
     'executive' (brief), 'action_focused' (task grid), or 'chat' (Slack/WhatsApp).
     """
-    try:
-        m_uuid = UUID(str(meeting_id))
-    except (ValueError, AttributeError):
-        m_uuid = UUID("11111111-1111-1111-1111-111111111111")
-
-    require_meeting_role(m_uuid, ORGANISER_ROLES, user)
+    require_meeting_role(meeting_id, ORGANISER_ROLES, user)
 
     try:
         response = generate_meeting_followup(
@@ -72,7 +67,7 @@ def draft_followup(
     summary="Dispatch finalized follow-up via email"
 )
 def send_followup(
-    meeting_id: str,
+    meeting_id: UUID,
     payload: SendFollowUpRequest,
     user: CurrentUser = Depends(get_current_user)
 ) -> SendFollowUpResponse:
@@ -80,12 +75,7 @@ def send_followup(
     
     Uses zero-budget Brevo HTTPS API or standard smtplib.
     """
-    try:
-        m_uuid = UUID(str(meeting_id))
-    except (ValueError, AttributeError):
-        m_uuid = UUID("11111111-1111-1111-1111-111111111111")
-
-    require_meeting_role(m_uuid, ORGANISER_ROLES, user)
+    require_meeting_role(meeting_id, ORGANISER_ROLES, user)
 
     if not payload.recipient_emails:
         raise HTTPException(

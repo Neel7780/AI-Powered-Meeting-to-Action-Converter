@@ -71,6 +71,23 @@ CREATE TABLE meetings (
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'processing', 'ready', 'failed', 'archived')),
   lifecycle TEXT NOT NULL DEFAULT 'active' CHECK (lifecycle IN ('active', 'pending_deletion', 'deleted')),
   retention_expires_at TEXT,
+  calendar_event_id TEXT,
+  calendar_provider TEXT,
+  conference_url TEXT,
+  created_at {TS}, updated_at {TS}
+);
+
+CREATE TABLE calendar_connections (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL DEFAULT 'google',
+  account_email TEXT NOT NULL,
+  encrypted_refresh_token TEXT NOT NULL,
+  access_token TEXT,
+  token_expires_at TEXT,
+  sync_enabled INTEGER NOT NULL DEFAULT 1,
+  last_synced_at TEXT,
   created_at {TS}, updated_at {TS}
 );
 

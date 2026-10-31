@@ -18,6 +18,9 @@ class CreateMeetingRequest(BaseModel):
     ai_attestation: bool = Field(
         default=False, description="Consent attestation required when AI processing is enabled"
     )
+    calendar_event_id: str | None = Field(default=None, description="External calendar event ID if linked")
+    calendar_provider: str | None = Field(default=None, description="Calendar provider name, e.g. 'google'")
+    conference_url: str | None = Field(default=None, description="External video conference URL")
 
 
 class MeetingResponse(BaseModel):
@@ -31,6 +34,9 @@ class MeetingResponse(BaseModel):
     status: str
     visibility: str = "workspace"
     lifecycle: str = "active"
+    calendar_event_id: str | None = None
+    calendar_provider: str | None = None
+    conference_url: str | None = None
     created_at: datetime
 
 

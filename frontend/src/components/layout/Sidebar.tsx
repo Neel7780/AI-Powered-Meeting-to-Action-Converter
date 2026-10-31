@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { CalendarPlus, LayoutDashboard, Sparkles, SquareKanban, Users, X } from "lucide-react";
+import { BarChart3, CalendarPlus, LayoutDashboard, Sparkles, SquareKanban, Users, X } from "lucide-react";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { Button } from "../ui/button";
 import Brand from "./Brand";
@@ -12,6 +12,7 @@ const navItems = [
   { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
   { label: "Meetings", path: "/meetings", icon: CalendarPlus },
   { label: "Tasks", path: "/tasks", icon: SquareKanban },
+  { label: "Analytics", path: "/analytics", icon: BarChart3 },
   { label: "AI Assistant", path: "/chat", icon: Sparkles },
   { label: "Team", path: "/team", icon: Users },
 ];
@@ -53,9 +54,10 @@ export default function Sidebar({ onClose }: SidebarProps) {
         ))}
       </nav>
 
-      <div className="border-t border-white/10 p-4">
-        <p className="eyebrow">Your role</p>
-        <p className="mt-1 text-sm capitalize text-neutral-300">{currentRole || "member"}</p>
+      <div className="border-t border-white/10 p-3">
+        <div className="rounded-md bg-white/[0.03] px-3 py-2 text-xs text-neutral-400">
+          Role: <span className="capitalize text-white">{currentRole ?? "Member"}</span>
+        </div>
       </div>
     </div>
   );

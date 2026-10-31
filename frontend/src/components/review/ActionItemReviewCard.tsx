@@ -11,7 +11,8 @@ import {
   RotateCcw,
   Save,
   ExternalLink,
-  Tag
+  Tag,
+  GitFork
 } from 'lucide-react';
 import type { ActionItemCandidate, WorkspaceMember } from '../../types/review';
 import { Button } from '../ui/button';
@@ -71,7 +72,7 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
   const handleOwnerChange = (memberId: string) => {
     setAssigneeError(false);
     onUpdate(item.id, {
-      assignee_id: memberId === 'unassigned' ? null : memberId
+      assignee_id: memberId === 'unassigned' || !memberId ? null : memberId
     });
   };
 
@@ -217,6 +218,15 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
             </p>
           )}
 
+          {item.blocked_by_id && (
+            <div className="flex items-center gap-1.5 pt-1">
+              <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+                <GitFork className="size-3 text-amber-400" />
+                <span>Prerequisite Requirement: Depends on preceding task</span>
+              </span>
+            </div>
+          )}
+
           {item.suggested_tags && item.suggested_tags.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
               {item.suggested_tags.map(tag => (
@@ -250,11 +260,19 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
             }`}
           >
             <option value="unassigned">-- Unassigned --</option>
-            {members.map(m => (
-              <option key={m.id} value={m.id}>
-                {m.full_name} ({m.role.replace('_', ' ')})
+            {item.assignee_id && !members.some(m => (m.user_id || m.id) === item.assignee_id) && (
+              <option value={item.assignee_id}>
+                {item.assignee?.full_name || 'Assigned Member'}
               </option>
-            ))}
+            )}
+            {members.map(m => {
+              const val = m.user_id || m.id;
+              return (
+                <option key={val} value={val}>
+                  {m.full_name} ({m.role.replace('_', ' ')})
+                </option>
+              );
+            })}
           </select>
 
           {isUnassigned && (

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
+  BarChart3,
   Building2,
   CalendarPlus,
   ListChecks,
@@ -20,8 +21,10 @@ import FloatingChatWidget from "../components/chat/FloatingChatWidget";
 import { Button } from "../components/ui/button";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { supabase } from "../lib/supabase";
-import CreateMeeting from "../pages/CreateMeeting";
 import ChatPage from "../pages/ChatPage";
+import TeamPage from "../pages/TeamPage";
+import AnalyticsPage from "../pages/AnalyticsPage";
+import MeetingsPage from "../pages/MeetingsPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
 import { FollowUpModal } from "../components/meetings/FollowUpModal";
@@ -56,13 +59,16 @@ export default function Dashboard() {
   const isChatPage = location.pathname === "/chat";
   const isTasksPage = location.pathname === "/tasks" || location.pathname === "/kanban";
   const isMeetingsPage = location.pathname === "/meetings";
-  const isOverview = !isTasksPage && !isMeetingsPage && !isChatPage;
+  const isTeamPage = location.pathname === "/team";
+  const isAnalyticsPage = location.pathname === "/analytics";
+  const isOverview = !isTasksPage && !isMeetingsPage && !isChatPage && !isTeamPage && !isAnalyticsPage;
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [fetchedStats, setStats] = useState<Stats | null>(null);
+  const [latestMeeting, setLatestMeeting] = useState<{ id: string; title: string } | null>(null);
 
   const isAdmin = currentRole === "admin";
   const workspaceId = currentWorkspace?.id;
@@ -94,6 +100,27 @@ export default function Dashboard() {
     };
   }, [workspaceId, isOverview]);
 
+  // Query latest meeting in workspace to avoid hardcoded dummy IDs
+  useEffect(() => {
+    if (!workspaceId) {
+      setLatestMeeting(null);
+      return;
+    }
+    supabase
+      .from("meetings")
+      .select("id, title")
+      .eq("workspace_id", workspaceId)
+      .order("starts_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setLatestMeeting({ id: data[0].id, title: data[0].title });
+        } else {
+          setLatestMeeting(null);
+        }
+      });
+  }, [workspaceId]);
+
   const handleAddMember = async (
     email: string,
     role: "organiser" | "member"
@@ -104,9 +131,9 @@ export default function Dashboard() {
   };
 
   const statCards = [
-    { label: "Meetings", value: stats?.meetings, icon: CalendarPlus, tint: tints.indigo },
-    { label: "Open tasks", value: stats?.openTasks, icon: ListChecks, tint: tints.amber },
-    { label: "Team members", value: stats?.members, icon: Users, tint: tints.emerald },
+    { label: "Meetings", value: stats?.meetings, icon: CalendarPlus, tint: tints.indigo, onClick: () => navigate("/meetings") },
+    { label: "Open tasks", value: stats?.openTasks, icon: ListChecks, tint: tints.amber, onClick: () => navigate("/tasks") },
+    { label: "Team members", value: stats?.members, icon: Users, tint: tints.emerald, onClick: () => navigate("/team") },
   ];
 
   const quickActions = [
@@ -125,11 +152,24 @@ export default function Dashboard() {
       onClick: () => navigate("/chat"),
     },
     {
+      label: "Workspace Analytics",
+      hint: "Bottlenecks, turnaround & scorecard",
+      icon: BarChart3,
+      tint: tints.indigo,
+      onClick: () => navigate("/analytics"),
+    },
+    {
       label: "Draft Follow-Up",
-      hint: "1-Click personalized meeting recap",
+      hint: latestMeeting ? `Recap for: ${latestMeeting.title}` : "1-Click personalized meeting recap",
       icon: Sparkles,
       tint: tints.indigo,
-      onClick: () => setShowFollowUp(true),
+      onClick: () => {
+        if (latestMeeting) {
+          setShowFollowUp(true);
+        } else {
+          navigate("/meetings");
+        }
+      },
     },
     {
       label: "View tasks",
@@ -141,8 +181,8 @@ export default function Dashboard() {
     ...(isAdmin
       ? [
           {
-            label: "Add team member",
-            hint: "Send an email invite",
+            label: "Add member",
+            hint: "Invite colleagues to this workspace",
             icon: UserPlus,
             tint: tints.emerald,
             onClick: () => setShowAddMember(true),
@@ -152,13 +192,13 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="flex min-h-screen flex-col bg-black text-white">
       {/* Top Navbar */}
       <Navbar onMenuClick={() => setShowMobileSidebar(true)} />
 
-      <div className="flex">
+      <div className="flex flex-1">
         {/* Desktop Sidebar */}
-        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-60 shrink-0 border-r border-white/10 lg:block">
+        <aside className="hidden w-64 shrink-0 border-r border-white/10 lg:block">
           <Sidebar />
         </aside>
 
@@ -185,9 +225,11 @@ export default function Dashboard() {
           ) : isTasksPage ? (
             <KanbanBoard workspaceId={currentWorkspace?.id} />
           ) : isMeetingsPage ? (
-            <div className="p-4 sm:p-6 lg:p-8">
-              <CreateMeeting />
-            </div>
+            <MeetingsPage />
+          ) : isTeamPage ? (
+            <TeamPage />
+          ) : isAnalyticsPage ? (
+            <AnalyticsPage />
           ) : loading ? (
             <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-neutral-500">
               <LoaderCircle className="size-4 animate-spin" />
@@ -224,8 +266,20 @@ export default function Dashboard() {
 
               {/* Stats row */}
               <div className="grid gap-3 sm:grid-cols-3">
-                {statCards.map(({ label, value, icon: Icon, tint }) => (
-                  <div key={label} className="panel flex items-center justify-between p-5">
+                {statCards.map(({ label, value, icon: Icon, tint, onClick }) => (
+                  <div
+                    key={label}
+                    onClick={onClick}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onClick();
+                      }
+                    }}
+                    className="panel flex items-center justify-between p-5 cursor-pointer hover:border-white/20 transition-colors"
+                  >
                     <div>
                       <p className="eyebrow">{label}</p>
                       <p className="mt-2 text-3xl font-medium tracking-tight text-white">{value ?? "—"}</p>
@@ -332,13 +386,15 @@ export default function Dashboard() {
             onAddMember={handleAddMember}
           />
 
-          {/* 1-Click Meeting Follow-Up Modal */}
-          <FollowUpModal
-            isOpen={showFollowUp}
-            onClose={() => setShowFollowUp(false)}
-            meetingId="mtg-sprint-102"
-            meetingTitle="Latest Sprint Review"
-          />
+          {/* 1-Click Meeting Follow-Up Modal (dynamically loaded with real meeting UUID) */}
+          {latestMeeting && (
+            <FollowUpModal
+              isOpen={showFollowUp}
+              onClose={() => setShowFollowUp(false)}
+              meetingId={latestMeeting.id}
+              meetingTitle={latestMeeting.title}
+            />
+          )}
 
           {/* Global Floating Chat Widget (available across all workspace views except /chat) */}
           {!isChatPage && currentWorkspace && (

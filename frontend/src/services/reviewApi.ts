@@ -12,64 +12,102 @@ import { getApiUrl } from '../lib/api';
 
 const STORAGE_KEY_ITEMS = 'staging_gate_candidate_items';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidUuid(val: unknown): val is string {
+  return typeof val === 'string' && UUID_REGEX.test(val);
+}
+
 /** POST JSON or FormData to the FastAPI backend with the user's Supabase JWT; throws the backend's `detail` on failure. */
 export async function postApi(path: string, body: unknown): Promise<any> {
   const { data: { session } } = await supabase.auth.getSession();
   const isForm = body instanceof FormData;
-  const token = session?.access_token || 'dev-token';
   const res = await fetch(getApiUrl(path), {
     method: 'POST',
     headers: {
       ...(isForm ? {} : { 'Content-Type': 'application/json' }),
-      Authorization: `Bearer ${token}`,
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
     },
     body: isForm ? body : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`);
+  let detailMsg = `HTTP ${res.status}`;
+  if (typeof data.detail === 'string') {
+    detailMsg = data.detail;
+  } else if (Array.isArray(data.detail)) {
+    detailMsg = data.detail
+      .map((d: any) => {
+        const field = Array.isArray(d.loc) ? d.loc.filter((x: any) => x !== 'body').join('.') : '';
+        return field ? `${field}: ${d.msg}` : d.msg;
+      })
+      .join('; ');
+  } else if (typeof data.message === 'string') {
+    detailMsg = data.message;
+  }
+  if (!res.ok) throw new Error(detailMsg);
+  return data;
+}
+
+export async function patchApi(path: string, body: unknown): Promise<any> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const res = await fetch(getApiUrl(path), {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  let detailMsg = `HTTP ${res.status}`;
+  if (typeof data.detail === 'string') {
+    detailMsg = data.detail;
+  } else if (Array.isArray(data.detail)) {
+    detailMsg = data.detail
+      .map((d: any) => {
+        const field = Array.isArray(d.loc) ? d.loc.filter((x: any) => x !== 'body').join('.') : '';
+        return field ? `${field}: ${d.msg}` : d.msg;
+      })
+      .join('; ');
+  } else if (typeof data.message === 'string') {
+    detailMsg = data.message;
+  }
+  if (!res.ok) throw new Error(detailMsg);
   return data;
 }
 
 export const INITIAL_MEMBERS: WorkspaceMember[] = [
   {
-    id: 'mem-1',
-    user_id: 'usr-1',
-    full_name: 'Arnav Pandita',
-    email: 'arnav.pandita@workspace.io',
+    id: '00000000-0000-0000-0000-000000000001',
+    user_id: '00000000-0000-0000-0000-000000000001',
+    full_name: 'Neel Khatri',
+    email: 'neelkhatri7780@gmail.com',
     role: 'admin',
-    initials: 'AP'
+    initials: 'NK'
   },
   {
-    id: 'mem-2',
-    user_id: 'usr-2',
-    full_name: 'Bharat Odedara',
-    email: 'bharat.odedara@workspace.io',
+    id: '00000000-0000-0000-0000-000000000002',
+    user_id: '00000000-0000-0000-0000-000000000002',
+    full_name: 'Manali Malani',
+    email: 'manali.malani@actionpulse.io',
     role: 'team_member',
-    initials: 'BO'
+    initials: 'MM'
   },
   {
-    id: 'mem-3',
-    user_id: 'usr-3',
-    full_name: 'Yuvraj Katara',
-    email: 'yuvraj.katara@workspace.io',
+    id: '00000000-0000-0000-0000-000000000003',
+    user_id: '00000000-0000-0000-0000-000000000003',
+    full_name: 'Krishna Parmar',
+    email: 'krishna.parmar@actionpulse.io',
     role: 'meeting_organiser',
-    initials: 'YK'
+    initials: 'KP'
   },
   {
-    id: 'mem-4',
-    user_id: 'usr-4',
-    full_name: 'Madhav Chauhan',
-    email: 'madhav.chauhan@workspace.io',
-    role: 'meeting_organiser',
-    initials: 'MC'
-  },
-  {
-    id: 'mem-5',
-    user_id: 'usr-5',
-    full_name: 'Harshil Patel',
-    email: 'harshil.patel@workspace.io',
+    id: '00000000-0000-0000-0000-000000000004',
+    user_id: '00000000-0000-0000-0000-000000000004',
+    full_name: 'Bhagy Parmar',
+    email: 'bhagy.parmar@actionpulse.io',
     role: 'team_member',
-    initials: 'HP'
+    initials: 'BP'
   }
 ];
 
@@ -400,44 +438,39 @@ function saveStoredCandidateItems(items: ActionItemCandidate[]) {
 export const reviewApi = {
   async fetchMeetingDetails(meetingId: string): Promise<MeetingDetails> {
     if (isSupabaseConfigured && supabase) {
-      try {
         const { data, error } = await supabase
           .from('meetings')
           .select('*')
           .eq('id', meetingId)
           .maybeSingle();
 
-        if (!error && data) {
-          return {
-            id: data.id,
-            workspace_id: data.workspace_id,
-            title: data.title,
-            date: data.starts_at || data.created_at,
-            timezone: data.timezone || 'Asia/Kolkata',
-            duration: '45 mins',
-            organiser_name: 'Organiser',
-            status: data.status === 'ready' ? 'review_ready' : data.status,
-            candidate_count: 0
-          };
-        }
-      } catch (err) {
-        console.warn('Error fetching meeting details from Supabase:', err);
-      }
+        if (error) throw error;
+        if (!data) throw new Error('Meeting not found');
+        return {
+          id: data.id,
+          workspace_id: data.workspace_id,
+          title: data.title,
+          date: data.starts_at || data.created_at,
+          timezone: data.timezone || 'Asia/Kolkata',
+          duration: '45 mins',
+          organiser_name: 'Organiser',
+          status: data.status === 'ready' ? 'review_ready' : data.status,
+          candidate_count: 0
+        };
     }
     return INITIAL_MEETING;
   },
 
   async fetchTranscript(meetingId: string): Promise<TranscriptSegment[]> {
     if (isSupabaseConfigured && supabase) {
-      try {
         // Look up the transcript associated with this meeting
         const { data: transcript, error: tError } = await supabase
           .from('transcripts')
           .select('id')
           .eq('meeting_id', meetingId)
           .maybeSingle();
-
-        if (!tError && transcript) {
+        if (tError) throw tError;
+        if (transcript) {
           // Schema alignment: transcript_segments uses transcript_id, start_ms, and end_ms
           const { data: segments, error: sError } = await supabase
             .from('transcript_segments')
@@ -445,7 +478,8 @@ export const reviewApi = {
             .eq('transcript_id', transcript.id)
             .order('segment_index', { ascending: true });
 
-          if (!sError && segments && segments.length > 0) {
+          if (sError) throw sError;
+          if (segments && segments.length > 0) {
             return segments.map((seg) => {
               const startMs = Number(seg.start_ms || 0);
               const startSec = Math.floor(startMs / 1000);
@@ -468,51 +502,50 @@ export const reviewApi = {
             });
           }
         }
-      } catch (err) {
-        console.warn('Error fetching transcript segments from Supabase:', err);
-      }
+        return [];
     }
     return INITIAL_TRANSCRIPT_SEGMENTS;
   },
 
-  async fetchWorkspaceMembers(_workspaceId: string): Promise<WorkspaceMember[]> {
+  async fetchWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
     if (isSupabaseConfigured && supabase) {
-      try {
         const { data, error } = await supabase
           .from('workspace_members')
-          .select('role, user_id, profiles:user_id(id, display_name, email)')
-          .eq('workspace_id', _workspaceId);
-
-        if (!error && data && data.length > 0) {
-          return data.map((m: any) => {
-            const name = m.profiles?.display_name || m.profiles?.email || 'Member';
-            const initials = name
-              .split(' ')
-              .map((p: string) => p[0])
-              .join('')
-              .toUpperCase()
-              .slice(0, 2);
-            return {
-              id: m.user_id,
-              user_id: m.user_id,
-              full_name: name,
-              email: m.profiles?.email || '',
-              role: m.role === 'admin' ? 'admin' : m.role === 'organiser' ? 'meeting_organiser' : 'team_member',
-              initials
-            };
-          });
-        }
-      } catch (err) {
-        console.warn('Error fetching workspace members from Supabase:', err);
-      }
+          .select('role, user_id')
+          .eq('workspace_id', workspaceId);
+        if (error) throw error;
+        if (!data?.length) return [];
+        const { data: profiles, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, display_name, email')
+          .in('id', data.map(m => m.user_id));
+        if (profileError) throw profileError;
+        const byId = new Map((profiles || []).map(p => [p.id, p]));
+        return data.map((m) => {
+          const profile = byId.get(m.user_id);
+          const name = profile?.display_name || profile?.email?.split('@')[0] || 'Member';
+          const initials = name
+            .split(' ')
+            .map((p: string) => p[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2);
+          return {
+            id: m.user_id,
+            user_id: m.user_id,
+            full_name: name,
+            email: profile?.email || '',
+            role: m.role === 'admin' ? 'admin' : m.role === 'organiser' ? 'meeting_organiser' : 'team_member',
+            initials
+          };
+        });
     }
     return INITIAL_MEMBERS;
   },
 
-  async fetchActionItemCandidates(meetingId: string): Promise<ActionItemCandidate[]> {
+  async fetchActionItemCandidates(meetingId: string, members: WorkspaceMember[]): Promise<ActionItemCandidate[]> {
     // Schema alignment: Candidate items live in extracted_items
     if (isSupabaseConfigured && supabase) {
-      try {
         const { data, error } = await supabase
           .from('extracted_items')
           .select('*')
@@ -520,9 +553,8 @@ export const reviewApi = {
           .eq('type', 'action')
           .order('created_at', { ascending: true });
 
-        if (!error && data) {
-          const members = INITIAL_MEMBERS;
-          return data.map((item: any) => {
+        if (error) throw error;
+        return (data || []).map((item: any) => {
             const startMs = item.source_start_ms ? Number(item.source_start_ms) : 0;
             const startSec = Math.floor(startMs / 1000);
             const mins = Math.floor(startSec / 60);
@@ -533,38 +565,35 @@ export const reviewApi = {
             if (item.review_status === 'approved') status = 'approved';
             else if (item.review_status === 'rejected') status = 'rejected';
 
-            const assignee = item.owner_user_id 
-              ? members.find(m => m.user_id === item.owner_user_id || m.id === item.owner_user_id) || {
-                  id: item.owner_user_id,
-                  user_id: item.owner_user_id,
-                  full_name: item.owner_name || 'Assigned Member',
-                  email: '',
-                  role: 'team_member' as const
-                }
+            const assignee = members.find(m => m.user_id === item.owner_user_id || m.id === item.owner_user_id) || null;
+            const dueDate = item.deadline_utc
+              ? new Intl.DateTimeFormat('sv-SE', { timeZone: item.deadline_timezone || 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(item.deadline_utc))
               : null;
+
+            let blockedById: string | null = null;
+            if (typeof item.rejection_reason === 'string' && item.rejection_reason.startsWith('depends_on:')) {
+              blockedById = item.rejection_reason.split('depends_on:')[1]?.trim() || null;
+            }
 
             return {
               id: item.id,
               meeting_id: item.meeting_id,
               title: item.task || item.source_excerpt || 'Action Item',
               description: item.source_excerpt || item.task || '',
-              due_date: item.deadline_utc ? item.deadline_utc.split('T')[0] : (item.deadline_raw || null),
-              assignee_id: item.owner_user_id || null,
+              due_date: dueDate,
+              extracted_due_date: dueDate,
+              assignee_id: item.owner_user_id || assignee?.user_id || null,
               assignee,
+              blocked_by_id: blockedById,
               status,
               confidence_score: item.confidence !== null && item.confidence !== undefined ? Number(item.confidence) : 0.9,
               transcript_timestamp: timestamp,
               created_at: item.created_at,
               updated_at: item.updated_at
             };
-          });
-        }
-      } catch (err) {
-        console.warn('Error fetching extracted items from Supabase:', err);
-      }
+        });
     }
     
-    const members = INITIAL_MEMBERS;
     const items = getStoredCandidateItems().map(item => ({
       ...item,
       assignee: item.assignee_id ? members.find(m => m.id === item.assignee_id) || null : null
@@ -615,11 +644,47 @@ export const reviewApi = {
 
   /** Review gate: POST /api/meetings/{id}/approve (creates tasks + sends assignment emails). */
   async approveActionItems(meetingId: string, items: ActionItemCandidate[]): Promise<ActionItemCandidate[]> {
-    if (!isSupabaseConfigured) {
+    if (!isSupabaseConfigured || !isValidUuid(meetingId) || items.some(i => !isValidUuid(i.id))) {
       return Promise.all(items.map(i => this.updateActionItem(i.id, { status: 'approved' })));
     }
+
+    const payloadItems = items.map((i) => {
+      const ownerId = isValidUuid(i.assignee_id) ? i.assignee_id : null;
+      const payloadItem: Record<string, any> = {
+        id: i.id,
+        task: i.title,
+        owner_user_id: ownerId,
+      };
+
+      if (isValidUuid(i.blocked_by_id)) {
+        payloadItem.blocked_by_id = i.blocked_by_id;
+      }
+      if (i.execution_type) {
+        payloadItem.execution_type = i.execution_type;
+      }
+
+      if (i.due_date !== i.extracted_due_date) {
+        if (i.due_date) {
+          payloadItem.deadline_date = i.due_date;
+          try {
+            const d = new Date(i.due_date.includes('T') ? i.due_date : `${i.due_date}T23:59:59Z`);
+            if (!isNaN(d.getTime())) {
+              payloadItem.deadline_utc = d.toISOString();
+            }
+          } catch {
+            // ignore unparseable date
+          }
+        } else {
+          payloadItem.deadline_date = null;
+          payloadItem.deadline_utc = null;
+        }
+      }
+
+      return payloadItem;
+    });
+
     await postApi(`/api/meetings/${meetingId}/approve`, {
-      items: items.map(i => ({ id: i.id, task: i.title, owner_user_id: i.assignee_id ?? null })),
+      items: payloadItems,
     });
     return items.map(i => ({ ...i, status: 'approved' as const }));
   },
@@ -628,6 +693,21 @@ export const reviewApi = {
     if (!isSupabaseConfigured) return this.updateActionItem(item.id, { status: 'rejected' });
     await postApi(`/api/meetings/${meetingId}/reject`, { item_ids: [item.id] });
     return { ...item, status: 'rejected' };
+  },
+
+  async updateTaskDependency(
+    workspaceId: string,
+    taskId: string,
+    blockedById: string | null,
+    executionType?: 'human' | 'agent'
+  ): Promise<any> {
+    if (!isSupabaseConfigured || !isValidUuid(workspaceId) || !isValidUuid(taskId)) {
+      return { id: taskId, blocked_by: blockedById, status: blockedById ? 'blocked' : 'todo' };
+    }
+    return patchApi(`/api/workspaces/${workspaceId}/tasks/${taskId}/dependency`, {
+      blocked_by: isValidUuid(blockedById) ? blockedById : null,
+      execution_type: executionType || null,
+    });
   },
 
   async revertActionItem(itemId: string): Promise<ActionItemCandidate> {

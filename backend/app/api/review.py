@@ -25,6 +25,7 @@ from app.schemas.review import (
     RejectResponse,
 )
 from app.services.email import notify_tasks_assigned
+from app.utils.dates import to_utc
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,8 @@ def approve_items(
 
     now_utc_str = datetime.now(UTC).isoformat()
     new_task_ids: list[UUID] = []
+    candidate_to_task: dict[str, UUID] = {}
+    pending_dependencies: dict[UUID, str] = {}
 
     # 4. Process each item in order
     for item_update in payload.items:
@@ -123,6 +126,13 @@ def approve_items(
         final_task = dumped.get("task", db_item.get("task"))
         final_owner = dumped.get("owner_user_id", db_item.get("owner_user_id"))
         final_deadline = dumped.get("deadline_utc", db_item.get("deadline_utc"))
+        if "deadline_date" in dumped:
+            final_deadline = (
+                to_utc(dumped["deadline_date"].isoformat(), None, meeting["timezone"])
+                if dumped["deadline_date"] else None
+            )
+            if dumped["deadline_date"] and final_deadline is None:
+                raise HTTPException(status_code=422, detail="Invalid meeting timezone for due date")
         final_priority = dumped.get("priority", db_item.get("priority") or "normal")
 
         # Step 4a: Update extracted_items (enforce extracted_review_chk: status + reviewed_by + reviewed_at)
@@ -135,10 +145,11 @@ def approve_items(
             update_item_payload["task"] = dumped["task"]
         if "owner_user_id" in dumped:
             update_item_payload["owner_user_id"] = str(dumped["owner_user_id"]) if dumped["owner_user_id"] else None
-        if "deadline_utc" in dumped:
+        if "deadline_utc" in dumped or "deadline_date" in dumped:
             update_item_payload["deadline_utc"] = (
-                dumped["deadline_utc"].isoformat() if dumped["deadline_utc"] else None
+                final_deadline.isoformat() if isinstance(final_deadline, datetime) else final_deadline
             )
+            update_item_payload["deadline_timezone"] = meeting["timezone"] if final_deadline else None
         if "priority" in dumped:
             update_item_payload["priority"] = dumped["priority"]
 
@@ -156,6 +167,12 @@ def approve_items(
             deadline_val = (
                 final_deadline.isoformat() if isinstance(final_deadline, datetime) else final_deadline
             )
+
+            # Record dependency requirement for resolution
+            raw_blocked = dumped.get("blocked_by_id")
+            if not raw_blocked and (db_item.get("rejection_reason") or "").startswith("depends_on:"):
+                raw_blocked = db_item.get("rejection_reason").split(":", 1)[1]
+
             task_insert = {
                 "workspace_id": str(workspace_id),
                 "meeting_id": str(meeting_id),
@@ -164,9 +181,13 @@ def approve_items(
                 "deadline_utc": deadline_val,
                 "priority": final_priority,
                 "status": "todo",
+                "blocked_by": None,
                 "source_excerpt": db_item["source_excerpt"],  # Must match verbatim per validate_task_source trigger
                 "created_by": str(user.id),
-                "external_owner_label": db_item.get("owner_name") if not final_owner else None,
+                "external_owner_label": (
+                    "AI Agent" if dumped.get("execution_type") == "agent" and not final_owner
+                    else (db_item.get("owner_name") if not final_owner else None)
+                ),
             }
 
             try:
@@ -176,6 +197,9 @@ def approve_items(
                 task_record = t_resp.data[0]
                 task_id = UUID(str(task_record["id"]))
                 new_task_ids.append(task_id)
+                candidate_to_task[str_id] = task_id
+                if raw_blocked:
+                    pending_dependencies[task_id] = str(raw_blocked)
             except Exception as exc:
                 err_str = str(exc).lower()
                 if "unique" in err_str or "conflict" in err_str or "extracted_item_id" in err_str:
@@ -205,6 +229,34 @@ def approve_items(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail=f"Failed to assign task: {exc}"
                     ) from exc
+
+    # Step 4c: Resolve inter-task dependencies dynamically across the batch & existing workspace tasks
+    for tid, raw_prereq in pending_dependencies.items():
+        prereq_task_id: str | None = None
+        if raw_prereq in candidate_to_task:
+            prereq_task_id = str(candidate_to_task[raw_prereq])
+        else:
+            try:
+                t_lookup = (
+                    client.table("tasks")
+                    .select("id, status")
+                    .or_(f"id.eq.{raw_prereq},extracted_item_id.eq.{raw_prereq}")
+                    .limit(1)
+                    .execute()
+                )
+                if t_lookup.data and len(t_lookup.data) > 0:
+                    prereq_task_id = str(t_lookup.data[0]["id"])
+            except Exception as exc:
+                logger.debug("Prerequisite task lookup error for %s: %s", raw_prereq, exc)
+
+        if prereq_task_id and prereq_task_id != str(tid):
+            try:
+                client.table("tasks").update({
+                    "blocked_by": prereq_task_id,
+                    "status": "blocked",
+                }).eq("id", str(tid)).execute()
+            except Exception as exc:
+                logger.warning("Failed to link resolved task dependency: %s", exc)
 
     # 5. Dispatch task assignment email in background
     if new_task_ids:

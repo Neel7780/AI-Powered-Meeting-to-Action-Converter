@@ -36,6 +36,10 @@ def create_mock_supabase(tables: dict):
 class TestEmailDelivery:
     """Unit tests for low-level send_email and invite templates."""
 
+    @pytest.fixture(autouse=True)
+    def reset_brevo_key(self, monkeypatch):
+        monkeypatch.setattr(settings, "BREVO_API_KEY", "")
+
     @patch("smtplib.SMTP")
     def test_send_email_success(self, mock_smtp_cls):
         mock_server = MagicMock()
@@ -243,3 +247,171 @@ class TestNotifyTasksAssigned:
 
         # No email should be sent if all tasks were already notified
         mock_send_email.assert_not_called()
+
+
+class TestMeetingRemindersAndNudges:
+    """Unit tests for pre-meeting reminders and post-meeting transcript nudges."""
+
+    @patch("app.services.email.send_email")
+    def test_send_meeting_reminder_email(self, mock_send_email):
+        from app.services.email import send_meeting_reminder_email
+
+        send_meeting_reminder_email(
+            to="attendee@example.com",
+            user_name="Arnav",
+            meeting_title="Sprint 2 Planning",
+            starts_at_str="2026-10-27T10:00:00Z",
+            tz_name="Asia/Kolkata",
+            conference_url="https://meet.google.com/abc-defg-hij",
+            meeting_link="https://actionpulse.app/meetings/123/review"
+        )
+
+        assert mock_send_email.call_count == 1
+        kwargs = mock_send_email.call_args[1]
+        assert kwargs["to"] == "attendee@example.com"
+        assert "Upcoming Meeting: Sprint 2 Planning" in kwargs["subject"]
+        assert "meet.google.com/abc-defg-hij" in kwargs["html_body"]
+        assert "Arnav" in kwargs["text_body"]
+
+    @patch("app.services.email.send_email")
+    def test_send_meeting_transcript_nudge_email(self, mock_send_email):
+        from app.services.email import send_meeting_transcript_nudge_email
+
+        send_meeting_transcript_nudge_email(
+            to="lead@example.com",
+            organiser_name="Lead Organiser",
+            meeting_title="Sprint 1 Retrospective",
+            upload_link="https://actionpulse.app/meetings/456/review"
+        )
+
+        assert mock_send_email.call_count == 1
+        kwargs = mock_send_email.call_args[1]
+        assert kwargs["to"] == "lead@example.com"
+        assert "Action Required: Upload notes" in kwargs["subject"]
+        assert "Upload Transcript & Extract Tasks" in kwargs["html_body"]
+        assert "Sprint 1 Retrospective" in kwargs["text_body"]
+
+    @patch("app.services.email.send_meeting_reminder_email")
+    @patch("app.services.email.get_supabase_client")
+    def test_process_pre_meeting_reminders(self, mock_get_client, mock_send_reminder):
+        from app.services.email import process_pre_meeting_reminders
+
+        meeting_id = str(uuid4())
+        organiser_id = str(uuid4())
+        participant_id = str(uuid4())
+        workspace_id = str(uuid4())
+
+        client = MagicMock()
+        meetings_mock = MagicMock()
+        meetings_mock.select.return_value.gte.return_value.lte.return_value.eq.return_value.neq.return_value.execute.return_value = MagicMock(
+            data=[{
+                "id": meeting_id,
+                "title": "Upcoming Standup",
+                "starts_at": "2026-10-27T10:00:00Z",
+                "timezone": "Asia/Kolkata",
+                "organiser_id": organiser_id,
+                "workspace_id": workspace_id,
+                "conference_url": "https://meet.google.com/xyz",
+            }]
+        )
+
+        parts_mock = MagicMock()
+        parts_mock.select.return_value.eq.return_value.not_.is_.return_value.execute.return_value = MagicMock(
+            data=[{"user_id": participant_id}]
+        )
+
+        wm_mock = MagicMock()
+        wm_mock.select.return_value.eq.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[{"user_id": organiser_id}, {"user_id": participant_id}]
+        )
+
+        prof_mock = MagicMock()
+        prof_mock.select.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[
+                {"id": organiser_id, "email": "org@example.com", "display_name": "Org", "timezone": "Asia/Kolkata"},
+                {"id": participant_id, "email": "part@example.com", "display_name": "Part", "timezone": "Asia/Kolkata"},
+            ]
+        )
+
+        notif_mock = MagicMock()
+        notif_mock.insert.return_value.execute.return_value = MagicMock(data=[{"id": "1"}])
+        notif_mock.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"id": "1"}])
+
+        def table_router(name):
+            if name == "meetings":
+                return meetings_mock
+            elif name == "meeting_participants":
+                return parts_mock
+            elif name == "workspace_members":
+                return wm_mock
+            elif name == "profiles":
+                return prof_mock
+            elif name == "notifications":
+                return notif_mock
+            return MagicMock()
+
+        client.table.side_effect = table_router
+        mock_get_client.return_value = client
+
+        sent_count = process_pre_meeting_reminders(window_minutes=60)
+        assert sent_count == 2
+        assert mock_send_reminder.call_count == 2
+
+    @patch("app.services.email.send_meeting_transcript_nudge_email")
+    @patch("app.services.email.get_supabase_client")
+    def test_process_post_meeting_nudges(self, mock_get_client, mock_send_nudge):
+        from app.services.email import process_post_meeting_nudges
+
+        meeting_id = str(uuid4())
+        organiser_id = str(uuid4())
+        workspace_id = str(uuid4())
+
+        client = MagicMock()
+        meetings_mock = MagicMock()
+        meetings_mock.select.return_value.gte.return_value.lte.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[{
+                "id": meeting_id,
+                "title": "Ended Meeting",
+                "starts_at": "2026-10-27T08:00:00Z",
+                "organiser_id": organiser_id,
+                "workspace_id": workspace_id,
+            }]
+        )
+
+        transcripts_mock = MagicMock()
+        # No transcript uploaded for this meeting yet
+        transcripts_mock.select.return_value.in_.return_value.execute.return_value = MagicMock(data=[])
+
+        wm_mock = MagicMock()
+        wm_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[{"user_id": organiser_id}]
+        )
+
+        prof_mock = MagicMock()
+        prof_mock.select.return_value.eq.return_value.execute.return_value = MagicMock(
+            data=[{"email": "org@example.com", "display_name": "Org"}]
+        )
+
+        notif_mock = MagicMock()
+        notif_mock.insert.return_value.execute.return_value = MagicMock(data=[{"id": "1"}])
+        notif_mock.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"id": "1"}])
+
+        def table_router(name):
+            if name == "meetings":
+                return meetings_mock
+            elif name == "transcripts":
+                return transcripts_mock
+            elif name == "workspace_members":
+                return wm_mock
+            elif name == "profiles":
+                return prof_mock
+            elif name == "notifications":
+                return notif_mock
+            return MagicMock()
+
+        client.table.side_effect = table_router
+        mock_get_client.return_value = client
+
+        nudges_sent = process_post_meeting_nudges(min_age_minutes=15, max_age_hours=24)
+        assert nudges_sent == 1
+        assert mock_send_nudge.call_count == 1

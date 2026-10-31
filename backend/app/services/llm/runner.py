@@ -44,13 +44,14 @@ def run_extraction(meeting_id: UUID | str) -> None:
         transcript = db.table("transcripts").select("id, canonical_text").eq("meeting_id", mid).execute().data[0]
         segments = (
             db.table("transcript_segments")
-            .select("text, start_ms, end_ms")
+            .select("text, speaker_name, start_ms, end_ms")
             .eq("transcript_id", transcript["id"])
             .order("segment_index")
             .execute()
             .data
         )
-        roster_text, refs = build_roster(_load_members(db, meeting["workspace_id"]))
+        members = _load_members(db, meeting["workspace_id"])
+        roster_text, refs = build_roster(members)
 
         starts_at = datetime.fromisoformat(meeting["starts_at"])
         local_start = starts_at.astimezone(ZoneInfo(meeting["timezone"]))
@@ -91,14 +92,37 @@ def run_extraction(meeting_id: UUID | str) -> None:
             canonical_text=canonical_text,
             segments=segments,
             roster_refs=refs,
+            roster_names={ref: member.get("display_name") or (member.get("email") or "").split("@")[0]
+                          for ref, member in zip(refs, members)},
             timezone=meeting["timezone"],
             meeting_starts_at=starts_at,
         )
         if rows:
-            db.table("extracted_items").insert([
-                {**r, "meeting_id": mid, "provider": "gemini", "model_version": settings.GEMINI_MODEL}
-                for r in rows
-            ]).execute()
+            insert_rows = []
+            for r in rows:
+                row_copy = {k: v for k, v in r.items() if k != "depends_on_index"}
+                row_copy.update({
+                    "meeting_id": mid,
+                    "provider": "gemini",
+                    "model_version": settings.GEMINI_MODEL,
+                })
+                insert_rows.append(row_copy)
+
+            inserted = db.table("extracted_items").insert(insert_rows).execute()
+            inserted_items = inserted.data or []
+
+            # Link sequential dependencies between candidate items if detected
+            for idx, r in enumerate(rows):
+                dep_idx = r.get("depends_on_index")
+                if dep_idx is not None and 0 <= dep_idx < len(inserted_items) and idx < len(inserted_items):
+                    prereq_id = inserted_items[dep_idx]["id"]
+                    curr_id = inserted_items[idx]["id"]
+                    try:
+                        db.table("extracted_items").update({
+                            "rejection_reason": f"depends_on:{prereq_id}"
+                        }).eq("id", curr_id).execute()
+                    except Exception as err:
+                        logger.warning("Failed to link candidate dependency: %s", err)
         db.table("meetings").update({"status": "ready"}).eq("id", mid).execute()
         logger.info(
             "extraction ready meeting=%s items=%d flagged=%d latency_ms=%d",

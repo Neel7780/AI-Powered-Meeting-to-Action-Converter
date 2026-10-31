@@ -109,6 +109,9 @@ def create_meeting(
         "visibility": "workspace",
         "status": "draft",
         "lifecycle": "active",
+        "calendar_event_id": payload.calendar_event_id,
+        "calendar_provider": payload.calendar_provider,
+        "conference_url": payload.conference_url,
     }
 
     try:

@@ -1,6 +1,6 @@
 """Pydantic schemas for Candidate Items Review and Approval API (BE-4)."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -14,8 +14,15 @@ class ApproveItemUpdate(BaseModel):
         default=None, description="Assigned workspace member UUID. Null clears the owner"
     )
     deadline_utc: datetime | None = Field(default=None, description="Explicit deadline in UTC")
+    deadline_date: date | None = Field(default=None, description="Edited due date in the meeting timezone; null clears it")
     priority: Literal["low", "normal", "high", "urgent"] | None = Field(
         default=None, description="Task priority (low, normal, high, urgent)"
+    )
+    blocked_by_id: UUID | None = Field(
+        default=None, description="Prerequisite candidate item UUID or existing task UUID"
+    )
+    execution_type: Literal["human", "agent"] | None = Field(
+        default=None, description="Execution routing: human team member or automated AI agent"
     )
 
 

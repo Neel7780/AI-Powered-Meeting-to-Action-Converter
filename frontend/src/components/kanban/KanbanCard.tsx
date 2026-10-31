@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Quote, ChevronDown, CheckCircle2, Clock, Link as LinkIcon } from 'lucide-react';
+import { AlertCircle, Quote, ChevronDown, CheckCircle2, Clock, Link as LinkIcon, Bot, GitFork } from 'lucide-react';
 import { WhatsAppShareButton } from './WhatsAppShareButton';
 
 export type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
@@ -28,6 +28,7 @@ export interface KanbanTaskItem {
   priority: TaskPriority;
   status: TaskStatus;
   blocked_by?: string | null;
+  execution_type?: 'human' | 'agent';
   source_excerpt: string;
   external_owner_label?: string | null;
   created_at: string;
@@ -43,7 +44,9 @@ export interface KanbanTaskItem {
 
 export interface KanbanCardProps {
   task: KanbanTaskItem;
+  allTasks?: KanbanTaskItem[];
   onStatusChange: (taskId: string, newStatus: TaskStatus) => Promise<void> | void;
+  onOpenDependencyModal?: (task: KanbanTaskItem) => void;
   onDragStart?: (taskId: string) => void;
   onDragEnd?: () => void;
   isUpdating?: boolean;
@@ -84,7 +87,9 @@ const statusOptions: { value: TaskStatus; label: string }[] = [
 
 export const KanbanCard: React.FC<KanbanCardProps> = ({
   task,
+  allTasks = [],
   onStatusChange,
+  onOpenDependencyModal,
   onDragStart,
   onDragEnd,
   isUpdating = false,
@@ -94,6 +99,7 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
   const [isDragging, setIsDragging] = useState(false);
 
   const priority = priorityConfig[task.priority] || priorityConfig.normal;
+  const blockingTask = task.blocked_by ? allTasks.find((t) => t.id === task.blocked_by) : null;
 
   // Find primary assignee or fallback to first assignee
   const primaryAssignee =
@@ -154,26 +160,42 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
         ${isUpdating ? 'pointer-events-none opacity-60' : 'cursor-grab active:cursor-grabbing'}
       `}
     >
-      {/* Top row: Priority & Status Selector & WhatsApp Share */}
+      {/* Top row: Priority, Agent Badge, Dependency & WhatsApp Share */}
       <div className="flex items-center justify-between gap-2 mb-2.5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {/* Priority Pill */}
           <span
-            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border ${priority.badgeClass}`}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border ${priority.badgeClass}`}
           >
             <span className={`size-1.5 rounded-full ${priority.dotClass}`} />
             {priority.label}
           </span>
 
-          {/* Blocked by indicator if applicable */}
-          {task.blocked_by && (
+          {/* AI Agent Execution Badge */}
+          {task.execution_type === 'agent' ? (
             <span
-              title="This task is blocked by another task"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800/40"
+              title="This task is automated for AI Agent Execution"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800/40 font-medium"
             >
-              <AlertCircle className="size-3" />
-              Blocked
+              <Bot className="size-3 text-purple-600 dark:text-purple-400" />
+              Agent
             </span>
+          ) : null}
+
+          {/* Blocked by indicator with tooltip & modal trigger */}
+          {task.blocked_by && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenDependencyModal?.(task);
+              }}
+              title={blockingTask ? `Blocked by: "${blockingTask.title}" (${blockingTask.status}). Click to view chain.` : 'Blocked by prerequisite task. Click to manage.'}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 dark:text-red-400 dark:border-red-800/40 transition-colors cursor-pointer"
+            >
+              <AlertCircle className="size-3 text-red-500" />
+              <span>{blockingTask ? `Blocked: ${blockingTask.title.slice(0, 15)}...` : 'Blocked'}</span>
+            </button>
           )}
         </div>
 
@@ -266,6 +288,23 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
               <Clock className="size-3" />
               <span>{deadlineFormatted}</span>
             </div>
+          )}
+
+          {/* Dependency Chains Button */}
+          {onOpenDependencyModal && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenDependencyModal(task);
+              }}
+              title="Configure Task Dependencies & Workflow Chains"
+              aria-label="Manage dependencies"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 hover:border-slate-300 transition-colors dark:bg-neutral-900 dark:hover:bg-neutral-800 dark:text-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
+            >
+              <GitFork className="size-3 opacity-60 text-indigo-500" />
+              <span>Chains</span>
+            </button>
           )}
 
           {/* Quick Status Selector Dropdown */}

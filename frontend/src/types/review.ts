@@ -33,8 +33,11 @@ export interface ActionItemCandidate {
   title: string;
   description: string;
   due_date: string | null; // ISO YYYY-MM-DD
+  extracted_due_date?: string | null;
   assignee_id: string | null;
   assignee?: WorkspaceMember | null;
+  blocked_by_id?: string | null;
+  execution_type?: 'human' | 'agent';
   status: ActionItemStatus;
   confidence_score: number; // 0.0 to 1.0 (e.g. 0.95 for 95%)
   transcript_timestamp: string; // e.g. "04:15"
