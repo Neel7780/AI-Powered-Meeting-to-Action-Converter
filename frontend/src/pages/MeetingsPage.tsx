@@ -16,6 +16,7 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import { WorkflowChainsView } from '../components/kanban/WorkflowChainsView';
 import { TaskDependencyModal } from '../components/kanban/TaskDependencyModal';
 import { CreateMeeting } from './CreateMeeting';
+import { OnlineMeetingAutomationHub } from '../components/meetings/OnlineMeetingAutomationHub';
 import type { KanbanTaskItem, TaskStatus } from '../components/kanban/KanbanCard';
 import { reviewApi } from '../services/reviewApi';
 import { Button } from '../components/ui/button';
@@ -44,6 +45,7 @@ export default function MeetingsPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTaskForDependency, setSelectedTaskForDependency] = useState<KanbanTaskItem | null>(null);
+  const [activeTab, setActiveTab] = useState<'workflows' | 'automation'>('workflows');
 
   // 1. Fetch meetings and tasks for the active workspace
   const loadWorkspaceMeetingData = useCallback(async () => {
@@ -233,7 +235,42 @@ export default function MeetingsPage() {
         )}
       </div>
 
-      {loading ? (
+      {/* 2. Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-white/10 pb-1">
+        <button
+          onClick={() => setActiveTab('workflows')}
+          className={`flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs font-medium transition-all ${
+            activeTab === 'workflows'
+              ? 'border-indigo-500 text-white'
+              : 'border-transparent text-neutral-400 hover:text-neutral-200'
+          }`}
+        >
+          <GitFork className="size-3.5" />
+          <span>Workflow Chains & Tasks</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('automation')}
+          className={`flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs font-medium transition-all ${
+            activeTab === 'automation'
+              ? 'border-indigo-500 text-white'
+              : 'border-transparent text-neutral-400 hover:text-neutral-200'
+          }`}
+        >
+          <Video className="size-3.5 text-indigo-400" />
+          <span>Online Meeting Automation</span>
+          <span className="rounded-full border border-indigo-500/30 bg-indigo-500/15 px-2 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
+            Sprint 2 · Task 1
+          </span>
+        </button>
+      </div>
+
+      {activeTab === 'automation' && workspaceId ? (
+        <OnlineMeetingAutomationHub
+          workspaceId={workspaceId}
+          onMeetingCreated={loadWorkspaceMeetingData}
+        />
+      ) : loading ? (
         <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-neutral-400">
           <LoaderCircle className="size-5 animate-spin text-indigo-400" />
           <span>Loading meetings and workflow dependencies…</span>
