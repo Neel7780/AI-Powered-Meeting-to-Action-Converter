@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api import analytics, calendar, chat, extraction, health, meetings, review, tasks, workspaces
+from app.api import analytics, calendar, chat, extraction, health, meeting_automation, meetings, review, tasks, workspaces
 
 api_router = APIRouter()
 
@@ -28,3 +28,6 @@ api_router.include_router(extraction.router, tags=["Extraction"])
 
 # Meeting Chatbot API
 api_router.include_router(chat.router, prefix="/chat", tags=["Meeting Chatbot"])
+
+# Online Meeting Automation (Sprint 2 - Task 1: Madhav Chauhan)
+api_router.include_router(meeting_automation.router, tags=["Online Meeting Automation"])
