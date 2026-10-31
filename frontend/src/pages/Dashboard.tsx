@@ -24,6 +24,7 @@ import CreateMeeting from "../pages/CreateMeeting";
 import ChatPage from "../pages/ChatPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
+import { FollowUpModal } from "../components/meetings/FollowUpModal";
 
 // Icon tints shared with the landing page's feature rows
 const tints = {
@@ -58,6 +59,7 @@ export default function Dashboard() {
   const isOverview = !isTasksPage && !isMeetingsPage && !isChatPage;
 
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showFollowUp, setShowFollowUp] = useState(false);
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [fetchedStats, setStats] = useState<Stats | null>(null);
@@ -121,6 +123,13 @@ export default function Dashboard() {
       icon: Sparkles,
       tint: tints.indigo,
       onClick: () => navigate("/chat"),
+    },
+    {
+      label: "Draft Follow-Up",
+      hint: "1-Click personalized meeting recap",
+      icon: Sparkles,
+      tint: tints.indigo,
+      onClick: () => setShowFollowUp(true),
     },
     {
       label: "View tasks",
@@ -321,6 +330,14 @@ export default function Dashboard() {
             isOpen={showAddMember}
             onClose={() => setShowAddMember(false)}
             onAddMember={handleAddMember}
+          />
+
+          {/* 1-Click Meeting Follow-Up Modal */}
+          <FollowUpModal
+            isOpen={showFollowUp}
+            onClose={() => setShowFollowUp(false)}
+            meetingId="mtg-sprint-102"
+            meetingTitle="Latest Sprint Review"
           />
 
           {/* Global Floating Chat Widget (available across all workspace views except /chat) */}

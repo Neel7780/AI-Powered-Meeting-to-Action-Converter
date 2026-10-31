@@ -455,3 +455,33 @@ def notify_tasks_assigned(meeting_id: UUID | str, task_ids: List[UUID | str]) ->
     except Exception as exc:
         # Crucial: background job must never raise
         logger.error("notify_tasks_assigned: Unexpected error in background job: %s", exc, exc_info=True)
+
+
+def send_meeting_followup(
+    to_emails: List[str],
+    subject: str,
+    html_body: str,
+    text_body: str,
+    meeting_id: Optional[UUID | str] = None,
+) -> tuple[int, List[str]]:
+    """Dispatch personalized meeting follow-up emails to specified recipients.
+    
+    Zero-Budget Tech Stack: Brevo HTTPS API or standard smtplib.
+    Returns (success_count, list_of_failed_recipients).
+    """
+    sent_count = 0
+    failed: List[str] = []
+
+    for email_addr in to_emails:
+        addr = email_addr.strip()
+        if not addr:
+            continue
+        try:
+            send_email(to=addr, subject=subject, html_body=html_body, text_body=text_body)
+            sent_count += 1
+            logger.info("Follow-up email dispatched successfully to %s", addr)
+        except Exception as exc:
+            logger.error("Failed to send follow-up email to %s: %s", addr, exc)
+            failed.append(addr)
+
+    return sent_count, failed

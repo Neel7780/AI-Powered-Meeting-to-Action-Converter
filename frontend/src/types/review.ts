@@ -55,3 +55,35 @@ export interface MeetingDetails {
   status: 'draft' | 'extracting' | 'review_ready' | 'completed';
   candidate_count: number;
 }
+
+
+export type FollowUpTone = 'executive' | 'action_focused' | 'chat';
+
+export interface FollowUpParticipant {
+  user_id?: string | null;
+  name: string;
+  email?: string | null;
+  is_organiser: boolean;
+  task_count: number;
+}
+
+export interface DraftFollowUpResponse {
+  meeting_id: string;
+  meeting_title: string;
+  target_user_id?: string | null;
+  target_name?: string | null;
+  tone: FollowUpTone;
+  subject: string;
+  content_markdown: string;
+  content_html: string;
+  whatsapp_share_url: string;
+  recipient_emails: string[];
+  participants: FollowUpParticipant[];
+}
+
+export interface SendFollowUpResponse {
+  success: boolean;
+  recipients_count: number;
+  message: string;
+  failed_recipients?: string[];
+}

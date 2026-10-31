@@ -25,6 +25,7 @@ import { reviewApi } from '../services/reviewApi';
 import { TranscriptViewer } from '../components/review/TranscriptViewer';
 import { ActionItemReviewCard } from '../components/review/ActionItemReviewCard';
 import { Button } from '../components/ui/button';
+import { FollowUpModal } from '../components/meetings/FollowUpModal';
 
 interface MeetingReviewProps {
   meetingId?: string;
@@ -55,6 +56,7 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'warning' } | null>(null);
+  const [followUpModalOpen, setFollowUpModalOpen] = useState<boolean>(false);
 
   const showToast = (text: string, type: 'success' | 'info' | 'warning' = 'success') => {
     setToastMessage({ text, type });
@@ -350,6 +352,17 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
                 Task board
                 <ChevronRight />
               </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFollowUpModalOpen(true)}
+                title="Draft personalized follow-up in one click"
+                className="border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20"
+              >
+                <Sparkles className="size-3.5 text-indigo-400" />
+                Draft Follow-Up
+              </Button>
             </div>
           </div>
         </div>
@@ -523,6 +536,12 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
 
         </div>
       </main>
+        <FollowUpModal
+        isOpen={followUpModalOpen}
+        onClose={() => setFollowUpModalOpen(false)}
+        meetingId={meetingId}
+        meetingTitle={meeting?.title}
+      />
     </div>
   );
 };
