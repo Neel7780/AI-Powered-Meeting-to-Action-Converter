@@ -11,6 +11,7 @@ import {
   SquareKanban,
   UserPlus,
   Users,
+  Video,
 } from "lucide-react";
 
 import Navbar from "../components/layout/Navbar";
@@ -119,6 +120,13 @@ export default function Dashboard() {
       icon: CalendarPlus,
       tint: tints.indigo,
       onClick: () => navigate("/meetings"),
+    },
+    {
+      label: "Meeting Studio",
+      hint: "Summary, chapters and transcript explorer",
+      icon: Video,
+      tint: tints.indigo,
+      onClick: () => navigate("/meeting-details"),
     },
     {
       label: "Ask AI Copilot",
