@@ -7,10 +7,9 @@ import {
   MessageCircle, 
   Mail, 
   Download, 
-  Sparkles,
   Link2
 } from 'lucide-react';
-import type { RichMeetingDetails } from '../../types/meetingDetails';
+import type { RichMeetingDetails } from '../../../types/meetingDetails';
 
 interface ShareModalProps {
   meeting: RichMeetingDetails;
@@ -24,7 +23,6 @@ export const MeetingShareModal: React.FC<ShareModalProps> = ({
   onClose
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedSummary, setCopiedSummary] = useState(false);
 
   if (!isOpen) return null;
 

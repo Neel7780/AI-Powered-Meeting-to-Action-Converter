@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { MeetingDetailsSidebar } from '../components/meetings/details/MeetingDetailsSidebar';
 import { MeetingTopNav } from '../components/meetings/details/MeetingTopNav';
 import { MeetingVideoPlayer } from '../components/meetings/details/MeetingVideoPlayer';
@@ -16,7 +16,6 @@ import type { RichMeetingDetails } from '../types/meetingDetails';
 
 export const MeetingDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
 
   const [meeting, setMeeting] = useState<RichMeetingDetails>(DESIGN_SPRINT_MEETING_DETAILS);
   const [transcript, setTranscript] = useState(DESIGN_SPRINT_TRANSCRIPT);
@@ -160,6 +159,11 @@ export const MeetingDetailsPage: React.FC = () => {
 
         {/* Studio Content Grid */}
         <main className="flex-1 overflow-y-auto p-3 sm:p-5">
+          {isLoading && (
+            <div className="mb-2 text-center text-xs text-teal-400">
+              Loading meeting details...
+            </div>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full max-w-[1720px] mx-auto items-start">
             {/* Left Column (Video Player + Multi-Track Timeline) */}
             <div className="lg:col-span-6 xl:col-span-7 flex flex-col space-y-4">

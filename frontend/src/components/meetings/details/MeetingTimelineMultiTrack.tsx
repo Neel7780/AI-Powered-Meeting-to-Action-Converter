@@ -6,18 +6,15 @@ import {
   Target, 
   BarChart3, 
   Play, 
-  ChevronRight, 
-  Sparkles,
-  Search,
-  ExternalLink
+  ChevronRight
 } from 'lucide-react';
-import type { RichMeetingDetails, SpeakerTimelineTrack } from '../../types/meetingDetails';
+import type { RichMeetingDetails } from '../../../types/meetingDetails';
 
 interface TimelineProps {
   meeting: RichMeetingDetails;
   playbackSeconds: number;
   onSeek: (seconds: number) => void;
-  onSelectTimestamp: (timestamp: string, segmentId?: string) => void;
+  onSelectTimestamp?: (timestamp: string, segmentId?: string) => void;
 }
 
 export const MeetingTimelineMultiTrack: React.FC<TimelineProps> = ({
@@ -247,7 +244,10 @@ export const MeetingTimelineMultiTrack: React.FC<TimelineProps> = ({
           {meeting.clips.map((clip) => (
             <div
               key={clip.id}
-              onClick={() => onSeek(clip.start_seconds)}
+              onClick={() => {
+                onSeek(clip.start_seconds);
+                onSelectTimestamp?.(clip.start_timestamp);
+              }}
               className="flex items-center justify-between p-2.5 rounded-xl bg-[#161a22] hover:bg-[#1f2533] border border-[#262d3d] cursor-pointer transition"
             >
               <div className="flex items-center gap-2.5">
@@ -275,7 +275,10 @@ export const MeetingTimelineMultiTrack: React.FC<TimelineProps> = ({
           {meeting.comments.map((comm) => (
             <div
               key={comm.id}
-              onClick={() => onSeek(comm.seconds)}
+              onClick={() => {
+                onSeek(comm.seconds);
+                onSelectTimestamp?.(comm.timestamp);
+              }}
               className="p-2.5 rounded-xl bg-[#161a22] hover:bg-[#1f2533] border border-[#262d3d] cursor-pointer transition space-y-1"
             >
               <div className="flex items-center justify-between text-[11px]">

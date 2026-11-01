@@ -5,7 +5,13 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.core.deps import CurrentUser, get_current_user
+from app.services.llm.summary_service import (
+    LLMChapter,
+    LLMDiscussionPoint,
+    LLMSummaryAndChapters,
+)
 from main import app
 
 client = TestClient(app)
@@ -467,21 +473,39 @@ def test_get_meeting_summary_success():
 
     db.table.side_effect = table_mock
 
+    mock_llm_summary = LLMSummaryAndChapters(
+        overview="Design Sprint Review: team reviewed sidebar redesign and confirmed action items.",
+        key_discussion_points=[
+            LLMDiscussionPoint(
+                topic="Sidebar Redesign",
+                points=["Adopt teal accent theme", "Improve navigation hierarchy"],
+                timestamp="00:00",
+                speakers=["Karthik", "Asha"],
+            )
+        ],
+        outcomes=["Adopted teal accent theme"],
+        next_steps=["Asha: complete action items tab"],
+        chapters=[],
+    )
+
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
         with patch("app.core.deps.get_supabase_client", return_value=db), \
-             patch("app.api.meetings.get_supabase_client", return_value=db):
+             patch("app.api.meetings.get_supabase_client", return_value=db), \
+             patch("app.services.llm.summary_service._try_llm_summary_and_chapters", return_value=mock_llm_summary):
             resp = client.get(f"/api/meetings/{meeting_id}/summary")
             assert resp.status_code == 200
             data = resp.json()
             assert data["meeting_id"] == str(meeting_id)
             assert "Design Sprint Review" in data["overview"]
             assert len(data["key_discussion_points"]) > 0
+            assert data["key_discussion_points"][0]["topic"] == "Sidebar Redesign"
             assert len(data["decisions"]) == 1
             assert data["decisions"][0]["id"] == "dec-101"
             assert data["decisions"][0]["speaker"] == "Karthik"
             assert len(data["speaker_insights"]) == 2
             assert data["speaker_insights"][0]["speaker"] in ["Karthik", "Asha"]
+            assert data["model_used"] == settings.GEMINI_MODEL
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -559,11 +583,46 @@ def test_get_meeting_summary_forbidden_for_non_member():
         "status": "ready"
     }])
 
-    # Not a member of the workspace
+    # Not a member of the workspace -> returns 404 to avoid leaking workspace existence
     wm_mock = MagicMock()
     wm_mock.select.return_value = wm_mock
     wm_mock.eq.return_value = wm_mock
     wm_mock.execute.return_value = MagicMock(data=[])
+
+    db.table.side_effect = lambda name: meetings_mock if name == "meetings" else wm_mock
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+            resp = client.get(f"/api/meetings/{meeting_id}/summary")
+            assert resp.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_get_meeting_summary_forbidden_for_guest_role():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="guest@example.com")
+
+    db = MagicMock()
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[{
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Private Strategic Review",
+        "status": "ready"
+    }])
+
+    # Member exists, but role="guest" is not allowed (allowed: admin, organiser, member)
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "guest"}])
 
     db.table.side_effect = lambda name: meetings_mock if name == "meetings" else wm_mock
 
@@ -648,17 +707,56 @@ def test_get_meeting_chapters_success():
 
     db.table.side_effect = table_mock
 
+    mock_llm_chapters = LLMSummaryAndChapters(
+        overview="Design Sprint Review overview",
+        chapters=[
+            LLMChapter(
+                title="Introduction & Sprint Goals",
+                summary="Welcome team and set sprint goals.",
+                key_points=["Welcome to the sprint review."],
+                start_seconds=0,
+                duration_seconds=300,
+                speakers=["Karthik"],
+            ),
+            LLMChapter(
+                title="Sidebar Redesign & Styling",
+                summary="Review of sidebar redesign and accent styling updates.",
+                key_points=["Update accent styling", "Sidebar layout review"],
+                start_seconds=300,
+                duration_seconds=450,
+                speakers=["Asha"],
+            ),
+            LLMChapter(
+                title="API Latency Benchmarks",
+                summary="Evaluation of backend response times and latency.",
+                key_points=["API response is sub-second."],
+                start_seconds=750,
+                duration_seconds=450,
+                speakers=["Vikram"],
+            ),
+        ],
+    )
+
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
         with patch("app.core.deps.get_supabase_client", return_value=db), \
-             patch("app.api.meetings.get_supabase_client", return_value=db):
+             patch("app.api.meetings.get_supabase_client", return_value=db), \
+             patch("app.services.llm.summary_service._try_llm_summary_and_chapters", return_value=mock_llm_chapters):
             resp = client.get(f"/api/meetings/{meeting_id}/chapters")
             assert resp.status_code == 200
             data = resp.json()
             assert data["meeting_id"] == str(meeting_id)
-            assert data["chapter_count"] > 0
-            assert len(data["chapters"]) == data["chapter_count"]
+            assert data["chapter_count"] == 3
+            assert len(data["chapters"]) == 3
+            assert data["chapters"][0]["title"] == "Introduction & Sprint Goals"
             assert data["chapters"][0]["timestamp"] == "00:00"
+            assert data["chapters"][0]["action_item_count"] == 0
+            assert data["chapters"][1]["title"] == "Sidebar Redesign & Styling"
+            assert data["chapters"][1]["timestamp"] == "05:00"
+            assert data["chapters"][1]["action_item_count"] == 1
+            assert "ai-101" in data["chapters"][1]["action_item_ids"]
+            assert data["chapters"][2]["title"] == "API Latency Benchmarks"
+            assert data["chapters"][2]["timestamp"] == "12:30"
             # Action item at 320000ms (5m20s) should link to the corresponding chapter
             all_linked_actions = [ai for ch in data["chapters"] for ai in ch["action_item_ids"]]
             assert "ai-101" in all_linked_actions
@@ -735,10 +833,46 @@ def test_get_meeting_chapters_forbidden_for_non_member():
         "status": "ready"
     }])
 
+    # Not a member of the workspace -> returns 404 to avoid leaking workspace existence
     wm_mock = MagicMock()
     wm_mock.select.return_value = wm_mock
     wm_mock.eq.return_value = wm_mock
     wm_mock.execute.return_value = MagicMock(data=[])
+
+    db.table.side_effect = lambda name: meetings_mock if name == "meetings" else wm_mock
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+            resp = client.get(f"/api/meetings/{meeting_id}/chapters")
+            assert resp.status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_get_meeting_chapters_forbidden_for_guest_role():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="guest@example.com")
+
+    db = MagicMock()
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[{
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Restricted Meeting",
+        "status": "ready"
+    }])
+
+    # Member exists, but role="guest" is not allowed (allowed: admin, organiser, member)
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "guest"}])
 
     db.table.side_effect = lambda name: meetings_mock if name == "meetings" else wm_mock
 

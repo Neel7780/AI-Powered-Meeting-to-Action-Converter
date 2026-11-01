@@ -8,6 +8,7 @@ export interface MeetingChapter {
   summary: string;
   speakers: string[];
   key_points: string[];
+  action_item_count?: number;
   action_item_ids: string[];
   decision_count: number;
 }

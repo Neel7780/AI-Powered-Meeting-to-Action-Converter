@@ -6,14 +6,12 @@ import {
   RotateCw, 
   CheckCircle2, 
   ArrowRight, 
-  Tag, 
   FileText,
   User,
-  ExternalLink,
   Clock
 } from 'lucide-react';
-import type { MeetingSummaryData } from '../../types/meetingDetails';
-import type { ActionItemCandidate } from '../../types/review';
+import type { MeetingSummaryData } from '../../../types/meetingDetails';
+import type { ActionItemCandidate } from '../../../types/review';
 
 interface SummaryTabProps {
   summary: MeetingSummaryData;
@@ -79,65 +77,83 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1a202c] hover:bg-[#222a3a] border border-[#2d3748] text-slate-300 hover:text-white text-xs transition"
             title="Copy summary in Markdown format"
           >
-            {copied ? (
-              <>
-                <Check className="w-3 h-3 text-emerald-400" />
-                <span className="text-emerald-400 font-semibold">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="w-3 h-3" />
-                <span>Copy</span>
-              </>
-            )}
+            {copied ? <Check className="w-3.5 h-3.5 text-teal-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+            <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
           </button>
         </div>
       </div>
 
-      {/* Executive Overview */}
+      {/* Section 1: Overview */}
       <div className="space-y-2">
         <div className="text-[11px] font-bold tracking-wider uppercase text-teal-400 flex items-center gap-1.5">
           <FileText className="w-3.5 h-3.5" />
           <span>Executive Overview</span>
         </div>
-        <div className="p-3.5 rounded-xl bg-[#141720] border border-[#222734] text-slate-300 leading-relaxed text-xs sm:text-sm">
+        <p className="text-slate-200 leading-relaxed bg-[#11141c] p-3.5 rounded-xl border border-[#1e2330]">
           {summary.overview}
-        </div>
+        </p>
       </div>
 
-      {/* Key Discussion Points */}
+      {/* Speaker Insights Bar (Sprint 2 Feature) */}
+      {summary.speaker_insights && summary.speaker_insights.length > 0 && (
+        <div className="space-y-2.5">
+          <div className="text-[11px] font-bold tracking-wider uppercase text-slate-400 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-slate-400" />
+              <span>Participant Voice Contributions</span>
+            </span>
+            <span className="text-[10px] text-teal-400 font-mono">Calculated from audio duration</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {summary.speaker_insights.map((spk) => (
+              <div key={spk.speaker} className="p-3 rounded-xl bg-[#131620] border border-[#202636] space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-200 text-xs">{spk.speaker}</span>
+                  <span className="font-mono text-xs font-bold text-teal-300">{spk.talk_percentage}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-[#1f2536] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-teal-400 rounded-full"
+                    style={{ width: `${spk.talk_percentage}%` }}
+                  />
+                </div>
+                <div className="text-[10px] text-slate-400 truncate" title={spk.key_contribution}>
+                  {spk.key_contribution}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Section 2: Key Discussion Topics */}
       <div className="space-y-3">
-        <div className="text-[11px] font-bold tracking-wider uppercase text-slate-400 flex items-center justify-between">
-          <span>Key Discussion Topics</span>
-          <span className="text-teal-400 font-mono">{summary.key_discussion_points.length} topics</span>
+        <div className="text-[11px] font-bold tracking-wider uppercase text-slate-400 flex items-center gap-1.5">
+          <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
+          <span>Key Discussion Topics & Evidence</span>
         </div>
 
         <div className="space-y-3">
           {summary.key_discussion_points.map((topic, idx) => (
-            <div
-              key={idx}
-              className="p-3.5 rounded-xl bg-[#141720] border border-[#222734] hover:border-[#2d3547] transition space-y-2"
-            >
+            <div key={idx} className="p-3.5 rounded-xl bg-[#131620] border border-[#202636] space-y-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="font-semibold text-white text-xs sm:text-sm">
-                  {topic.topic}
-                </span>
+                <span className="font-bold text-slate-100 text-xs sm:text-[13px]">{topic.topic}</span>
                 {topic.timestamp && (
                   <button
                     onClick={() => onSelectTimestamp(topic.timestamp!)}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-950/60 text-teal-300 hover:bg-teal-900/80 font-mono text-[11px] border border-teal-800/40 transition"
-                    title="Jump to this topic in transcript"
+                    className="flex items-center gap-1 font-mono text-[11px] text-teal-400 hover:text-teal-300 bg-teal-950/60 px-2 py-0.5 rounded border border-teal-800/40"
                   >
-                    <Clock className="w-3 h-3" />
+                    <Clock className="w-2.5 h-2.5" />
                     <span>{topic.timestamp}</span>
                   </button>
                 )}
               </div>
 
-              <ul className="space-y-1.5 pl-1">
+              <ul className="space-y-1.5 pt-1">
                 {topic.points.map((pt, pIdx) => (
                   <li key={pIdx} className="flex items-start gap-2 text-slate-300 text-xs">
-                    <span className="text-teal-400 mt-1">•</span>
+                    <span className="text-teal-400 font-bold">•</span>
                     <span>{pt}</span>
                   </li>
                 ))}
@@ -147,24 +163,24 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
         </div>
       </div>
 
-      {/* Decisions Made */}
+      {/* Section 3: Decisions Made (Highlighted Grounded Items) */}
       <div className="space-y-3">
-        <div className="text-[11px] font-bold tracking-wider uppercase text-emerald-400 flex items-center gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Decisions Made ({summary.decisions.length})</span>
+        <div className="text-[11px] font-bold tracking-wider uppercase text-emerald-400 flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Decisions Formally Agreed ({summary.decisions.length})</span>
+          </span>
+          <span className="text-[10px] text-slate-400 font-normal">Grounded quotes</span>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {summary.decisions.map((dec) => (
             <div
               key={dec.id}
-              className="p-3 rounded-xl bg-[#131b1c] border border-emerald-900/40 hover:border-emerald-700/60 transition space-y-1.5"
+              className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/30 via-[#12181f] to-[#10141a] border border-emerald-800/40 space-y-2"
             >
-              <div className="flex items-center justify-between gap-2 text-[11px]">
-                <span className="font-semibold text-emerald-300 flex items-center gap-1">
-                  <User className="w-3 h-3" />
-                  <span>{dec.speaker}</span>
-                </span>
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-emerald-300">{dec.speaker} agreed:</span>
                 <button
                   onClick={() => onSelectTimestamp(dec.timestamp, dec.segment_id)}
                   className="flex items-center gap-1 font-mono text-emerald-400 hover:underline cursor-pointer"
@@ -199,9 +215,12 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
               key={cand.id}
               className="p-3 rounded-xl bg-[#151722] border border-[#24293c] hover:border-indigo-600/50 transition flex items-center justify-between gap-3"
             >
-              <div className="space-y-1 min-w-0">
+              <div
+                onClick={() => onJumpToCandidate(cand.id)}
+                className="space-y-1 min-w-0 cursor-pointer"
+              >
                 <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-teal-400 flex-shrink-0" />
+                  <span className="w-2 col-2 rounded-full bg-teal-400 flex-shrink-0" />
                   <span className="font-semibold text-slate-200 text-xs truncate">
                     {cand.title}
                   </span>

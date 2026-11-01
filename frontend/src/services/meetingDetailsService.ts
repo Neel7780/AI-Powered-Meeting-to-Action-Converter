@@ -1,4 +1,4 @@
-import { getApiUrl } from '../lib/api';
+import { API_BASE_URL, getApiUrl } from '../lib/api';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { RichMeetingDetails, MeetingChapter, MeetingSummaryData } from '../types/meetingDetails';
 import type { TranscriptSegment, ActionItemCandidate } from '../types/review';
@@ -30,7 +30,13 @@ export const meetingDetailsService = {
     }
 
     try {
-      const apiUrl = getApiUrl();
+      const summaryEndpoint = API_BASE_URL
+        ? `${API_BASE_URL}/api/meetings/${meetingId}/summary`
+        : getApiUrl(`/api/meetings/${meetingId}/summary`);
+      const chaptersEndpoint = API_BASE_URL
+        ? `${API_BASE_URL}/api/meetings/${meetingId}/chapters`
+        : getApiUrl(`/api/meetings/${meetingId}/chapters`);
+
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -41,8 +47,8 @@ export const meetingDetailsService = {
 
       // Parallel fetch from FastAPI backend
       const [summaryRes, chaptersRes] = await Promise.all([
-        fetch(`${apiUrl}/meetings/${meetingId}/summary`, { headers }).catch(() => null),
-        fetch(`${apiUrl}/meetings/${meetingId}/chapters`, { headers }).catch(() => null)
+        fetch(summaryEndpoint, { headers }).catch(() => null),
+        fetch(chaptersEndpoint, { headers }).catch(() => null)
       ]);
 
       let summaryData: MeetingSummaryData = DESIGN_SPRINT_MEETING_DETAILS.summary;
@@ -83,7 +89,7 @@ export const meetingDetailsService = {
 
       // Fetch transcript segments from Supabase if configured
       let transcriptData: TranscriptSegment[] = DESIGN_SPRINT_TRANSCRIPT;
-      if (isSupabaseConfigured()) {
+      if (isSupabaseConfigured) {
         const { data: tData } = await supabase
           .from('transcripts')
           .select('id')

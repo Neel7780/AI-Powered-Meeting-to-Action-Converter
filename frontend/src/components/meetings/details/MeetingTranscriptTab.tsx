@@ -6,15 +6,10 @@ import {
   Check, 
   Clock, 
   Sparkles, 
-  User, 
-  ChevronDown, 
-  ArrowUp, 
-  ArrowDown, 
-  X,
-  ExternalLink,
-  CheckCircle2
+  X, 
+  CheckCircle2 
 } from 'lucide-react';
-import type { TranscriptSegment, ActionItemCandidate } from '../../types/review';
+import type { TranscriptSegment, ActionItemCandidate } from '../../../types/review';
 
 interface TranscriptTabProps {
   segments: TranscriptSegment[];
@@ -65,37 +60,41 @@ export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
     return map;
   }, [candidates]);
 
-  // Filtered segments
+  // Filtered segments by speaker & search query
   const filteredSegments = useMemo(() => {
     return editableSegments.filter((seg) => {
-      const matchesSpeaker = selectedSpeaker === 'all' || seg.speaker_name === selectedSpeaker;
-      const matchesSearch =
+      const matchSpeaker =
+        selectedSpeaker === 'all' || seg.speaker_name === selectedSpeaker;
+      const matchSearch =
         searchQuery.trim() === '' ||
         seg.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        seg.speaker_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        seg.timestamp.includes(searchQuery);
-
-      return matchesSpeaker && matchesSearch;
+        seg.speaker_name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchSpeaker && matchSearch;
     });
   }, [editableSegments, selectedSpeaker, searchQuery]);
 
-  // Auto-scroll when highlightedTimestamp or highlightedSegmentId changes
+  // Auto-scroll to active playing segment or highlighted timestamp
   useEffect(() => {
-    let match: TranscriptSegment | undefined;
-    if (highlightedSegmentId) {
-      match = segments.find((s) => s.id === highlightedSegmentId);
+    const activeId = highlightedSegmentId;
+    if (activeId && segmentRefs.current[activeId]) {
+      segmentRefs.current[activeId]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+      return;
     }
-    if (!match && highlightedTimestamp) {
-      match = segments.find((s) => s.timestamp === highlightedTimestamp);
-    }
-    if (match && segmentRefs.current[match.id]) {
-      segmentRefs.current[match.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [highlightedTimestamp, highlightedSegmentId, segments]);
 
-  const handleCopy = () => {
+    if (highlightedTimestamp) {
+      const match = segments.find((s) => s.timestamp === highlightedTimestamp);
+      if (match && segmentRefs.current[match.id]) {
+        segmentRefs.current[match.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [highlightedSegmentId, highlightedTimestamp, segments]);
+
+  const handleCopyFullTranscript = () => {
     const fullText = editableSegments
-      .map((s) => `${s.speaker_name} (${s.timestamp}): ${s.text}`)
+      .map((s) => `[${s.timestamp}] ${s.speaker_name}: ${s.text}`)
       .join('\n\n');
     navigator.clipboard.writeText(fullText);
     setCopied(true);
@@ -108,116 +107,93 @@ export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
     );
   };
 
-  // Helper to render text with query highlight & token styling matching the screenshot
-  const renderTextContent = (text: string) => {
-    // Screenshot highlight token: "General, AI Insights, and Workspaces."
-    const token = 'General, AI Insights, and Workspaces.';
-    if (text.includes(token)) {
-      const parts = text.split(token);
-      return (
-        <span>
-          {parts[0]}
-          <span className="px-1.5 py-0.5 rounded-md bg-blue-600 text-white font-semibold text-xs shadow-xs mx-0.5">
-            {token}
-          </span>
-          {parts[1]}
-        </span>
-      );
-    }
-
-    if (!searchQuery.trim()) return text;
-
-    const regex = new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    const splitParts = text.split(regex);
-
-    return splitParts.map((part, i) =>
-      regex.test(part) ? (
-        <mark key={i} className="bg-yellow-400 text-black px-1 rounded font-bold">
-          {part}
-        </mark>
-      ) : (
-        part
-      )
-    );
-  };
-
   return (
-    <div className="flex flex-col h-full bg-[#0e1117] text-slate-200 select-text">
-      {/* Search & Actions Bar (Screenshot Top Controls) */}
-      <div className="p-3.5 border-b border-[#1d222e] bg-[#11141b] flex items-center justify-between gap-2 flex-wrap">
-        {/* Search Input Box */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search for transcript..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-8 py-1.5 text-xs bg-[#181c25] border border-[#252b39] rounded-lg text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 transition"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
+    <div className="flex flex-col h-full bg-[#0d0f14] text-slate-200 text-xs sm:text-[13px] select-none">
+      {/* Search & Filter Header Bar */}
+      <div className="p-3 sm:p-4 border-b border-[#1f2430] bg-[#10131a] space-y-2.5 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          {/* Search box */}
+          <div className="relative flex-1">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search transcript, speaker or phrase..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-8 py-1.5 text-xs bg-[#151922] border border-[#242b38] rounded-xl text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 transition"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
 
-        {/* Action Icons (Pencil edit and Copy sheets from screenshot) */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* Edit Mode Toggle Button */}
           <button
             onClick={() => setIsEditMode(!isEditMode)}
-            className={`p-1.5 rounded-lg border transition ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
               isEditMode
-                ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-xs'
-                : 'bg-[#181c25] hover:bg-[#202633] text-slate-400 hover:text-white border-[#252b39]'
+                ? 'bg-amber-950/80 text-amber-300 border-amber-800/60 shadow-xs'
+                : 'bg-[#151922] hover:bg-[#1d2330] text-slate-300 border-[#242b38]'
             }`}
-            title={isEditMode ? 'Exit edit mode' : 'Edit transcript text'}
+            title="Edit speaker names or transcript text"
           >
-            <Edit3 className="w-3.5 h-3.5" />
+            <Edit3 className="w-3.5 h-3.5 text-slate-400" />
+            <span className="hidden sm:inline">{isEditMode ? 'Done' : 'Edit'}</span>
           </button>
 
+          {/* Copy Full Transcript */}
           <button
-            onClick={handleCopy}
-            className="p-1.5 rounded-lg bg-[#181c25] hover:bg-[#202633] text-slate-400 hover:text-white border-[#252b39] transition"
-            title="Copy entire transcript"
+            onClick={handleCopyFullTranscript}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#151922] hover:bg-[#1d2330] border border-[#242b38] text-slate-300 hover:text-white text-xs font-medium transition"
+            title="Copy whole transcript with timestamps"
           >
-            {copied ? (
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-            ) : (
-              <Copy className="w-3.5 h-3.5" />
-            )}
+            {copied ? <Check className="w-3.5 h-3.5 text-teal-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+            <span className="hidden md:inline">{copied ? 'Copied' : 'Copy'}</span>
           </button>
         </div>
-      </div>
 
-      {/* Speaker Filter Pills */}
-      <div className="px-3 py-2 border-b border-[#1b202a] bg-[#0c0e14] flex items-center gap-1.5 overflow-x-auto scrollbar-none text-[11px]">
-        <button
-          onClick={() => setSelectedSpeaker('all')}
-          className={`px-2.5 py-0.5 rounded-full transition font-medium ${
-            selectedSpeaker === 'all'
-              ? 'bg-teal-500 text-slate-950 font-bold'
-              : 'text-slate-400 hover:text-slate-200 bg-[#161a22]'
-          }`}
-        >
-          All ({editableSegments.length})
-        </button>
-        {speakers.map((spk) => (
+        {/* Speaker Chips Filter */}
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5 text-[11px]">
+          <span className="text-slate-400 font-medium mr-1 text-[10px] uppercase tracking-wider">
+            Speakers:
+          </span>
+
           <button
-            key={spk}
-            onClick={() => setSelectedSpeaker(spk)}
-            className={`px-2.5 py-0.5 rounded-full transition font-medium ${
-              selectedSpeaker === spk
-                ? 'bg-teal-500 text-slate-950 font-bold'
-                : 'text-slate-400 hover:text-slate-200 bg-[#161a22]'
+            onClick={() => setSelectedSpeaker('all')}
+            className={`px-2.5 py-0.5 rounded-full border transition font-medium ${
+              selectedSpeaker === 'all'
+                ? 'bg-teal-500 text-slate-950 border-teal-400 font-bold'
+                : 'bg-[#151821] text-slate-400 border-[#222734] hover:text-white hover:bg-[#1a202c]'
             }`}
           >
-            {spk}
+            All ({segments.length})
           </button>
-        ))}
+
+          {speakers.map((spk) => {
+            const count = segments.filter((s) => s.speaker_name === spk).length;
+            const isSelected = selectedSpeaker === spk;
+
+            return (
+              <button
+                key={spk}
+                onClick={() => setSelectedSpeaker(spk)}
+                className={`px-2.5 py-0.5 rounded-full border transition whitespace-nowrap ${
+                  isSelected
+                    ? 'bg-teal-500 text-slate-950 border-teal-400 font-bold'
+                    : 'bg-[#151821] text-slate-300 border-[#222734] hover:text-white hover:bg-[#1a202c]'
+                }`}
+              >
+                <span>{spk}</span>
+                <span className="ml-1 opacity-70 text-[10px]">({count})</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Transcript Dialogue List */}
@@ -239,7 +215,9 @@ export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
             return (
               <div
                 key={seg.id}
-                ref={(el) => (segmentRefs.current[seg.id] = el)}
+                ref={(el) => {
+                  segmentRefs.current[seg.id] = el;
+                }}
                 className={`transition duration-300 rounded-xl p-3 -mx-2 space-y-1.5 ${
                   isHighlighted
                     ? 'bg-teal-950/40 border border-teal-500/50 ring-1 ring-teal-500/30 shadow-md'
@@ -268,43 +246,52 @@ export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
                   {linkedCandidates.length > 0 && (
                     <span className="text-[10px] font-semibold text-teal-300 bg-teal-950/80 px-2 py-0.5 rounded-full border border-teal-800/50 flex items-center gap-1">
                       <Sparkles className="w-2.5 h-2.5 text-teal-400" />
-                      <span>Action Item Detected</span>
+                      <span>{linkedCandidates.length} Action Item{linkedCandidates.length > 1 ? 's' : ''}</span>
                     </span>
                   )}
                 </div>
 
-                {/* Dialog Body (Editable in Edit Mode) */}
+                {/* Transcript Body Text (Editable or Read-Only) */}
                 {isEditMode ? (
                   <textarea
                     value={seg.text}
                     onChange={(e) => handleTextChange(seg.id, e.target.value)}
-                    className="w-full text-xs text-slate-200 bg-[#171b25] p-2 rounded-lg border border-[#2b3342] focus:outline-none focus:border-teal-500"
                     rows={2}
+                    className="w-full p-2 bg-[#171c26] text-slate-200 border border-[#2b3342] rounded-lg text-xs leading-relaxed focus:outline-none focus:border-teal-500"
                   />
                 ) : (
-                  <p className="text-xs sm:text-[13px] text-slate-300 leading-relaxed">
-                    {renderTextContent(seg.text)}
+                  <p className="text-slate-300 text-xs sm:text-[13px] leading-relaxed select-text">
+                    {seg.text}
                   </p>
                 )}
 
-                {/* Connected Action Items Context Cards */}
+                {/* Staging Gate Candidate Badge below verbatim excerpt */}
                 {linkedCandidates.length > 0 && (
                   <div className="pt-1.5 space-y-1.5">
                     {linkedCandidates.map((cand) => (
                       <div
                         key={cand.id}
-                        onClick={() => onOpenActionItem?.(cand.id)}
-                        className="p-2 rounded-lg bg-[#141824] hover:bg-[#1a2030] border border-teal-800/30 cursor-pointer transition flex items-center justify-between text-xs"
+                        className="p-2.5 rounded-lg bg-[#141b24] border border-teal-800/30 flex items-center justify-between gap-2"
                       >
-                        <div className="flex items-center gap-2 truncate">
+                        <div className="flex items-center gap-2 min-w-0">
                           <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
-                          <span className="font-medium text-teal-200 truncate">
-                            {cand.title}
-                          </span>
+                          <div className="truncate">
+                            <span className="font-semibold text-slate-200 text-xs truncate">
+                              {cand.title}
+                            </span>
+                            <span className="text-[11px] text-slate-400 ml-2">
+                              Assignee: <strong className="text-slate-300">{cand.assignee?.full_name || 'Unassigned'}</strong>
+                            </span>
+                          </div>
                         </div>
-                        <span className="text-[10px] text-slate-400 bg-[#1c2232] px-1.5 py-0.5 rounded flex-shrink-0">
-                          {cand.assignee?.full_name || 'Unassigned'}
-                        </span>
+
+                        <button
+                          onClick={() => onOpenActionItem?.(cand.id)}
+                          className="px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 hover:bg-teal-500 hover:text-slate-950 text-[10px] font-bold border border-teal-600/40 transition flex-shrink-0"
+                          title="Inspect AI confidence & evidence quote"
+                        >
+                          Review Gate
+                        </button>
                       </div>
                     ))}
                   </div>

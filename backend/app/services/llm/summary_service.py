@@ -12,7 +12,7 @@ import logging
 import re
 from typing import Literal
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
@@ -219,7 +219,7 @@ def generate_meeting_summary(
             outcomes=[],
             next_steps=[],
             speaker_insights=[],
-            generated_at=datetime.utcnow().isoformat() + "Z",
+            generated_at=datetime.now(timezone.utc).isoformat(),
             model_used="none",
         )
 
@@ -268,7 +268,7 @@ def generate_meeting_summary(
             outcomes=llm_result.outcomes,
             next_steps=llm_result.next_steps,
             speaker_insights=speaker_insights,
-            generated_at=datetime.utcnow().isoformat() + "Z",
+            generated_at=datetime.now(timezone.utc).isoformat(),
             model_used=settings.GEMINI_MODEL,
         )
 
@@ -323,7 +323,7 @@ def generate_meeting_summary(
         outcomes=outcomes,
         next_steps=next_steps,
         speaker_insights=speaker_insights,
-        generated_at=meeting.get("updated_at") or meeting.get("created_at") or (datetime.utcnow().isoformat() + "Z"),
+        generated_at=meeting.get("updated_at") or meeting.get("created_at") or datetime.now(timezone.utc).isoformat(),
         model_used="deterministic-grounded",
     )
 

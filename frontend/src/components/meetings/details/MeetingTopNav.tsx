@@ -4,13 +4,12 @@ import {
   ChevronRight, 
   Share2, 
   Menu, 
-  ExternalLink, 
   Layers, 
   CheckCircle2, 
   SlidersHorizontal 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { RichMeetingDetails } from '../../types/meetingDetails';
+import type { RichMeetingDetails } from '../../../types/meetingDetails';
 
 interface TopNavProps {
   meeting: RichMeetingDetails;
@@ -59,47 +58,55 @@ export const MeetingTopNav: React.FC<TopNavProps> = ({
             {meeting.title}
           </span>
 
-          <span
-            className={`hidden md:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-              isLiveBackend
-                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/50'
-                : 'bg-indigo-950/60 text-indigo-300 border-indigo-700/50'
-            }`}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isLiveBackend ? 'bg-emerald-400 animate-pulse' : 'bg-indigo-400'
-              }`}
-            />
-            <span>{isLiveBackend ? 'Live API' : 'Studio Demo'}</span>
-          </span>
+          {/* Live vs Demo Badge */}
+          {isLiveBackend ? (
+            <span className="ml-2 hidden sm:flex items-center gap-1 text-[11px] font-medium text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live Studio
+            </span>
+          ) : (
+            <span className="ml-2 hidden sm:flex items-center gap-1 text-[11px] font-medium text-amber-400 bg-amber-950/50 border border-amber-800/40 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              Demo Studio (Offline Mode)
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Right: Mode Switcher, Avatars & Share */}
-      <div className="flex items-center gap-2.5 flex-shrink-0">
-        {/* Split View Toggle */}
+      {/* Right Controls */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Toggle split view on desktop */}
         <button
           onClick={onToggleSplitView}
-          className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
-            splitView 
-              ? 'bg-teal-950/40 text-teal-300 border-teal-700/50' 
-              : 'bg-[#141820] text-slate-400 border-[#222733] hover:text-white'
+          className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border rounded-lg transition ${
+            splitView
+              ? 'bg-teal-950/80 text-teal-300 border-teal-700/60 shadow-xs'
+              : 'bg-[#151921] hover:bg-[#1b212c] text-slate-400 hover:text-slate-200 border-[#232936]'
           }`}
-          title="Toggle Summary & Transcript Side-by-Side View"
+          title="Toggle split screen view"
         >
           <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span>{splitView ? 'Tabs Mode' : 'Side-by-Side'}</span>
+          <span>{splitView ? 'Split: ON' : 'Split: OFF'}</span>
         </button>
 
-        {/* Go to Staging Gate Review */}
+        {/* Share Button */}
+        <button
+          onClick={onOpenShare}
+          className="flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-slate-950 bg-teal-400 hover:bg-teal-300 rounded-lg shadow-xs transition active:scale-95"
+          title="Share meeting summary via Link, WhatsApp or Email"
+        >
+          <Share2 className="w-3.5 h-3.5" />
+          <span>Share</span>
+        </button>
+
+        {/* Go to Review */}
         <button
           onClick={() => navigate('/meeting-review')}
           className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white bg-[#151921] hover:bg-[#1b212c] border border-[#232936] rounded-lg transition"
-          title="Review and approve candidate action items"
+          title="Open Action Item Review & Staging Gate"
         >
           <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
-          <span>Staging Gate ({meeting.summary.decisions.length + 4})</span>
+          <span className="hidden md:inline">Review Items</span>
         </button>
 
         {/* Go to Kanban */}
@@ -137,15 +144,6 @@ export const MeetingTopNav: React.FC<TopNavProps> = ({
             </div>
           ))}
         </div>
-
-        {/* Share Button (Screenshot button) */}
-        <button
-          onClick={onOpenShare}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-slate-900 hover:bg-slate-100 font-semibold text-xs shadow-xs transition active:scale-95"
-        >
-          <Share2 className="w-3.5 h-3.5 text-slate-900" />
-          <span>Share</span>
-        </button>
       </div>
     </header>
   );

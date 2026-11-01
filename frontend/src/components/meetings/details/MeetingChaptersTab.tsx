@@ -1,16 +1,11 @@
 import React from 'react';
 import { 
   Bookmark, 
-  Clock, 
   Play, 
   ArrowRight, 
-  CheckCircle2, 
-  Sparkles, 
-  Users, 
-  Tag,
-  ChevronRight
+  Users 
 } from 'lucide-react';
-import type { MeetingChapter } from '../../types/meetingDetails';
+import type { MeetingChapter } from '../../../types/meetingDetails';
 
 interface ChaptersTabProps {
   chapters: MeetingChapter[];
@@ -139,7 +134,7 @@ export const MeetingChaptersTab: React.FC<ChaptersTabProps> = ({
 
                 {/* Badges & 1-Click Navigate to Transcript */}
                 <div className="flex items-center gap-2">
-                  {((chap.action_item_ids && chap.action_item_ids.length > 0) || (chap.action_item_count && chap.action_item_count > 0)) && (
+                  {((chap.action_item_ids && chap.action_item_ids.length > 0) || ((chap.action_item_count ?? 0) > 0)) && (
                     <span className="text-[10px] bg-indigo-950/70 text-indigo-300 px-2 py-0.5 rounded border border-indigo-800/40 font-medium">
                       {(chap.action_item_ids?.length || chap.action_item_count)} Action Item{(chap.action_item_ids?.length || chap.action_item_count || 1) > 1 ? 's' : ''}
                     </span>

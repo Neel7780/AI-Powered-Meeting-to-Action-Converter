@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { FileText, Bookmark, Mic, Columns, LayoutGrid } from 'lucide-react';
+import { FileText, Bookmark, Mic, Columns } from 'lucide-react';
 import { MeetingSummaryTab } from './MeetingSummaryTab';
 import { MeetingChaptersTab } from './MeetingChaptersTab';
 import { MeetingTranscriptTab } from './MeetingTranscriptTab';
-import type { RichMeetingDetails, MeetingChapter } from '../../types/meetingDetails';
-import type { TranscriptSegment, ActionItemCandidate } from '../../types/review';
+import type { RichMeetingDetails, MeetingChapter } from '../../../types/meetingDetails';
+import type { TranscriptSegment, ActionItemCandidate } from '../../../types/review';
 
 interface RightPanelProps {
   meeting: RichMeetingDetails;
@@ -114,7 +114,7 @@ export const MeetingRightPanel: React.FC<RightPanelProps> = ({
                 summary={meeting.summary}
                 candidates={candidates}
                 onSelectTimestamp={handleNavigateToTranscript}
-                onJumpToCandidate={onSelectTimestamp}
+                onJumpToCandidate={(candidateId) => onSelectTimestamp('', candidateId)}
               />
             </div>
             <div className="h-full overflow-hidden">
@@ -136,7 +136,7 @@ export const MeetingRightPanel: React.FC<RightPanelProps> = ({
                 summary={meeting.summary}
                 candidates={candidates}
                 onSelectTimestamp={handleNavigateToTranscript}
-                onJumpToCandidate={onSelectTimestamp}
+                onJumpToCandidate={(candidateId) => onSelectTimestamp('', candidateId)}
               />
             )}
 
