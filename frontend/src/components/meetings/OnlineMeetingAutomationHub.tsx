@@ -153,7 +153,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-0.5 text-[11px] font-medium text-indigo-400">
                 <Radio className="size-3 animate-pulse text-indigo-400" />
-                Sprint 2 Feature · Task 1
+                Live Webhooks & Sync
               </span>
               <span className="text-xs text-neutral-500">Zero-Touch Ingestion</span>
             </div>
