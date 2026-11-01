@@ -105,13 +105,7 @@ export default function MeetingsPage() {
             ),
             task_assignees (
               user_id,
-              is_primary,
-              profiles (
-                id,
-                display_name,
-                email,
-                avatar_url
-              )
+              is_primary
             )
           `)
           .eq('workspace_id', workspaceId)
@@ -127,9 +121,42 @@ export default function MeetingsPage() {
       setMeetings(meetingList);
 
       const rawTasks = (tasksRes.data || []) as any[];
+      const userIds = Array.from(
+        new Set(
+          rawTasks
+            .flatMap((t) => (t.task_assignees || []).map((a: any) => a.user_id))
+            .filter(Boolean)
+        )
+      );
+
+      const profileMap = new Map<string, any>();
+      if (userIds.length > 0) {
+        try {
+          const { data: profiles, error: pErr } = await supabase
+            .from('profiles')
+            .select('id, display_name, email, avatar_url')
+            .in('id', userIds);
+          if (!pErr && profiles) {
+            profiles.forEach((p) => profileMap.set(p.id, p));
+          }
+        } catch {
+          // ignore profile lookup fallback
+        }
+      }
+
       const taskList: KanbanTaskItem[] = rawTasks.map((t) => ({
         ...t,
         execution_type: t.execution_type || (t.external_owner_label === 'AI Agent' ? 'agent' : 'human'),
+        task_assignees: (t.task_assignees || []).map((a: any) => ({
+          user_id: a.user_id,
+          is_primary: Boolean(a.is_primary),
+          profiles: profileMap.get(a.user_id) || {
+            id: a.user_id,
+            display_name: null,
+            email: null,
+            avatar_url: null,
+          },
+        })),
       }));
       setAllTasks(taskList);
 

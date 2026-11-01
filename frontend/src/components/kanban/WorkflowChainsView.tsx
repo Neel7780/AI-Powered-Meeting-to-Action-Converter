@@ -16,49 +16,87 @@ import { Button } from '@/components/ui/button';
 
 export interface WorkflowChainsViewProps {
   tasks: KanbanTaskItem[];
+  allTasks?: KanbanTaskItem[];
   onOpenDependencyModal: (task: KanbanTaskItem) => void;
   onStatusChange: (taskId: string, newStatus: TaskStatus) => Promise<void> | void;
 }
 
 export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
   tasks,
+  allTasks,
   onOpenDependencyModal,
   onStatusChange,
 }) => {
   const [filterMode, setFilterMode] = useState<'all' | 'blocked' | 'agent' | 'chains'>('all');
 
+  const sourceTasks = useMemo(() => {
+    return allTasks && allTasks.length > 0 ? allTasks : tasks;
+  }, [allTasks, tasks]);
+
+  const filteredTaskIds = useMemo(() => new Set(tasks.map((t) => t.id)), [tasks]);
+
   // Map tasks by ID for fast lookup
   const taskMap = useMemo(() => {
     const map = new Map<string, KanbanTaskItem>();
-    tasks.forEach((t) => map.set(t.id, t));
+    sourceTasks.forEach((t) => map.set(t.id, t));
     return map;
-  }, [tasks]);
+  }, [sourceTasks]);
 
   // Find all tasks that are roots (have no prerequisites)
   const rootTasks = useMemo(() => {
-    return tasks.filter((t) => !t.blocked_by);
-  }, [tasks]);
+    return sourceTasks.filter((t) => !t.blocked_by);
+  }, [sourceTasks]);
 
   // Group into distinct workflow chains (Root ➔ Dependents)
   const workflowChains = useMemo(() => {
     const chains: Array<{ root: KanbanTaskItem; dependents: KanbanTaskItem[] }> = [];
 
     rootTasks.forEach((root) => {
-      // Find all tasks directly or indirectly blocked by this root
-      const directDependents = tasks.filter((t) => t.blocked_by === root.id);
+      const directDependents = sourceTasks.filter((t) => t.blocked_by === root.id);
       if (directDependents.length > 0) {
-        // Collect entire chain recursively
-        const collected: KanbanTaskItem[] = [...directDependents];
-        directDependents.forEach((dep) => {
-          const subDependents = tasks.filter((t) => t.blocked_by === dep.id);
-          collected.push(...subDependents);
-        });
-        chains.push({ root, dependents: collected });
+        const collected: KanbanTaskItem[] = [];
+        const queue: KanbanTaskItem[] = [...directDependents];
+        const visited = new Set<string>();
+
+        while (queue.length > 0) {
+          const current = queue.shift()!;
+          if (visited.has(current.id)) continue;
+          visited.add(current.id);
+          collected.push(current);
+
+          const subs = sourceTasks.filter((t) => t.blocked_by === current.id);
+          queue.push(...subs);
+        }
+
+        // Only include this chain if it contains at least one task matching the filter
+        const matchesFilter =
+          filteredTaskIds.has(root.id) || collected.some((d) => filteredTaskIds.has(d.id));
+
+        if (matchesFilter) {
+          chains.push({ root, dependents: collected });
+        }
+      }
+    });
+
+    // Also handle cases where a filtered task is blocked by a task whose root was missing
+    const tasksInChains = new Set<string>();
+    chains.forEach((c) => {
+      tasksInChains.add(c.root.id);
+      c.dependents.forEach((d) => tasksInChains.add(d.id));
+    });
+
+    tasks.forEach((t) => {
+      if (t.blocked_by && !tasksInChains.has(t.id)) {
+        const prereq = taskMap.get(t.blocked_by);
+        if (prereq) {
+          chains.push({ root: prereq, dependents: [t] });
+          tasksInChains.add(t.id);
+        }
       }
     });
 
     return chains;
-  }, [rootTasks, tasks]);
+  }, [rootTasks, sourceTasks, filteredTaskIds, tasks, taskMap]);
 
   // Key KPI Metrics
   const metrics = useMemo(() => {
