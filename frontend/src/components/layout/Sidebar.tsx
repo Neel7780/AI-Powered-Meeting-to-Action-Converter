@@ -55,9 +55,10 @@ export default function Sidebar({ onClose }: SidebarProps) {
         ))}
       </nav>
 
-      <div className="border-t border-white/10 p-4">
-        <p className="eyebrow">Your role</p>
-        <p className="mt-1 text-sm capitalize text-neutral-300">{currentRole || "member"}</p>
+      <div className="border-t border-white/10 p-3">
+        <div className="rounded-md bg-white/[0.03] px-3 py-2 text-xs text-neutral-400">
+          Role: <span className="capitalize text-white">{currentRole ?? "Member"}</span>
+        </div>
       </div>
     </div>
   );

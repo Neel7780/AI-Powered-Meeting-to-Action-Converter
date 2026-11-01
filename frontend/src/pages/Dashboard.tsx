@@ -28,6 +28,7 @@ import AnalyticsPage from "../pages/AnalyticsPage";
 import MeetingsPage from "../pages/MeetingsPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
+import { FollowUpModal } from "../components/meetings/FollowUpModal";
 
 // Icon tints shared with the landing page's feature rows
 const tints = {
@@ -64,9 +65,11 @@ export default function Dashboard() {
   const isOverview = !isTasksPage && !isMeetingsPage && !isChatPage && !isTeamPage && !isAnalyticsPage;
 
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showFollowUp, setShowFollowUp] = useState(false);
   const [showCreateWorkspace, setShowCreateWorkspace] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [fetchedStats, setStats] = useState<Stats | null>(null);
+  const [latestMeeting, setLatestMeeting] = useState<{ id: string; title: string } | null>(null);
 
   const isAdmin = currentRole === "admin";
   const workspaceId = currentWorkspace?.id;
@@ -97,6 +100,27 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, [workspaceId, isOverview]);
+
+  // Query latest meeting in workspace to avoid hardcoded dummy IDs
+  useEffect(() => {
+    if (!workspaceId) {
+      setLatestMeeting(null);
+      return;
+    }
+    supabase
+      .from("meetings")
+      .select("id, title")
+      .eq("workspace_id", workspaceId)
+      .order("starts_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setLatestMeeting({ id: data[0].id, title: data[0].title });
+        } else {
+          setLatestMeeting(null);
+        }
+      });
+  }, [workspaceId]);
 
   const handleAddMember = async (
     email: string,
@@ -143,6 +167,19 @@ export default function Dashboard() {
       onClick: () => navigate("/analytics"),
     },
     {
+      label: "Draft Follow-Up",
+      hint: latestMeeting ? `Recap for: ${latestMeeting.title}` : "1-Click personalized meeting recap",
+      icon: Sparkles,
+      tint: tints.indigo,
+      onClick: () => {
+        if (latestMeeting) {
+          setShowFollowUp(true);
+        } else {
+          navigate("/meetings");
+        }
+      },
+    },
+    {
       label: "View tasks",
       hint: "Check your action items",
       icon: SquareKanban,
@@ -152,8 +189,8 @@ export default function Dashboard() {
     ...(isAdmin
       ? [
           {
-            label: "Add team member",
-            hint: "Send an email invite",
+            label: "Add member",
+            hint: "Invite colleagues to this workspace",
             icon: UserPlus,
             tint: tints.emerald,
             onClick: () => setShowAddMember(true),
@@ -163,13 +200,13 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="flex min-h-screen flex-col bg-black text-white">
       {/* Top Navbar */}
       <Navbar onMenuClick={() => setShowMobileSidebar(true)} />
 
-      <div className="flex">
+      <div className="flex flex-1">
         {/* Desktop Sidebar */}
-        <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-60 shrink-0 border-r border-white/10 lg:block">
+        <aside className="hidden w-64 shrink-0 border-r border-white/10 lg:block">
           <Sidebar />
         </aside>
 
@@ -356,6 +393,16 @@ export default function Dashboard() {
             onClose={() => setShowAddMember(false)}
             onAddMember={handleAddMember}
           />
+
+          {/* 1-Click Meeting Follow-Up Modal (dynamically loaded with real meeting UUID) */}
+          {latestMeeting && (
+            <FollowUpModal
+              isOpen={showFollowUp}
+              onClose={() => setShowFollowUp(false)}
+              meetingId={latestMeeting.id}
+              meetingTitle={latestMeeting.title}
+            />
+          )}
 
           {/* Global Floating Chat Widget (available across all workspace views except /chat) */}
           {!isChatPage && currentWorkspace && (

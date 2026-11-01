@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { WorkflowChainsView } from '../components/kanban/WorkflowChainsView';
 import { TaskDependencyModal } from '../components/kanban/TaskDependencyModal';
+import { FollowUpModal } from '../components/meetings/FollowUpModal';
 import { CreateMeeting } from './CreateMeeting';
 import { OnlineMeetingAutomationHub } from '../components/meetings/OnlineMeetingAutomationHub';
 import type { KanbanTaskItem, TaskStatus } from '../components/kanban/KanbanCard';
@@ -66,6 +67,7 @@ export default function MeetingsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTaskForDependency, setSelectedTaskForDependency] = useState<KanbanTaskItem | null>(null);
   const [activeTab, setActiveTab] = useState<'workflows' | 'automation'>('workflows');
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
 
   // 1. Fetch meetings, confirmed tasks, and candidate items dynamically from Supabase
   const loadWorkspaceMeetingData = useCallback(async () => {
@@ -495,6 +497,15 @@ export default function MeetingsPage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => setShowFollowUpModal(true)}
+                        className="border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 text-xs"
+                      >
+                        <Sparkles className="size-3.5 mr-1 text-indigo-400" />
+                        Draft Follow-Up
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => navigate(`/meetings/${activeMeeting.id}/review`)}
                         className="border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs"
                       >
@@ -604,6 +615,16 @@ export default function MeetingsPage() {
             ) : null}
           </div>
         </div>
+      )}
+
+      {/* 1-Click Meeting Follow-Up Modal */}
+      {activeMeeting && (
+        <FollowUpModal
+          isOpen={showFollowUpModal}
+          onClose={() => setShowFollowUpModal(false)}
+          meetingId={activeMeeting.id}
+          meetingTitle={activeMeeting.title}
+        />
       )}
 
       {/* Task Dependency Modal */}

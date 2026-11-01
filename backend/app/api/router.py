@@ -2,7 +2,19 @@
 
 from fastapi import APIRouter
 
-from app.api import analytics, calendar, chat, extraction, health, meeting_automation, meetings, review, tasks, workspaces
+from app.api import (
+    analytics,
+    calendar,
+    chat,
+    extraction,
+    followup,
+    health,
+    meeting_automation,
+    meetings,
+    review,
+    tasks,
+    workspaces,
+)
 
 api_router = APIRouter()
 
@@ -13,6 +25,7 @@ api_router.include_router(health.router, tags=["Health"])
 api_router.include_router(workspaces.router, prefix="/workspaces", tags=["Workspaces"])
 api_router.include_router(meetings.router, tags=["Meetings"])
 api_router.include_router(review.router, tags=["Review & Approval"])
+api_router.include_router(followup.router, prefix="/meetings", tags=["Follow-Up"])
 
 # Sprint 2 Tasks & Dependencies (Task 6)
 api_router.include_router(tasks.router, prefix="/workspaces", tags=["Tasks"])
