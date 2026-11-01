@@ -369,9 +369,6 @@ export default function MeetingsPage() {
         >
           <Video className="size-3.5 text-indigo-400" />
           <span>Online Meeting Automation</span>
-          <span className="rounded-full border border-indigo-500/30 bg-indigo-500/15 px-2 py-0.5 text-[10px] font-mono font-medium text-indigo-300">
-            Sprint 2 · Task 1
-          </span>
         </button>
       </div>
 
