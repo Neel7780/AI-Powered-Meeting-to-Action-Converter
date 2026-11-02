@@ -710,6 +710,17 @@ export const reviewApi = {
     });
   },
 
+  async updateTaskStatus(
+    workspaceId: string,
+    taskId: string,
+    status: string
+  ): Promise<any> {
+    if (!isSupabaseConfigured || !isValidUuid(workspaceId) || !isValidUuid(taskId)) {
+      return { id: taskId, status };
+    }
+    return patchApi(`/api/workspaces/${workspaceId}/tasks/${taskId}/status`, { status });
+  },
+
   async revertActionItem(itemId: string): Promise<ActionItemCandidate> {
     if (isSupabaseConfigured) throw new Error('Reviewed items are final');
     return this.updateActionItem(itemId, { status: 'pending' });

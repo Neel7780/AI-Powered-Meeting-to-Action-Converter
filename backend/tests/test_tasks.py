@@ -120,3 +120,96 @@ def test_circular_dependency_rejected():
         assert "Circular dependency" in resp.json()["detail"]
 
     app.dependency_overrides.clear()
+
+class MockQuery:
+    def __init__(self, data=None):
+        self._data = data if data is not None else []
+
+    def eq(self, *args, **kwargs):
+        return self
+
+    def neq(self, *args, **kwargs):
+        return self
+
+    def execute(self):
+        return MagicMock(data=self._data)
+
+
+def test_update_task_status_prereq_blocking():
+    app.dependency_overrides[get_current_user] = mock_user
+    ws_id = str(uuid4())
+    t1_id = str(uuid4())
+    t2_id = str(uuid4())
+
+    target_mock = {"id": t2_id, "workspace_id": ws_id, "status": "blocked", "blocked_by": t1_id}
+    prereq_mock = {"id": t1_id, "workspace_id": ws_id, "status": "in_progress", "blocked_by": None}
+
+    with patch("app.api.tasks.require_role", return_value="member"),          patch("app.api.tasks.get_supabase_client") as mock_db_getter:
+
+        mock_db = MagicMock()
+        mock_db_getter.return_value = mock_db
+
+        def mock_table(name: str):
+            table_mock = MagicMock()
+            if name == "tasks":
+                def mock_select(cols):
+                    sel_mock = MagicMock()
+                    def mock_eq(f, v):
+                        if str(v) == t2_id:
+                            return MockQuery([target_mock])
+                        elif str(v) == t1_id:
+                            return MockQuery([prereq_mock])
+                        return MockQuery([])
+                    sel_mock.eq.side_effect = mock_eq
+                    return sel_mock
+                table_mock.select.side_effect = mock_select
+            return table_mock
+
+        mock_db.table.side_effect = mock_table
+
+        resp = client.patch(
+            f"/api/workspaces/{ws_id}/tasks/{t2_id}/status",
+            json={"status": "in_progress"}
+        )
+        assert resp.status_code == 400
+        assert "prerequisite is not completed yet" in resp.json()["detail"]
+
+    app.dependency_overrides.clear()
+
+
+def test_update_task_status_done_unblocks_downstream():
+    app.dependency_overrides[get_current_user] = mock_user
+    ws_id = str(uuid4())
+    t1_id = str(uuid4())
+
+    target_mock = {"id": t1_id, "workspace_id": ws_id, "status": "in_progress", "blocked_by": None}
+
+    with patch("app.api.tasks.require_role", return_value="member"),          patch("app.api.tasks.get_supabase_client") as mock_db_getter:
+
+        mock_db = MagicMock()
+        mock_db_getter.return_value = mock_db
+
+        def mock_table(name: str):
+            table_mock = MagicMock()
+            if name == "tasks":
+                def mock_select(cols):
+                    sel_mock = MagicMock()
+                    sel_mock.eq.side_effect = lambda f, v: MockQuery([target_mock] if str(v) == t1_id else [])
+                    return sel_mock
+                table_mock.select.side_effect = mock_select
+                table_mock.update.side_effect = lambda payload: MockQuery([{"id": t1_id}])
+            return table_mock
+
+        mock_db.table.side_effect = mock_table
+
+        resp = client.patch(
+            f"/api/workspaces/{ws_id}/tasks/{t1_id}/status",
+            json={"status": "done"}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == t1_id
+        assert data["status"] == "done"
+        assert data["completed_at"] is not None
+
+    app.dependency_overrides.clear()

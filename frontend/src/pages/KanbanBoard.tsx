@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useWorkspace } from '@/context/WorkspaceContext';
+import { useAuth } from '@/context/AuthContext';
 import { KanbanColumn } from '@/components/kanban/KanbanColumn';
 import { TaskDependencyModal } from '@/components/kanban/TaskDependencyModal';
 import { WorkflowChainsView } from '@/components/kanban/WorkflowChainsView';
@@ -34,15 +35,16 @@ export interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps = {}) {
-  const { currentWorkspace } = useWorkspace();
+  const { currentWorkspace, loading: workspaceLoading } = useWorkspace();
+  const { user: authUser } = useAuth();
   const activeWorkspaceId = propWorkspaceId || currentWorkspace?.id;
+  const currentUserId = authUser?.id || null;
 
   const [tasks, setTasks] = useState<KanbanTaskItem[]>([]);
   const [meetings, setMeetings] = useState<MeetingOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [updatingTaskIds, setUpdatingTaskIds] = useState<Set<string>>(new Set());
 
   // Sprint 2 Feature State: Active View & Dependency Modal
@@ -55,25 +57,24 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
   const [selectedMeetingId, setSelectedMeetingId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // 1. Fetch current logged-in user
+  // Reset workspace-specific states whenever activeWorkspaceId changes
   useEffect(() => {
-    async function loadUser() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          setCurrentUserId(user.id);
-        } else {
-          setCurrentUserId('current-user');
-        }
-      } catch {
-        setCurrentUserId('current-user');
-      }
-    }
-    loadUser();
-  }, []);
+    setSelectedMeetingId('all');
+    setTasks([]);
+    setMeetings([]);
+    setErrorMsg(null);
+  }, [activeWorkspaceId]);
 
-  // 2. Fetch tasks and meetings from Supabase
+  // Fetch tasks and meetings from Supabase strictly scoped to activeWorkspaceId
   const fetchData = useCallback(async (isManualRefresh = false) => {
+    if (!activeWorkspaceId) {
+      setTasks([]);
+      setMeetings([]);
+      setIsLoading(false);
+      setIsRefreshing(false);
+      return;
+    }
+
     if (isManualRefresh) {
       setIsRefreshing(true);
     } else {
@@ -82,74 +83,95 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     setErrorMsg(null);
 
     try {
-      let taskQuery = supabase
-        .from('tasks')
-        .select(`
-          id,
-          workspace_id,
-          meeting_id,
-          title,
-          description,
-          deadline_utc,
-          priority,
-          status,
-          blocked_by,
-          source_excerpt,
-          external_owner_label,
-          created_at,
-          updated_at,
-          completed_at,
-          meetings (
+      const [taskRes, meetingRes] = await Promise.all([
+        supabase
+          .from('tasks')
+          .select(`
             id,
+            workspace_id,
+            meeting_id,
             title,
-            starts_at
-          ),
-          task_assignees (
-            user_id,
-            is_primary,
-            profiles (
+            description,
+            deadline_utc,
+            priority,
+            status,
+            blocked_by,
+            source_excerpt,
+            external_owner_label,
+            created_at,
+            updated_at,
+            completed_at,
+            meetings (
               id,
-              display_name,
-              email,
-              avatar_url
+              title,
+              starts_at
+            ),
+            task_assignees (
+              user_id,
+              is_primary
             )
-          )
-        `)
-        .order('created_at', { ascending: false });
+          `)
+          .eq('workspace_id', activeWorkspaceId)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('meetings')
+          .select('id, title, starts_at')
+          .eq('workspace_id', activeWorkspaceId)
+          .order('starts_at', { ascending: false }),
+      ]);
 
-      if (activeWorkspaceId) {
-        taskQuery = taskQuery.eq('workspace_id', activeWorkspaceId);
-      }
+      const meetingList = (meetingRes.data || []) as MeetingOption[];
+      setMeetings(meetingList);
+      setSelectedMeetingId((prev) => {
+        if (prev === 'all') return 'all';
+        return meetingList.some((m) => m.id === prev) ? prev : 'all';
+      });
 
-      const { data: taskData, error: taskError } = await taskQuery;
-
-      let meetingQuery = supabase
-        .from('meetings')
-        .select('id, title, starts_at')
-        .order('starts_at', { ascending: false });
-
-      if (activeWorkspaceId) {
-        meetingQuery = meetingQuery.eq('workspace_id', activeWorkspaceId);
-      }
-
-      const { data: meetingData } = await meetingQuery;
-
-      if (meetingData && meetingData.length > 0) {
-        setMeetings(meetingData as MeetingOption[]);
-      }
-
-      if (taskError) {
-        console.error('Supabase tasks fetch error:', taskError.message);
-        setErrorMsg(`Failed to load tasks: ${taskError.message}`);
+      if (taskRes.error) {
+        console.error('Supabase tasks fetch error:', taskRes.error.message);
+        setErrorMsg(`Failed to load tasks: ${taskRes.error.message}`);
         setTasks([]);
-      } else if (taskData) {
-        const mapped = (taskData as any[]).map((t) => ({
+      } else {
+        const rawTasks = (taskRes.data || []) as any[];
+        const userIds = Array.from(
+          new Set(
+            rawTasks
+              .flatMap((t) => (t.task_assignees || []).map((a: any) => a.user_id))
+              .filter(Boolean)
+          )
+        );
+
+        const profileMap = new Map<string, any>();
+        if (userIds.length > 0) {
+          try {
+            const { data: profiles, error: pErr } = await supabase
+              .from('profiles')
+              .select('id, display_name, email, avatar_url')
+              .in('id', userIds);
+            if (!pErr && profiles) {
+              profiles.forEach((p) => profileMap.set(p.id, p));
+            }
+          } catch (pErr) {
+            console.warn('Profile lookup warning:', pErr);
+          }
+        }
+
+        const mapped: KanbanTaskItem[] = rawTasks.map((t) => ({
           ...t,
-          execution_type: t.execution_type || (t.external_owner_label === 'AI Agent' ? 'agent' : 'human'),
+          execution_type:
+            t.execution_type || (t.external_owner_label === 'AI Agent' ? 'agent' : 'human'),
+          task_assignees: (t.task_assignees || []).map((a: any) => ({
+            user_id: a.user_id,
+            is_primary: Boolean(a.is_primary),
+            profiles: profileMap.get(a.user_id) || {
+              id: a.user_id,
+              display_name: null,
+              email: null,
+              avatar_url: null,
+            },
+          })),
         }));
         setTasks(mapped);
-      } else {
-        setTasks([]);
       }
     } catch (err: unknown) {
       console.error('Network exception while fetching tasks:', err);
@@ -164,12 +186,12 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     fetchData();
   }, [fetchData]);
 
-  // 3. Setup Supabase Realtime subscription
+  // Setup Supabase Realtime subscription for both tasks and task_assignees
   useEffect(() => {
     if (!activeWorkspaceId) return;
 
     const channel = supabase
-      .channel(`realtime:tasks:${activeWorkspaceId}`)
+      .channel(`realtime:kanban:${activeWorkspaceId}`)
       .on(
         'postgres_changes',
         {
@@ -180,7 +202,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
         },
         (payload) => {
           if (payload.eventType === 'UPDATE') {
-            const updatedRow = payload.new as KanbanTaskItem;
+            const updatedRow = payload.new as any;
             setTasks((prev) =>
               prev.map((t) => (t.id === updatedRow.id ? { ...t, ...updatedRow } : t))
             );
@@ -192,6 +214,17 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'task_assignees',
+        },
+        () => {
+          fetchData(true);
+        }
+      )
       .subscribe();
 
     return () => {
@@ -199,10 +232,19 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     };
   }, [fetchData, activeWorkspaceId]);
 
-  // 4. Handle Status Change (both Drag-and-Drop and Status Selector Dropdown)
+  // Handle Status Change with backend validation & cascade
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     const targetTask = tasks.find((t) => t.id === taskId);
     if (!targetTask || targetTask.status === newStatus) return;
+
+    // Prerequisite check: Cannot move task out of blocked if prerequisite is not completed
+    if (newStatus !== 'blocked' && targetTask.blocked_by) {
+      const prereq = tasks.find((t) => t.id === targetTask.blocked_by);
+      if (prereq && prereq.status !== 'done') {
+        setErrorMsg(`Cannot advance "${targetTask.title}": Prerequisite task is not completed yet.`);
+        return;
+      }
+    }
 
     const previousStatus = targetTask.status;
 
@@ -212,9 +254,13 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
         if (t.id === taskId) {
           return { ...t, status: newStatus };
         }
-        // If this task is completed ('done'), automatically unblock any downstream tasks!
+        // If this task is completed ('done'), automatically unblock downstream tasks
         if (newStatus === 'done' && t.blocked_by === taskId && t.status === 'blocked') {
           return { ...t, status: 'todo' };
+        }
+        // If moved backwards from done, re-block downstream tasks
+        if (previousStatus === 'done' && newStatus !== 'done' && t.blocked_by === taskId && t.status !== 'blocked') {
+          return { ...t, status: 'blocked' };
         }
         return t;
       })
@@ -223,29 +269,44 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     setUpdatingTaskIds((prev) => new Set(prev).add(taskId));
 
     try {
-      // Column-level security grants UPDATE (status) to authenticated users;
-      // updated_at is handled automatically by the tasks_set_updated_at trigger.
-      const { error } = await supabase
-        .from('tasks')
-        .update({ status: newStatus })
-        .eq('id', taskId);
+      if (activeWorkspaceId) {
+        await reviewApi.updateTaskStatus(activeWorkspaceId, taskId, newStatus);
+      } else {
+        await supabase
+          .from('tasks')
+          .update({ status: newStatus })
+          .eq('id', taskId);
+      }
+    } catch (err: any) {
+      console.warn('Backend update failed, trying direct Supabase fallback:', err);
+      try {
+        const { error } = await supabase
+          .from('tasks')
+          .update({ status: newStatus })
+          .eq('id', taskId);
 
-      if (error) {
-        console.error('Supabase status update error:', error.message);
+        if (error) {
+          throw error;
+        } else if (newStatus === 'done') {
+          await supabase
+            .from('tasks')
+            .update({ status: 'todo' })
+            .eq('blocked_by', taskId)
+            .eq('status', 'blocked');
+        } else if (previousStatus === 'done') {
+          await supabase
+            .from('tasks')
+            .update({ status: 'blocked' })
+            .eq('blocked_by', taskId)
+            .neq('status', 'blocked');
+        }
+      } catch (dbErr: any) {
+        console.error('Supabase status update error:', dbErr?.message || err?.message);
         setTasks((prev) =>
           prev.map((t) => (t.id === taskId ? { ...t, status: previousStatus } : t))
         );
-        setErrorMsg(`Failed to move task: ${error.message}`);
-      } else if (newStatus === 'done') {
-        // Automatically persist unblocking of downstream dependent tasks
-        await supabase
-          .from('tasks')
-          .update({ status: 'todo' })
-          .eq('blocked_by', taskId)
-          .eq('status', 'blocked');
+        setErrorMsg(`Failed to move task: ${dbErr?.message || err?.message || 'Update error'}`);
       }
-    } catch (err: unknown) {
-      console.warn('Update threw exception, running in local/demo mode:', err);
     } finally {
       setUpdatingTaskIds((prev) => {
         const next = new Set(prev);
@@ -305,7 +366,10 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     return tasks.filter((task) => {
       // Assignment filter: "All Workspace Tasks" vs "Assigned to Me"
       if (filterType === 'assigned') {
-        const isAssigned = task.task_assignees?.some((a) => a.user_id === currentUserId);
+        const isAssigned = Boolean(
+          currentUserId &&
+          task.task_assignees?.some((a) => a.user_id === currentUserId)
+        );
         if (!isAssigned) return false;
       }
 
@@ -541,7 +605,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       )}
 
       {/* Main Content Area */}
-      {isLoading ? (
+      {workspaceLoading || isLoading ? (
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <div
@@ -554,10 +618,19 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             </div>
           ))}
         </div>
+      ) : !activeWorkspaceId ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-[#060606] p-12 text-center">
+          <Users className="size-10 text-neutral-500 mb-3" />
+          <h3 className="text-lg font-medium text-white">No Workspace Selected</h3>
+          <p className="mt-1 text-sm text-neutral-400 max-w-md">
+            Please select or create a workspace to view and manage its tasks and workflow chains.
+          </p>
+        </div>
       ) : activeView === 'chains' ? (
         /* Sprint 2 View: Interactive Workflow Chains & Dependency Graph (Meeting-Aware) */
         <WorkflowChainsView
           tasks={filteredTasks}
+          allTasks={tasks}
           onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
           onStatusChange={handleStatusChange}
         />

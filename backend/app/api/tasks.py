@@ -160,3 +160,131 @@ def update_task_dependency(
         execution_type=payload.execution_type,
         updated_at=now_iso,
     )
+
+
+class TaskStatusUpdateRequest(BaseModel):
+    status: Literal["todo", "in_progress", "blocked", "done"] = Field(
+        ..., description="New task status"
+    )
+
+
+class TaskStatusUpdateResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    status: str
+    completed_at: str | None = None
+    updated_at: str
+    unblocked_tasks_count: int = 0
+    reblocked_tasks_count: int = 0
+
+
+@router.patch(
+    "/{workspace_id}/tasks/{task_id}/status",
+    response_model=TaskStatusUpdateResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update task status with automatic dependency cascading and RLS resolution",
+)
+def update_task_status(
+    workspace_id: UUID,
+    task_id: UUID,
+    payload: TaskStatusUpdateRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> TaskStatusUpdateResponse:
+    """Update task status in workspace.
+
+    Verifies workspace membership, checks that prerequisites are met before advancing to in_progress/done,
+    and automatically cascades downstream dependencies:
+    - If status is 'done', any downstream task blocked_by this task is unblocked to 'todo'.
+    - If status moves back from 'done', any downstream task is re-blocked.
+    """
+    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    client = get_supabase_client()
+
+    target_resp = (
+        client.table("tasks")
+        .select("id, workspace_id, status, blocked_by")
+        .eq("id", str(task_id))
+        .eq("workspace_id", str(workspace_id))
+        .execute()
+    )
+    if not target_resp.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found in this workspace",
+        )
+    target_task = target_resp.data[0]
+    previous_status = target_task.get("status", "todo")
+    new_status = payload.status
+
+    # Prerequisite verification: If new status is not 'blocked', prerequisite must be done
+    if new_status in ("todo", "in_progress", "done") and target_task.get("blocked_by"):
+        prereq_id = target_task.get("blocked_by")
+        prereq_resp = client.table("tasks").select("status").eq("id", str(prereq_id)).execute()
+        if prereq_resp.data and prereq_resp.data[0].get("status") != "done":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot advance task: prerequisite is not completed yet",
+            )
+
+    now_iso = datetime.now(UTC).isoformat()
+    completed_at = now_iso if new_status == "done" else None
+
+    update_payload = {
+        "status": new_status,
+        "completed_at": completed_at,
+        "updated_at": now_iso,
+    }
+
+    try:
+        updated_resp = client.table("tasks").update(update_payload).eq("id", str(task_id)).execute()
+        if not updated_resp.data:
+            raise RuntimeError("Database returned empty record on task update")
+    except Exception as exc:
+        logger.error("Failed to update task status: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update task status: {exc}",
+        ) from exc
+
+    unblocked_count = 0
+    reblocked_count = 0
+
+    # Auto-unblock downstream tasks if completed
+    if new_status == "done":
+        try:
+            unblock_resp = (
+                client.table("tasks")
+                .update({"status": "todo", "updated_at": now_iso})
+                .eq("workspace_id", str(workspace_id))
+                .eq("blocked_by", str(task_id))
+                .eq("status", "blocked")
+                .execute()
+            )
+            unblocked_count = len(unblock_resp.data) if unblock_resp.data else 0
+        except Exception as exc:
+            logger.warning("Downstream unblock warning: %s", exc)
+
+    # Re-block downstream tasks if previously done task was moved back
+    elif previous_status == "done" and new_status != "done":
+        try:
+            reblock_resp = (
+                client.table("tasks")
+                .update({"status": "blocked", "updated_at": now_iso})
+                .eq("workspace_id", str(workspace_id))
+                .eq("blocked_by", str(task_id))
+                .neq("status", "blocked")
+                .execute()
+            )
+            reblocked_count = len(reblock_resp.data) if reblock_resp.data else 0
+        except Exception as exc:
+            logger.warning("Downstream reblock warning: %s", exc)
+
+    return TaskStatusUpdateResponse(
+        id=task_id,
+        workspace_id=workspace_id,
+        status=new_status,
+        completed_at=completed_at,
+        updated_at=now_iso,
+        unblocked_tasks_count=unblocked_count,
+        reblocked_tasks_count=reblocked_count,
+    )
