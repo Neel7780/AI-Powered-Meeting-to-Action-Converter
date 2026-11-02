@@ -3,8 +3,9 @@ title: ActionPulse Diarization Worker
 emoji: 🎙️
 colorFrom: indigo
 colorTo: blue
-sdk: docker
-app_port: 7860
+sdk: gradio
+app_file: app.py
+python_version: "3.11"
 pinned: false
 ---
 
@@ -28,25 +29,29 @@ single biggest accuracy boost for diarization. The worker outputs anonymous labe
    <https://huggingface.co/settings/tokens>.
 2. **Accept the model terms** (gated, free): open
    <https://huggingface.co/pyannote/speaker-diarization-community-1> while logged in and click *Agree*.
-3. **Create the Space**: <https://huggingface.co/new-space>, SDK **Docker**, hardware **CPU basic (free)**.
-   Visibility can be private.
-4. **Push this folder** to the Space:
+3. **Create the Space**: <https://huggingface.co/new-space>, hardware **CPU basic (free)**. Any SDK works:
+   the `sdk: gradio` line in this README's header is what counts once you push. Do **not** keep
+   `static`, which can only serve HTML and can't run Python. The Gradio SDK runs
+   `python app.py`; `packages.txt` installs ffmpeg. The `Dockerfile` is only for local runs.
+4. **Push this folder** to the Space, replacing the template files:
    ```bash
-   git clone https://huggingface.co/spaces/<you>/actionpulse-diarization
-   cp diarization-worker/* actionpulse-diarization/
-   cd actionpulse-diarization && git add . && git commit -m "worker" && git push
+   git clone https://huggingface.co/spaces/<you>/<space>
+   cd <space> && git rm -q index.html style.css
+   cp ../diarization-worker/{README.md,app.py,requirements.txt,packages.txt} .
+   git add . && git commit -m "ActionPulse diarization worker" && git push
    ```
+   When git asks for a password, use a Hugging Face token with **write** access.
 5. **Space secrets** (Settings → Variables and secrets):
    - `HF_TOKEN`: your token from step 1
    - `WORKER_SECRET`: a long random string (`python -c "import secrets;print(secrets.token_urlsafe(32))"`)
    - optional `WHISPER_MODEL`: `base` (faster) or `medium` / `large-v3-turbo` (more accurate, slower)
 6. **Backend env vars** (Render dashboard → Environment):
-   - `DIARIZATION_WORKER_URL`: `https://<you>-actionpulse-diarization.hf.space`
+   - `DIARIZATION_WORKER_URL`: `https://<you>-<space>.hf.space`
      (for a private Space, also see the note below)
    - `DIARIZATION_WORKER_SECRET`: same value as `WORKER_SECRET`
 7. Apply `supabase/migrations/0006_audio_diarization.sql` in the Supabase SQL editor.
 
-Check that it's up: `GET https://<you>-actionpulse-diarization.hf.space/` returns `{"status": "ok"}`.
+Check that it's up: `GET https://<you>-<space>.hf.space/` returns `{"status": "ok"}`.
 
 > **Private Space:** requests also need `Authorization: Bearer <HF token>`. The simplest option is a
 > public Space: the `X-Worker-Secret` header already blocks everyone else from using `/diarize`.

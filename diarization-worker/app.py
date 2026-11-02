@@ -131,3 +131,10 @@ def diarize(
             turns = _speaker_turns(diar(str(wav), num_speakers=num_speakers))
 
     return {"language": info.language, "segments": assign_speakers(asr_segments, turns)}
+
+
+if __name__ == "__main__":
+    # Hugging Face "Gradio" Spaces start the app with `python app.py` and proxy port 7860.
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "7860")))
