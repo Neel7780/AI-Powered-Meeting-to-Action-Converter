@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from app.api import (
     analytics,
+    audio,
     calendar,
     chat,
     extraction,
@@ -24,6 +25,7 @@ api_router.include_router(health.router, tags=["Health"])
 # Sprint 1 Vertical Slice routers
 api_router.include_router(workspaces.router, prefix="/workspaces", tags=["Workspaces"])
 api_router.include_router(meetings.router, tags=["Meetings"])
+api_router.include_router(audio.router, tags=["Audio & Speaker Diarization"])
 api_router.include_router(review.router, tags=["Review & Approval"])
 api_router.include_router(followup.router, prefix="/meetings", tags=["Follow-Up"])
 
