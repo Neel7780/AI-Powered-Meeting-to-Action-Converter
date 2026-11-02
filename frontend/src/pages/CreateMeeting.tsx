@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Mic, Video } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { supabase } from '../lib/supabase';
 import { postApi } from '../services/reviewApi';
@@ -21,6 +22,7 @@ export function CreateMeeting() {
   const [progress, setProgress] = useState('');
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>();
   const [conferenceUrl, setConferenceUrl] = useState<string | undefined>();
+  const [meetingFormat, setMeetingFormat] = useState<'online' | 'in_person' | null>(null);
 
   const { currentWorkspace } = useWorkspace();
   const workspaceId = currentWorkspace?.id;
@@ -30,6 +32,8 @@ export function CreateMeeting() {
     setSelectedEventId(ev.id);
     setTitle(ev.title);
     setConferenceUrl(ev.conference_url || undefined);
+    // No video link on the calendar event: most likely an in-person meeting
+    setMeetingFormat(ev.conference_url ? 'online' : 'in_person');
     if (ev.timezone) setTimezone(ev.timezone);
 
     try {
@@ -182,6 +186,33 @@ export function CreateMeeting() {
             onMembersLoaded={setWorkspaceMembers}
           />
         )}
+
+        <div>
+          <p className="field-label">Where is this meeting happening?</p>
+          <div role="radiogroup" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {([
+              ['online', Video, 'Online', 'Google Meet, Zoom or Teams: upload the exported transcript'],
+              ['in_person', Mic, 'In person / offline', 'Record the meeting right here in ActionPulse'],
+            ] as const).map(([value, Icon, label, hint]) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={meetingFormat === value}
+                onClick={() => setMeetingFormat(value)}
+                className={`flex items-start gap-3 rounded-md border p-3 text-left transition-colors ${
+                  meetingFormat === value ? 'border-white/40 bg-white/[0.06]' : 'border-white/10 hover:border-white/25'
+                }`}
+              >
+                <Icon className="mt-0.5 size-4 shrink-0 text-neutral-400" />
+                <span>
+                  <span className="block text-sm font-medium text-white">{label}</span>
+                  <span className="block text-xs text-neutral-500">{hint}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="panel space-y-4 p-6">
@@ -193,6 +224,20 @@ export function CreateMeeting() {
             When recording, everyone in the room must be added as a participant.
           </p>
         </div>
+        {meetingFormat === 'in_person' && (
+          <div className="flex items-start gap-3 rounded-md border border-sky-500/25 bg-sky-500/5 p-3 text-sm text-neutral-300">
+            <Mic className="mt-0.5 size-4 shrink-0 text-sky-400" />
+            <p>
+              <span className="font-medium text-white">Offline meeting? Use Record meeting.</span>{' '}
+              Start recording below when the meeting begins and stop it at the end. We'll detect the{' '}
+              {selectedMemberIds.length + externalParticipants.length || 'different'} speakers, and you
+              just confirm who is who.
+              {selectedMemberIds.length + externalParticipants.length === 0 && (
+                <span className="text-amber-400"> Add everyone in the room as participants first.</span>
+              )}
+            </p>
+          </div>
+        )}
         <label className="flex cursor-pointer items-start gap-3 rounded-md border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-neutral-300">
           <input
             type="checkbox"
@@ -202,7 +247,11 @@ export function CreateMeeting() {
           />
           All participants were informed that this meeting (transcript or recording) will be processed by AI.
         </label>
-        <TranscriptUploadModal onSubmit={handleSubmit} progress={progress} />
+        <TranscriptUploadModal
+          onSubmit={handleSubmit}
+          progress={progress}
+          preferredTab={meetingFormat === 'in_person' ? 'record' : meetingFormat === 'online' ? 'upload' : undefined}
+        />
       </section>
     </div>
   );

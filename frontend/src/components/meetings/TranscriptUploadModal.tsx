@@ -8,10 +8,19 @@ interface TranscriptUploadModalProps {
   /** Sends the transcript to the backend; throw to show an error. */
   onSubmit: (input: { text?: string; file?: File; audio?: File }) => Promise<void>;
   progress?: string;
+  /** Switches to this tab when it changes (e.g. 'record' for in-person meetings). */
+  preferredTab?: 'paste' | 'upload' | 'record';
 }
 
-export function TranscriptUploadModal({ onSubmit, progress }: TranscriptUploadModalProps) {
-  const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'record'>('paste');
+export function TranscriptUploadModal({ onSubmit, progress, preferredTab }: TranscriptUploadModalProps) {
+  const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'record'>(preferredTab ?? 'paste');
+
+  // Follow the parent's suggestion when it changes (adjust-state-during-render, no effect needed)
+  const [lastPreferred, setLastPreferred] = useState(preferredTab);
+  if (preferredTab !== lastPreferred) {
+    setLastPreferred(preferredTab);
+    if (preferredTab) setActiveTab(preferredTab);
+  }
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [audio, setAudio] = useState<File | null>(null);
