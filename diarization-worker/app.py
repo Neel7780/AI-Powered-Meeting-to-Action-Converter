@@ -71,6 +71,21 @@ def _to_wav(src: Path, dst: Path) -> None:
     )
 
 
+def _read_wav(path: Path):
+    """16 kHz mono 16-bit WAV (from _to_wav) -> float32 numpy array.
+
+    Decoding ourselves keeps faster-whisper (PyAV) and pyannote (torchcodec) away from their own
+    audio decoders, whose versions often clash with preinstalled packages on Kaggle/Colab.
+    """
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(path), "rb") as w:
+        frames = w.readframes(w.getnframes())
+    return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def _speaker_turns(diarization) -> list[tuple[int, int, str]]:
     # pyannote 4 returns an object with .speaker_diarization; pyannote 3 returns the Annotation itself
     annotation = getattr(diarization, "exclusive_speaker_diarization", None) or getattr(
@@ -135,12 +150,18 @@ def diarize(
 
         with _lock:
             asr, diar = _load()
-            segments, info = asr.transcribe(str(wav), language=language or None, vad_filter=True)
+            import torch
+
+            samples = _read_wav(wav)
+            if samples.size < 16000 // 2:
+                raise HTTPException(422, "Recording is shorter than half a second")
+            segments, info = asr.transcribe(samples, language=language or None, vad_filter=True)
             asr_segments = [
                 {"start_ms": int(s.start * 1000), "end_ms": int(s.end * 1000), "text": s.text}
                 for s in segments
             ]
-            turns = _speaker_turns(diar(str(wav), num_speakers=num_speakers))
+            waveform = torch.from_numpy(samples.copy()).unsqueeze(0)  # (channel, time)
+            turns = _speaker_turns(diar({"waveform": waveform, "sample_rate": 16000}, num_speakers=num_speakers))
 
     return {"language": info.language, "segments": assign_speakers(asr_segments, turns)}
 
