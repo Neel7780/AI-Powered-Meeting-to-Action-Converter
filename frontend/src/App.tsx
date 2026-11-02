@@ -9,6 +9,7 @@ import MeetingReview from "./pages/MeetingReview";
 import AcceptInvite from "./pages/AcceptInvite";
 import CalendarCallback from "./pages/CalendarCallback";
 import MeetingDetailsPage from "./pages/MeetingDetailsPage";
+import SpeakerMapping from "./pages/SpeakerMapping";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="/invite/:token" element={<ProtectedRoute><AcceptInvite /></ProtectedRoute>} />
         <Route path="/calendar/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
         <Route path="/meetings/:id/review" element={<MeetingReview />} />
+        <Route path="/meetings/:id/speakers" element={<ProtectedRoute><SpeakerMapping /></ProtectedRoute>} />
         <Route path="/meeting-details" element={<MeetingDetailsPage />} />
         <Route path="/meetings/:id" element={<MeetingDetailsPage />} />
         <Route path="/meetings/design-sprint-review" element={<MeetingDetailsPage />} />

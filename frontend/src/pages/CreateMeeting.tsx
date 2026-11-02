@@ -61,10 +61,13 @@ export function CreateMeeting() {
   };
 
   // create meeting -> submit transcript (backend parses + stores) -> extract -> poll -> review
-  const handleSubmit = async (input: { text?: string; file?: File }) => {
+  const handleSubmit = async (input: { text?: string; file?: File; audio?: File }) => {
     if (!workspaceId) throw new Error('Please select or create a workspace first.');
     if (!title.trim() || !date || !timezone) throw new Error('Fill in title, date and timezone.');
     if (!attested) throw new Error('Confirm participants were told about AI processing.');
+    if (input.audio && selectedMemberIds.length + externalParticipants.length === 0) {
+      throw new Error('Add everyone in the room as participants: speaker detection uses the participant count.');
+    }
 
     setProgress('Creating meeting...');
     const meeting = await postApi(`/api/workspaces/${workspaceId}/meetings`, {
@@ -79,6 +82,17 @@ export function CreateMeeting() {
       calendar_provider: selectedEventId ? 'google' : undefined,
       conference_url: conferenceUrl || undefined,
     });
+
+    if (input.audio) {
+      // Offline meeting: transcription + diarization runs in the background (can take a while on
+      // the free worker); the speaker-mapping page polls and then runs extraction.
+      setProgress('Uploading recording...');
+      const audioForm = new FormData();
+      audioForm.append('file', input.audio);
+      await postApi(`/api/meetings/${meeting.id}/audio`, audioForm);
+      navigate(`/meetings/${meeting.id}/speakers`);
+      return;
+    }
 
     setProgress('Uploading transcript...');
     const form = new FormData();
@@ -175,7 +189,8 @@ export function CreateMeeting() {
           <p className="eyebrow">Step 02</p>
           <h2 className="mt-1 text-base font-medium tracking-tight text-white">Ingest transcript</h2>
           <p className="mt-1 text-sm text-neutral-400">
-            Upload meeting transcripts (.txt, .vtt, .srt, .docx) to extract action items.
+            Upload a transcript (.txt, .vtt, .srt, .docx), or record an in-person meeting and map who spoke.
+            When recording, everyone in the room must be added as a participant.
           </p>
         </div>
         <label className="flex cursor-pointer items-start gap-3 rounded-md border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-neutral-300">
@@ -185,7 +200,7 @@ export function CreateMeeting() {
             onChange={(e) => setAttested(e.target.checked)}
             className="mt-0.5 size-4 shrink-0 cursor-pointer accent-white"
           />
-          All participants were informed that this transcript will be processed by AI.
+          All participants were informed that this meeting (transcript or recording) will be processed by AI.
         </label>
         <TranscriptUploadModal onSubmit={handleSubmit} progress={progress} />
       </section>
