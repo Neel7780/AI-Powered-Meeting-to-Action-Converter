@@ -1,0 +1,9 @@
+# CPU-only torch wheels (much smaller than the default CUDA build)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+torchaudio
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+python-multipart>=0.0.9
+faster-whisper>=1.1.0
+pyannote.audio>=4.0.0

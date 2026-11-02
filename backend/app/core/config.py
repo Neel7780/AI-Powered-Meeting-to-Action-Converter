@@ -23,6 +23,12 @@ class Settings:
     AI_NOTICE_VERSION: str = os.getenv("AI_NOTICE_VERSION", "2026-09-v1")
     STORAGE_BUCKET_TRANSCRIPTS: str = "meeting-transcripts"
 
+    # Speaker diarization worker for offline (in-app recorded) meetings.
+    # Self-hosted on a free Hugging Face Space, see diarization-worker/README.md.
+    DIARIZATION_WORKER_URL: str = os.getenv("DIARIZATION_WORKER_URL", "").rstrip("/")
+    DIARIZATION_WORKER_SECRET: str = os.getenv("DIARIZATION_WORKER_SECRET", "")
+    DIARIZATION_TIMEOUT_SECONDS: float = float(os.getenv("DIARIZATION_TIMEOUT_SECONDS", "3600"))
+
     # Google Calendar Integration (OAuth 2.0)
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")

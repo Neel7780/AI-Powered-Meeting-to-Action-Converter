@@ -32,3 +32,8 @@ services:
         sync: false
       - key: INTERNAL_TICK_SECRET
         sync: false
+      # Offline-meeting diarization worker (diarization-worker/, free HF Space)
+      - key: DIARIZATION_WORKER_URL
+        sync: false
+      - key: DIARIZATION_WORKER_SECRET
+        sync: false

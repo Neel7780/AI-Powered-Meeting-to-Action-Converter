@@ -1,18 +1,29 @@
 import { useState, useRef } from 'react';
-import { ArrowRight, FileText, LoaderCircle, Upload } from 'lucide-react';
+import { ArrowRight, FileText, LoaderCircle, Mic, Upload } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Notice } from '../ui/notice';
+import { AudioRecorder } from './AudioRecorder';
 
 interface TranscriptUploadModalProps {
   /** Sends the transcript to the backend; throw to show an error. */
-  onSubmit: (input: { text?: string; file?: File }) => Promise<void>;
+  onSubmit: (input: { text?: string; file?: File; audio?: File }) => Promise<void>;
   progress?: string;
+  /** Switches to this tab when it changes (e.g. 'record' for in-person meetings). */
+  preferredTab?: 'paste' | 'upload' | 'record';
 }
 
-export function TranscriptUploadModal({ onSubmit, progress }: TranscriptUploadModalProps) {
-  const [activeTab, setActiveTab] = useState<'paste' | 'upload'>('paste');
+export function TranscriptUploadModal({ onSubmit, progress, preferredTab }: TranscriptUploadModalProps) {
+  const [activeTab, setActiveTab] = useState<'paste' | 'upload' | 'record'>(preferredTab ?? 'paste');
+
+  // Follow the parent's suggestion when it changes (adjust-state-during-render, no effect needed)
+  const [lastPreferred, setLastPreferred] = useState(preferredTab);
+  if (preferredTab !== lastPreferred) {
+    setLastPreferred(preferredTab);
+    if (preferredTab) setActiveTab(preferredTab);
+  }
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [audio, setAudio] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
@@ -49,8 +60,10 @@ export function TranscriptUploadModal({ onSubmit, progress }: TranscriptUploadMo
   };
 
   const handleSubmit = async () => {
-    const input = activeTab === 'paste' ? { text: text.trim() } : { file: file ?? undefined };
-    if (!input.text && !input.file) return;
+    const input = activeTab === 'paste' ? { text: text.trim() }
+      : activeTab === 'record' ? { audio: audio ?? undefined }
+      : { file: file ?? undefined };
+    if (!input.text && !input.file && !input.audio) return;
 
     setIsUploading(true);
     setStatus('idle');
@@ -66,7 +79,7 @@ export function TranscriptUploadModal({ onSubmit, progress }: TranscriptUploadMo
     }
   };
 
-  const tabClass = (tab: 'paste' | 'upload') =>
+  const tabClass = (tab: 'paste' | 'upload' | 'record') =>
     `flex flex-1 items-center justify-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
       activeTab === tab ? 'border-white text-white' : 'border-transparent text-neutral-500 hover:text-white'
     }`;
@@ -82,10 +95,19 @@ export function TranscriptUploadModal({ onSubmit, progress }: TranscriptUploadMo
           <Upload className="size-4" />
           Upload file
         </button>
+        <button type="button" role="tab" aria-selected={activeTab === 'record'} onClick={() => setActiveTab('record')} className={tabClass('record')}>
+          <Mic className="size-4" />
+          Record meeting
+        </button>
       </div>
 
       <div className="p-5">
-        {activeTab === 'paste' ? (
+        {activeTab === 'record' ? (
+          <AudioRecorder
+            onChange={(f) => { setAudio(f); setStatus('idle'); }}
+            onError={(msg) => { setStatus('error'); setErrorMessage(msg); }}
+          />
+        ) : activeTab === 'paste' ? (
           <div>
             <textarea
               aria-label="Meeting transcript"
@@ -125,14 +147,14 @@ export function TranscriptUploadModal({ onSubmit, progress }: TranscriptUploadMo
         )}
 
         <div className="mt-5 space-y-4">
-          {status === 'success' && <Notice tone="success">Done! Opening review...</Notice>}
+          {status === 'success' && <Notice tone="success">{activeTab === 'record' ? 'Uploaded! Opening speaker mapping...' : 'Done! Opening review...'}</Notice>}
           {status === 'error' && <Notice tone="error">{errorMessage}</Notice>}
 
           <div className="flex justify-end">
             <Button
               type="button"
               onClick={handleSubmit}
-              disabled={isUploading || (activeTab === 'paste' ? !text.trim() : !file)}
+              disabled={isUploading || (activeTab === 'paste' ? !text.trim() : activeTab === 'record' ? !audio : !file)}
             >
               {isUploading ? (
                 <>
@@ -141,7 +163,7 @@ export function TranscriptUploadModal({ onSubmit, progress }: TranscriptUploadMo
                 </>
               ) : (
                 <>
-                  Submit transcript <ArrowRight />
+                  {activeTab === 'record' ? 'Transcribe recording' : 'Submit transcript'} <ArrowRight />
                 </>
               )}
             </Button>

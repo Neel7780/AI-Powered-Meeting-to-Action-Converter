@@ -1,6 +1,6 @@
 """In-memory SQLite stand-in for the Supabase client, for end-to-end backend tests.
 
-The schema below mirrors supabase/migrations/0001 + 0002 for the tables the backend writes:
+The schema below mirrors supabase/migrations/0001 + 0002 (+ 0006 audio transcripts) for the tables the backend writes:
 same columns, CHECKs (enums become CHECK ... IN), UNIQUE keys, partial unique indexes, foreign keys,
 updated_at, and the validate_task_source trigger. Not mirrored: RLS (the backend uses the
 service-role key, which bypasses it), audit log, auth.users (profiles stands in for it).
@@ -104,20 +104,20 @@ CREATE UNIQUE INDEX meeting_participants_user_uq ON meeting_participants(meeting
 CREATE TABLE transcripts (
   id TEXT PRIMARY KEY,
   meeting_id TEXT NOT NULL UNIQUE REFERENCES meetings(id) ON DELETE CASCADE,
-  source TEXT NOT NULL CHECK (source IN ('paste', 'txt', 'vtt', 'srt', 'docx')),
+  source TEXT NOT NULL CHECK (source IN ('paste', 'txt', 'vtt', 'srt', 'docx', 'audio')),
   storage_path TEXT, raw_text TEXT, canonical_text TEXT, file_name TEXT,
-  file_size_bytes INTEGER CHECK (file_size_bytes IS NULL OR file_size_bytes BETWEEN 0 AND 10485760),
+  file_size_bytes INTEGER CHECK (file_size_bytes IS NULL OR file_size_bytes BETWEEN 0 AND 52428800),
   mime_type TEXT,
   created_at {TS}, updated_at {TS},
   CHECK ((source = 'paste' AND canonical_text IS NOT NULL)
-      OR (source IN ('txt', 'vtt', 'srt', 'docx') AND (storage_path IS NOT NULL OR canonical_text IS NOT NULL)))
+      OR (source IN ('txt', 'vtt', 'srt', 'docx', 'audio') AND (storage_path IS NOT NULL OR canonical_text IS NOT NULL)))
 );
 
 CREATE TABLE transcript_segments (
   id TEXT PRIMARY KEY,
   transcript_id TEXT NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
   segment_index INTEGER NOT NULL CHECK (segment_index >= 0),
-  speaker_name TEXT, start_ms INTEGER, end_ms INTEGER,
+  speaker_name TEXT, speaker_label TEXT, start_ms INTEGER, end_ms INTEGER,
   text TEXT NOT NULL CHECK (length(trim(text)) > 0),
   created_at {TS},
   CHECK ((start_ms IS NULL AND end_ms IS NULL)
