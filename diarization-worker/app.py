@@ -41,15 +41,27 @@ def _load():
         from faster_whisper import WhisperModel
         from pyannote.audio import Pipeline
 
-        torch.set_num_threads(os.cpu_count() or 2)
-        _models["asr"] = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
-        _models["diar"] = Pipeline.from_pretrained(DIARIZATION_MODEL, token=HF_TOKEN)
+        use_gpu = torch.cuda.is_available() and os.environ.get("DEVICE", "auto") != "cpu"
+        if use_gpu:
+            # float16 fits Whisper small/medium + pyannote in a 4 GB+ GPU (T4, RTX 3050, ...)
+            _models["asr"] = WhisperModel(WHISPER_MODEL, device="cuda", compute_type="float16")
+        else:
+            torch.set_num_threads(os.cpu_count() or 2)
+            _models["asr"] = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+        diar = Pipeline.from_pretrained(DIARIZATION_MODEL, token=HF_TOKEN)
+        if diar is None:
+            raise RuntimeError(f"Could not load {DIARIZATION_MODEL}: check HF_TOKEN and accept the model terms")
+        if use_gpu:
+            diar.to(torch.device("cuda"))
+        _models["diar"] = diar
+        _models["device"] = "cuda" if use_gpu else "cpu"
     return _models["asr"], _models["diar"]
 
 
 @app.get("/")
 def health():
-    return {"status": "ok", "whisper": WHISPER_MODEL, "diarization": DIARIZATION_MODEL}
+    return {"status": "ok", "whisper": WHISPER_MODEL, "diarization": DIARIZATION_MODEL,
+            "device": _models.get("device", "not loaded yet")}
 
 
 def _to_wav(src: Path, dst: Path) -> None:
