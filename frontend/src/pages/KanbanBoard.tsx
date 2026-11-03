@@ -5,6 +5,7 @@ import { useWorkspace } from '@/context/WorkspaceContext';
 import { useAuth } from '@/context/AuthContext';
 import { KanbanColumn } from '@/components/kanban/KanbanColumn';
 import { TaskDependencyModal } from '@/components/kanban/TaskDependencyModal';
+import { TaskPrerequisiteDialog } from '@/components/kanban/TaskPrerequisiteDialog';
 import { WorkflowChainsView } from '@/components/kanban/WorkflowChainsView';
 import { reviewApi } from '@/services/reviewApi';
 import type { KanbanTaskItem, TaskStatus } from '@/components/kanban/KanbanCard';
@@ -50,6 +51,23 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
   // Sprint 2 Feature State: Active View & Dependency Modal
   const [activeView, setActiveView] = useState<'kanban' | 'chains'>('kanban');
   const [selectedTaskForDependency, setSelectedTaskForDependency] = useState<KanbanTaskItem | null>(null);
+  const [prereqModalTask, setPrereqModalTask] = useState<KanbanTaskItem | null>(null);
+  const [isPrereqModalOpen, setIsPrereqModalOpen] = useState(false);
+
+  const handleOpenPrereqDialog = (task: KanbanTaskItem) => {
+    setPrereqModalTask(task);
+    setIsPrereqModalOpen(true);
+  };
+
+  const handlePrerequisiteLinked = (taskId: string, blockedById: string) => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId
+          ? { ...t, blocked_by: blockedById, status: t.status === 'done' ? 'done' : 'blocked' }
+          : t
+      )
+    );
+  };
 
   // Filter states
   const [filterType, setFilterType] = useState<'all' | 'assigned'>('all');
@@ -96,6 +114,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             priority,
             status,
             blocked_by,
+            created_by,
             source_excerpt,
             external_owner_label,
             created_at,
@@ -639,6 +658,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             onStatusChange={handleStatusChange}
             onDropTask={handleStatusChange}
             onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
+            onOpenPrereqDialog={handleOpenPrereqDialog}
             updatingTaskIds={updatingTaskIds}
           />
 
@@ -650,6 +670,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             onStatusChange={handleStatusChange}
             onDropTask={handleStatusChange}
             onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
+            onOpenPrereqDialog={handleOpenPrereqDialog}
             updatingTaskIds={updatingTaskIds}
           />
 
@@ -661,6 +682,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             onStatusChange={handleStatusChange}
             onDropTask={handleStatusChange}
             onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
+            onOpenPrereqDialog={handleOpenPrereqDialog}
             updatingTaskIds={updatingTaskIds}
           />
 
@@ -672,6 +694,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             onStatusChange={handleStatusChange}
             onDropTask={handleStatusChange}
             onOpenDependencyModal={(task) => setSelectedTaskForDependency(task)}
+            onOpenPrereqDialog={handleOpenPrereqDialog}
             updatingTaskIds={updatingTaskIds}
           />
         </div>
@@ -685,6 +708,20 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
         allTasks={tasks}
         onUpdateDependency={handleUpdateDependency}
         onStatusChange={handleStatusChange}
+        onOpenPrereqDialog={handleOpenPrereqDialog}
+      />
+
+      {/* 2-Way Task Prerequisite Communication Dialog */}
+      <TaskPrerequisiteDialog
+        isOpen={isPrereqModalOpen}
+        onClose={() => {
+          setIsPrereqModalOpen(false);
+          setPrereqModalTask(null);
+        }}
+        task={prereqModalTask}
+        allTasks={tasks}
+        workspaceId={activeWorkspaceId}
+        onPrerequisiteLinked={handlePrerequisiteLinked}
       />
     </div>
   );

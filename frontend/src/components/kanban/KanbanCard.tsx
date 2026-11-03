@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Quote, ChevronDown, CheckCircle2, Clock, Link as LinkIcon, Bot, GitFork } from 'lucide-react';
+import { AlertCircle, Quote, ChevronDown, CheckCircle2, Clock, Link as LinkIcon, Bot, GitFork, MessageSquare } from 'lucide-react';
 import { WhatsAppShareButton } from './WhatsAppShareButton';
 
 export type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
@@ -31,6 +31,7 @@ export interface KanbanTaskItem {
   execution_type?: 'human' | 'agent';
   source_excerpt: string;
   external_owner_label?: string | null;
+  created_by?: string;
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
@@ -47,6 +48,7 @@ export interface KanbanCardProps {
   allTasks?: KanbanTaskItem[];
   onStatusChange: (taskId: string, newStatus: TaskStatus) => Promise<void> | void;
   onOpenDependencyModal?: (task: KanbanTaskItem) => void;
+  onOpenPrereqDialog?: (task: KanbanTaskItem) => void;
   onDragStart?: (taskId: string) => void;
   onDragEnd?: () => void;
   isUpdating?: boolean;
@@ -90,6 +92,7 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
   allTasks = [],
   onStatusChange,
   onOpenDependencyModal,
+  onOpenPrereqDialog,
   onDragStart,
   onDragEnd,
   isUpdating = false,
@@ -288,6 +291,23 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
               <Clock className="size-3" />
               <span>{deadlineFormatted}</span>
             </div>
+          )}
+
+          {/* 2-Way Prerequisite Q&A Button */}
+          {onOpenPrereqDialog && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenPrereqDialog(task);
+              }}
+              title="2-Way Prerequisite Q&A with Manager"
+              aria-label="Ask about prerequisites"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/80 hover:border-indigo-300 transition-colors dark:bg-indigo-950/40 dark:hover:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-900/60"
+            >
+              <MessageSquare className="size-3 text-indigo-600 dark:text-indigo-400" />
+              <span>Prereqs</span>
+            </button>
           )}
 
           {/* Dependency Chains Button */}
