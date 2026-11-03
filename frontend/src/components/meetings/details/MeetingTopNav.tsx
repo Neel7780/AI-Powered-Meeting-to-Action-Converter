@@ -17,7 +17,6 @@ interface TopNavProps {
   onToggleMobileMenu?: () => void;
   splitView: boolean;
   onToggleSplitView: () => void;
-  isLiveBackend?: boolean;
 }
 
 export const MeetingTopNav: React.FC<TopNavProps> = ({
@@ -26,7 +25,6 @@ export const MeetingTopNav: React.FC<TopNavProps> = ({
   onToggleMobileMenu,
   splitView,
   onToggleSplitView,
-  isLiveBackend = false
 }) => {
   const navigate = useNavigate();
 
@@ -57,19 +55,6 @@ export const MeetingTopNav: React.FC<TopNavProps> = ({
           <span className="font-semibold text-white truncate">
             {meeting.title}
           </span>
-
-          {/* Live vs Demo Badge */}
-          {isLiveBackend ? (
-            <span className="ml-2 hidden sm:flex items-center gap-1 text-[11px] font-medium text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live Studio
-            </span>
-          ) : (
-            <span className="ml-2 hidden sm:flex items-center gap-1 text-[11px] font-medium text-amber-400 bg-amber-950/50 border border-amber-800/40 px-2 py-0.5 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              Demo Studio (Offline Mode)
-            </span>
-          )}
         </div>
       </div>
 

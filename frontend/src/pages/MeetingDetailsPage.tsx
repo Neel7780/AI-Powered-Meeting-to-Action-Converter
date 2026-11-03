@@ -20,7 +20,6 @@ export const MeetingDetailsPage: React.FC = () => {
   const [meeting, setMeeting] = useState<RichMeetingDetails>(DESIGN_SPRINT_MEETING_DETAILS);
   const [transcript, setTranscript] = useState(DESIGN_SPRINT_TRANSCRIPT);
   const [candidates, setCandidates] = useState(DESIGN_SPRINT_CANDIDATES);
-  const [isLiveBackend, setIsLiveBackend] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // Time state: Default to 20:47 (1247 seconds) as shown in the screenshot!
@@ -44,7 +43,6 @@ export const MeetingDetailsPage: React.FC = () => {
           setMeeting(result.meeting);
           setTranscript(result.transcript);
           setCandidates(result.candidates);
-          setIsLiveBackend(result.isLiveBackend);
         }
       } catch (err) {
         console.warn('Error loading meeting studio data:', err);
@@ -154,7 +152,6 @@ export const MeetingDetailsPage: React.FC = () => {
           onToggleMobileMenu={() => setMobileSidebarOpen(true)}
           splitView={splitView}
           onToggleSplitView={() => setSplitView(!splitView)}
-          isLiveBackend={isLiveBackend}
         />
 
         {/* Studio Content Grid */}

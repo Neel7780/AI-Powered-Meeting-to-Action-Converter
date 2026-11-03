@@ -148,7 +148,7 @@ export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
           {/* 1. Execution Routing (Human vs AI Agent) */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-neutral-300 mb-2">
-              Task Execution Mode (Sprint 2 Specification)
+              Task Execution Mode
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button

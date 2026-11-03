@@ -12,7 +12,6 @@ import {
   HelpCircle, 
   ChevronDown, 
   Search,
-  Sparkles,
   CheckSquare
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -142,17 +141,6 @@ export const MeetingDetailsSidebar: React.FC<SidebarProps> = ({ onCloseMobile })
               <span>Add Folder</span>
             </button>
           </div>
-        </div>
-
-        {/* AI Quick Insight Tag */}
-        <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-950/40 via-purple-950/30 to-teal-950/20 border border-indigo-800/30 text-xs text-slate-300 space-y-1.5">
-          <div className="flex items-center gap-1.5 text-teal-300 font-semibold text-[11px]">
-            <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-            <span>AI Staging Gate Active</span>
-          </div>
-          <p className="text-[11px] text-slate-400 leading-relaxed">
-            Gemini 3.1 Flash-Lite extracted 4 action items and 3 decisions with sub-second sync.
-          </p>
         </div>
       </div>
 
