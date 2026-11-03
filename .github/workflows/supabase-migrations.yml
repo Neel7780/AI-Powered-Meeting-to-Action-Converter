@@ -24,10 +24,10 @@ jobs:
         if: env.SUPABASE_DB_URL != '' || env.SUPABASE_DB_PASSWORD != ''
         run: |
           if [ -n "$SUPABASE_DB_URL" ]; then
-            supabase db push --remote "$SUPABASE_DB_URL"
+            supabase db push --remote "$SUPABASE_DB_URL" --yes
           else
             supabase link --project-ref "$PROJECT_REF"
-            supabase db push
+            supabase db push --yes
           fi
         env:
           PROJECT_REF: jdzwrpdkqlsnrnluuwjg
