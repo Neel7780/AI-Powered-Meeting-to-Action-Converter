@@ -94,7 +94,7 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
         </p>
       </div>
 
-      {/* Speaker Insights Bar (Sprint 2 Feature) */}
+      {/* Speaker Insights Bar */}
       {summary.speaker_insights && summary.speaker_insights.length > 0 && (
         <div className="space-y-2.5">
           <div className="text-[11px] font-bold tracking-wider uppercase text-slate-400 flex items-center justify-between">

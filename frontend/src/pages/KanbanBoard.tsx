@@ -416,20 +416,14 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow">Task Management & Orchestration</p>
-          <h1 className="mt-2 flex flex-wrap items-center gap-3 text-3xl font-medium tracking-tight text-white">
-            Tasks & Workflow Chains
-            <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-emerald-400">
-              <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-              Live Supabase Data
-            </span>
-          </h1>
+          <h1 className="mt-2 text-3xl font-medium tracking-tight text-white">Tasks & Workflow Chains</h1>
           <p className="mt-2 text-sm text-neutral-400">
             Approved action items, multi-step dependencies, and AI agent execution routing.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Sprint 2 View Switcher Tabs: Kanban vs Workflow Chains */}
+          {/* View switcher: Kanban vs Workflow Chains */}
           <div className="inline-flex rounded-lg border border-white/10 bg-white/[0.04] p-1">
             <button
               type="button"

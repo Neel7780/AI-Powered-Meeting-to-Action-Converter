@@ -572,9 +572,6 @@ export default function MeetingsPage() {
                           Confirmed Task Chains & Execution Sequences
                         </h3>
                       </div>
-                      <span className="text-xs text-neutral-400">
-                        Live board tasks synced with Supabase
-                      </span>
                     </div>
 
                     <WorkflowChainsView
@@ -593,9 +590,6 @@ export default function MeetingsPage() {
                         <div>
                           <h4 className="text-xs font-semibold text-white flex items-center gap-1.5">
                             AI-Parsed Action Sequences
-                            <span className="rounded-full bg-indigo-500/20 border border-indigo-500/30 px-2 py-0.5 text-[10px] text-indigo-300 font-mono">
-                              Staging Review Stage
-                            </span>
                           </h4>
                           <p className="text-[11px] text-neutral-300 mt-0.5">
                             Gemini extracted these sequential dependency chains directly from the meeting transcript.

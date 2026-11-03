@@ -8,7 +8,6 @@ import {
   VolumeX, 
   Maximize, 
   Minimize, 
-  Tag, 
   Calendar,
   Sparkles
 } from 'lucide-react';
@@ -85,11 +84,6 @@ export const MeetingVideoPlayer: React.FC<VideoPlayerProps> = ({
               <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3 text-slate-400" />
                 <span>{meeting.date_formatted}</span>
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <Tag className="w-3 h-3 text-teal-400" />
-                <span className="text-teal-300 font-medium">Sprint 2 Studio Active</span>
               </span>
             </div>
           </div>
