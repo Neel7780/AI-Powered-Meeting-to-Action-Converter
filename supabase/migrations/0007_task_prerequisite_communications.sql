@@ -93,6 +93,9 @@ create policy task_comm_update_workspace_members
     )
   );
 
--- 7. Reload schema cache for PostgREST
+-- 7. Grant table access to authenticated and service_role
+grant select, insert, update, delete on table public.task_communications to authenticated, service_role;
+
+-- 8. Reload schema cache for PostgREST
 notify pgrst, 'reload schema';
 
