@@ -1,6 +1,6 @@
 # ActionPulse Backend (Python 3.11+ / FastAPI)
 
-> **Role in Sprint 1:** Ingestion parsers, Gemini 3.1 Flash-Lite extraction pipeline, review/approval endpoints, and task creation.
+> **Role:** Ingestion parsers, Amazon Bedrock extraction, meeting summaries, chat, follow-up drafts, review/approval endpoints, and task creation.
 
 ---
 
@@ -14,18 +14,7 @@ source venv/bin/activate
 ```
 
 ### Step 2: Install Core Dependencies
-Create `requirements.txt`:
-```txt
-fastapi>=0.110.0
-uvicorn[standard]>=0.28.0
-pydantic>=2.6.0
-supabase>=2.3.0
-google-genai>=0.1.1
-python-multipart>=0.0.9
-python-dotenv>=1.0.1
-httpx>=0.27.0
-```
-Install them:
+Install the existing requirements (including `langchain-aws`):
 ```bash
 pip install -r requirements.txt
 ```
@@ -35,7 +24,40 @@ Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Fill in your `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `GEMINI_API_KEY`.
+Fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and the Bedrock settings:
+
+```dotenv
+AWS_BEARER_TOKEN_BEDROCK=your-bedrock-api-key
+AWS_REGION=us-east-1
+BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
+LLM_PROVIDER_ALLOWLIST=bedrock
+```
+
+Generate the key in the Amazon Bedrock console under **API keys**. It is a bearer
+API key, not an AWS access-key/secret-key pair. Keep it in `backend/.env` locally
+and the backend's environment settings on Render; never put it in frontend variables.
+When upgrading an existing deployment, replace the old Gemini variables and change
+any existing `LLM_PROVIDER_ALLOWLIST` value to `bedrock`. Restart the backend afterwards.
+
+All AI features share LangChain's `ChatBedrockConverse` client in
+`app/services/llm/bedrock.py`. The selected model must support the Converse API
+and tool calling for structured extraction, summaries, and chat. Use a model ID
+or inference profile ID available to your account in the configured region;
+for example, `us.amazon.nova-lite-v1:0` is a US inference profile alternative.
+The client caps responses at 4,096 tokens and uses a 60-second read timeout with
+up to two SDK retries. Existing transcript grounding, consent checks, review gates,
+and deterministic fallbacks remain in place.
+
+Bedrock is billed by usage; AWS credits have account-specific eligibility and expiry.
+Confirm that your selected model is covered before using real meetings. Token usage
+and the Bedrock model ID are recorded in `llm_runs`; `est_cost_inr` is left null
+because the previous Gemini rates do not apply. Check AWS Billing for actual charges.
+
+References: [AWS API-key setup](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-use.html),
+[LangChain Bedrock integration](https://docs.langchain.com/oss/python/integrations/chat/bedrock).
+
+Offline checks: `python -m pytest tests`. Live Bedrock tests are opt-in:
+set `RUN_LIVE_BEDROCK_TESTS=1` and a real `AWS_BEARER_TOKEN_BEDROCK` to run them.
 
 ### Step 4: Run FastAPI Development Server
 ```bash
@@ -62,7 +84,7 @@ uvicorn main:app --reload --port 8000
 2. **Endpoints to Build in Sprint 1:**
    * `POST /api/meetings/{id}/extract`
      * Reads canonical transcript text.
-     * Calls Gemini 3.1 Flash-Lite with JSON schema output.
+     * Calls Amazon Bedrock through LangChain with structured schema output.
      * Inserts candidate items into `public.extracted_items` (defaults to `review_status = 'needs_review'`).
    * `POST /api/meetings/{id}/approve`
      * Receives item approval request from organiser.

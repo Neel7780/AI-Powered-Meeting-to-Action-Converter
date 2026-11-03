@@ -328,7 +328,7 @@ def simulate_online_meeting(
                 "review_status": "needs_review",
                 "rejection_reason": None,
                 "provider": payload.provider.value,
-                "model_version": "gemini-3.1-flash-lite",
+                "model_version": "demo",
                 "created_at": now.isoformat(),
             },
             {
@@ -347,7 +347,7 @@ def simulate_online_meeting(
                 "review_status": "needs_review",
                 "rejection_reason": f"depends_on:{task_1_id}",
                 "provider": payload.provider.value,
-                "model_version": "gemini-3.1-flash-lite",
+                "model_version": "demo",
                 "created_at": now.isoformat(),
             },
             {
@@ -366,7 +366,7 @@ def simulate_online_meeting(
                 "review_status": "needs_review",
                 "rejection_reason": None,
                 "provider": payload.provider.value,
-                "model_version": "gemini-3.1-flash-lite",
+                "model_version": "demo",
                 "created_at": now.isoformat(),
             },
         ]

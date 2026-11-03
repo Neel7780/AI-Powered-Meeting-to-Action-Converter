@@ -5,11 +5,48 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
 
+from app.core.config import settings
 from app.core.deps import CurrentUser, get_current_user
+from app.services.llm.chat_assistant import StructuredChatOutput, answer_workspace_chat
 from main import app
 
 client = TestClient(app)
+
+
+@pytest.mark.parametrize("allowed, valid_response", [(True, True), (True, False), (False, True)])
+def test_bedrock_chat_usage_fallback_and_provider_allowlist(monkeypatch, allowed, valid_response):
+    monkeypatch.setattr(settings, "AWS_BEARER_TOKEN_BEDROCK", "test-key")
+    monkeypatch.setattr(settings, "LLM_PROVIDER_ALLOWLIST", ["bedrock"] if allowed else [])
+    db = MagicMock()
+    model = MagicMock()
+    model.with_structured_output.return_value.invoke.return_value = {
+        "raw": AIMessage(content="", usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}),
+        "parsed": StructuredChatOutput(answer="Grounded answer") if valid_response else None,
+        "parsing_error": None,
+    }
+    with patch("app.services.llm.chat_assistant.get_supabase_client", return_value=db), \
+         patch("app.services.llm.chat_assistant._load_workspace_meeting_data", return_value=(
+             [{"id": str(uuid4()), "title": "Sprint sync"}], [], [], [],
+         )), \
+         patch("app.services.llm.chat_assistant._build_context_xml", return_value="<workspace_meetings_data />"), \
+         patch("app.services.llm.chat_assistant.create_chat_model", return_value=model) as factory, \
+         patch("app.services.llm.chat_assistant._build_fallback_answer", return_value="fallback"):
+        response = answer_workspace_chat(uuid4(), uuid4(), "What did we decide?", [])
+
+    if allowed and valid_response:
+        assert response.answer == "Grounded answer"
+        [run] = db.table.return_value.insert.call_args.args[0]
+        assert run["provider"] == "bedrock"
+        assert run["model_version"] == settings.BEDROCK_MODEL_ID
+        assert run["input_tokens"] == 100 and run["output_tokens"] == 20
+        assert run["est_cost_inr"] is None
+    else:
+        assert response == "fallback"
+        db.table.assert_not_called()
+    if not allowed:
+        factory.assert_not_called()
 
 
 def test_chat_message_unauthenticated():

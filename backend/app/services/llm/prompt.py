@@ -1,4 +1,4 @@
-"""Extraction prompt and the JSON schema Gemini must return (BE-3)."""
+"""Extraction prompt and the JSON schema the model must return (BE-3)."""
 
 import re
 from typing import Literal

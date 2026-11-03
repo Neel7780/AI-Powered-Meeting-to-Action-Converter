@@ -29,4 +29,8 @@ All requirement documents live in [`doc/`](doc/):
 
 ## Status
 
+The backend AI provider is Amazon Bedrock through LangChain, using a server-only
+Bedrock API key. See [`backend/README.md`](backend/README.md) for setup and migration
+from Gemini. Earlier planning documents describe the original Gemini architecture.
+
 Requirements elicitation and refinement complete; a throw-away prototype has been built. Next: Sprint 1 (auth + workspace, transcript ingestion, GenAI extraction, review gate, Kanban board) on a zero-budget stack (Vercel, Render, Supabase).

@@ -8,19 +8,14 @@ from typing import Any
 from uuid import UUID
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.supabase import get_supabase_client
 from app.schemas.chat import ChatCitation, ChatMessage, ChatResponse
+from app.services.llm.bedrock import bedrock_is_configured, create_chat_model
 
 logger = logging.getLogger(__name__)
-
-USD_PER_M_INPUT = 0.25
-USD_PER_M_OUTPUT = 1.50
-INR_PER_USD = 88.0
-
 
 class StructuredCitation(BaseModel):
     source_type: str = Field(description="'meeting', 'transcript', 'decision', 'action', 'task'")
@@ -532,8 +527,7 @@ def answer_workspace_chat(
             meeting_context_count=0
         )
 
-    # If GEMINI_API_KEY is not set or in test mode without live LLM, return structured fallback
-    if not settings.GEMINI_API_KEY:
+    if not bedrock_is_configured():
         return _build_fallback_answer(query, meetings, tasks, extracted_items)
 
     context_xml = _build_context_xml(meetings, tasks, extracted_items, transcripts)
@@ -557,15 +551,13 @@ def answer_workspace_chat(
     payload_hash = hashlib.sha256("\n".join(str(m.content) for m in messages).encode()).hexdigest()
 
     try:
-        llm = ChatGoogleGenerativeAI(
-            model=settings.GEMINI_MODEL,
-            api_key=settings.GEMINI_API_KEY,
-            temperature=0.1,
-            timeout=60,
-            max_retries=2,
-        )
-        structured_llm = llm.with_structured_output(StructuredChatOutput)
-        output: StructuredChatOutput = structured_llm.invoke(messages)
+        llm = create_chat_model(temperature=0.1)
+        structured_llm = llm.with_structured_output(StructuredChatOutput, include_raw=True)
+        result = structured_llm.invoke(messages)
+        if result["parsed"] is None:
+            raise ValueError("Bedrock chat response did not match the required schema")
+        output: StructuredChatOutput = result["parsed"]
+        usage = getattr(result.get("raw"), "usage_metadata", None) or {}
 
         latency_ms = int((time.monotonic() - started_time) * 1000)
 
@@ -573,12 +565,12 @@ def answer_workspace_chat(
         try:
             db.table("llm_runs").insert([{
                 "meeting_id": str(meetings[0]["id"]) if meetings else None,
-                "provider": "gemini",
-                "model_version": settings.GEMINI_MODEL,
-                "input_tokens": None,
-                "output_tokens": None,
+                "provider": "bedrock",
+                "model_version": settings.BEDROCK_MODEL_ID,
+                "input_tokens": usage.get("input_tokens"),
+                "output_tokens": usage.get("output_tokens"),
                 "latency_ms": latency_ms,
-                "est_cost_inr": 0.0,
+                "est_cost_inr": None,
                 "payload_hash": payload_hash,
                 "success": True,
                 "error_code": None
@@ -612,5 +604,5 @@ def answer_workspace_chat(
         )
 
     except Exception as exc:
-        logger.warning("LLM chatbot call failed, switching to rule-based fallback: %s", exc)
+        logger.warning("Bedrock chatbot call failed, switching to rule-based fallback: %s", type(exc).__name__)
         return _build_fallback_answer(query, meetings, tasks, extracted_items)

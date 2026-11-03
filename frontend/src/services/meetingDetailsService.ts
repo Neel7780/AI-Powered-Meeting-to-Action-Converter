@@ -64,7 +64,7 @@ export const meetingDetailsService = {
           next_steps: json.next_steps || summaryData.next_steps,
           speaker_insights: json.speaker_insights || summaryData.speaker_insights,
           generated_at: json.generated_at || new Date().toISOString(),
-          model_used: json.model_used || 'gemini-3.1-flash-lite'
+          model_used: json.model_used || 'none'
         };
       }
 

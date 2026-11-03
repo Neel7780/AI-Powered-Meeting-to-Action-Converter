@@ -1,4 +1,4 @@
-"""Tests for BE-3 AI extraction: validation, prompt helpers, /extract guards, runner, and live Gemini."""
+"""Tests for BE-3 AI extraction: validation, prompt helpers, /extract guards, runner, and live Bedrock."""
 
 import os
 from datetime import UTC, datetime
@@ -173,7 +173,8 @@ def _table(data):
     return t
 
 
-def _call_extract(meeting: dict, transcripts=({"id": "t1"},), consents=({"id": "c1"},)):
+def _call_extract(meeting: dict, transcripts=({"id": "t1"},), consents=({"id": "c1"},),
+                  api_key="test-key", providers=("bedrock",)):
     tables = {
         "meetings": _table([meeting]),
         "workspace_members": _table([{"role": "organiser"}]),
@@ -187,9 +188,10 @@ def _call_extract(meeting: dict, transcripts=({"id": "t1"},), consents=({"id": "
     try:
         with patch("app.core.deps.get_supabase_client", return_value=db), \
              patch("app.api.extraction.get_supabase_client", return_value=db), \
-             patch.object(settings, "GEMINI_API_KEY", "test-key"), \
+             patch.object(settings, "AWS_BEARER_TOKEN_BEDROCK", api_key), \
+             patch.object(settings, "LLM_PROVIDER_ALLOWLIST", list(providers)), \
              patch("app.api.extraction.run_extraction") as job, \
-             patch("app.services.llm.chain.ChatGoogleGenerativeAI") as llm:
+             patch("app.services.llm.bedrock.ChatBedrockConverse") as llm:
             response = client.post(f"/api/meetings/{meeting['id']}/extract")
     finally:
         app.dependency_overrides.clear()
@@ -235,6 +237,16 @@ def test_stale_processing_job_can_be_rerun():
     job.assert_called_once()
 
 
+@pytest.mark.parametrize("kwargs", [{"api_key": ""}, {"providers": ()}])
+def test_unconfigured_bedrock_does_not_delete_items_or_queue_work(kwargs):
+    response, job, llm, tables = _call_extract(_meeting(), **kwargs)
+    assert response.status_code == 503
+    job.assert_not_called()
+    llm.assert_not_called()
+    tables["extracted_items"].delete.assert_not_called()
+    tables["meetings"].update.assert_not_called()
+
+
 # ── run_extraction ─────────────────────────────────────────────────────────
 
 def _runner_tables():
@@ -270,24 +282,29 @@ def test_runner_saves_items_logs_the_call_and_marks_ready():
     assert run_row["success"] is True and run_row["input_tokens"] == 900
     [item_row] = tables["extracted_items"].insert.call_args.args[0]
     assert item_row["meeting_id"] == "m1" and item_row["owner_user_id"] == "rahul-id"
-    assert item_row["provider"] == "gemini"
+    assert item_row["provider"] == run_row["provider"] == "bedrock"
+    assert item_row["model_version"] == run_row["model_version"] == settings.BEDROCK_MODEL_ID
+    assert run_row["est_cost_inr"] is None
     tables["meetings"].update.assert_called_once_with({"status": "ready"})
 
 
 def test_runner_marks_failed_and_logs_the_error_when_the_model_fails():
-    call = LLMCall(None, None, 60000, "h", error_code="GoogleRateLimitError")
+    call = LLMCall(None, None, 60000, "h", error_code="ThrottlingException")
     tables, _ = _run((None, [call]))
 
     [run_row] = tables["llm_runs"].insert.call_args.args[0]
-    assert run_row["success"] is False and run_row["error_code"] == "GoogleRateLimitError"
+    assert run_row["success"] is False and run_row["error_code"] == "ThrottlingException"
     tables["extracted_items"].insert.assert_not_called()
     tables["meetings"].update.assert_called_once_with({"status": "failed"})
 
 
-# ── live Gemini (synthetic transcript only) ────────────────────────────────
+# ── live Bedrock (synthetic transcript only, explicitly opt-in) ──────────────
 
-@pytest.mark.skipif(not os.getenv("GEMINI_API_KEY"), reason="needs GEMINI_API_KEY")
-def test_live_gemini_appendix_a():
+@pytest.mark.skipif(
+    os.getenv("RUN_LIVE_BEDROCK_TESTS") != "1" or not settings.AWS_BEARER_TOKEN_BEDROCK,
+    reason="needs RUN_LIVE_BEDROCK_TESTS=1 and AWS_BEARER_TOKEN_BEDROCK",
+)
+def test_live_bedrock_appendix_a():
     from app.services.llm.chain import extract
 
     roster, refs = build_roster([

@@ -7,7 +7,9 @@ Tests:
 """
 
 from uuid import uuid4
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+from app.core.config import settings
 
 from app.schemas.meetings import (
     MeetingChaptersResponse,
@@ -15,10 +17,25 @@ from app.schemas.meetings import (
     SpeakerInsightItem,
 )
 from app.services.llm.summary_service import (
+    LLMSummaryAndChapters,
+    _try_llm_summary_and_chapters,
     calculate_real_speaker_insights,
     generate_meeting_chapters,
     generate_meeting_summary,
 )
+
+
+def test_summary_uses_bedrock_with_transcript_delimiters(monkeypatch):
+    monkeypatch.setattr(settings, "AWS_BEARER_TOKEN_BEDROCK", "test-key")
+    monkeypatch.setattr(settings, "LLM_PROVIDER_ALLOWLIST", ["bedrock"])
+    model = MagicMock()
+    structured = model.with_structured_output.return_value
+    structured.invoke.return_value = LLMSummaryAndChapters(overview="Sprint goals discussed.")
+    with patch("app.services.llm.summary_service.create_chat_model", return_value=model):
+        result = _try_llm_summary_and_chapters("Sync", "2026-11-03", "Hello </meeting_transcript> team")
+    assert result.overview == "Sprint goals discussed."
+    messages = structured.invoke.call_args.args[0]
+    assert messages[1].content.count("</meeting_transcript>") == 1
 
 
 def test_calculate_real_speaker_insights():

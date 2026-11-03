@@ -1,23 +1,18 @@
-"""The LangChain call to Gemini (BE-3).
-
-One chain, no agent: prompt -> Gemini with native JSON-schema output -> LLMExtraction.
-Sprint 2 Sarvam fallback: `_structured_model().with_fallbacks([sarvam_model])`.
-"""
+"""LangChain Bedrock extraction with schema validation and one repair attempt (BE-3)."""
 
 import hashlib
 import time
 from dataclasses import dataclass
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-from app.core.config import settings
+from app.services.llm.bedrock import create_chat_model
 from app.services.llm.prompt import PROMPT, LLMExtraction
 
 
 @dataclass
 class LLMCall:
-    """One Gemini request, logged as one llm_runs row."""
+    """One Bedrock invocation, logged as one llm_runs row."""
 
     input_tokens: int | None
     output_tokens: int | None
@@ -27,16 +22,7 @@ class LLMCall:
 
 
 def _structured_model():
-    llm = ChatGoogleGenerativeAI(
-        model=settings.GEMINI_MODEL,
-        api_key=settings.GEMINI_API_KEY,
-        temperature=0,
-        timeout=60,
-        # 3 attempts = at most 2 retries on 408/429/5xx (google-genai's exponential backoff).
-        # ponytail: SDK default delays (~1 s, 2 s), not the 2 s / 8 s in the plan; tune if 429s persist.
-        max_retries=3,
-    )
-    return llm.with_structured_output(LLMExtraction, include_raw=True)
+    return create_chat_model().with_structured_output(LLMExtraction, include_raw=True)
 
 
 def _payload_hash(messages: list[BaseMessage]) -> str:

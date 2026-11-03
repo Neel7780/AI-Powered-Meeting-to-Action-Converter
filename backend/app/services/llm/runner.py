@@ -7,22 +7,11 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import settings
 from app.core.supabase import get_supabase_client
-from app.services.llm.chain import LLMCall, extract
+from app.services.llm.chain import extract
 from app.services.llm.prompt import build_roster, strip_transcript_tags
 from app.services.llm.validate import validate_items
 
 logger = logging.getLogger(__name__)
-
-# List prices from doc/ai-infra/01-ai-llm.md (Gemini 3.1 Flash-Lite, paid tier; actual spend is ₹0 on free tier).
-USD_PER_M_INPUT = 0.25
-USD_PER_M_OUTPUT = 1.50
-INR_PER_USD = 88.0  # ponytail: fixed rate, fine for an estimate column
-
-
-def _est_cost_inr(call: LLMCall) -> float:
-    usd = (call.input_tokens or 0) * USD_PER_M_INPUT / 1e6 + (call.output_tokens or 0) * USD_PER_M_OUTPUT / 1e6
-    return round(usd * INR_PER_USD, 4)
-
 
 def _load_members(db, workspace_id: str) -> list[dict]:
     member_ids = [
@@ -69,12 +58,13 @@ def run_extraction(meeting_id: UUID | str) -> None:
         db.table("llm_runs").insert([
             {
                 "meeting_id": mid,
-                "provider": "gemini",
-                "model_version": settings.GEMINI_MODEL,
+                "provider": "bedrock",
+                "model_version": settings.BEDROCK_MODEL_ID,
                 "input_tokens": c.input_tokens,
                 "output_tokens": c.output_tokens,
                 "latency_ms": c.latency_ms,
-                "est_cost_inr": _est_cost_inr(c),
+                # Bedrock rates and credit coverage depend on the selected model and account.
+                "est_cost_inr": None,
                 "payload_hash": c.payload_hash,
                 "success": c.error_code is None,
                 "error_code": c.error_code,
@@ -103,8 +93,8 @@ def run_extraction(meeting_id: UUID | str) -> None:
                 row_copy = {k: v for k, v in r.items() if k != "depends_on_index"}
                 row_copy.update({
                     "meeting_id": mid,
-                    "provider": "gemini",
-                    "model_version": settings.GEMINI_MODEL,
+                    "provider": "bedrock",
+                    "model_version": settings.BEDROCK_MODEL_ID,
                 })
                 insert_rows.append(row_copy)
 

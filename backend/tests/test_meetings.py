@@ -505,7 +505,7 @@ def test_get_meeting_summary_success():
             assert data["decisions"][0]["speaker"] == "Karthik"
             assert len(data["speaker_insights"]) == 2
             assert data["speaker_insights"][0]["speaker"] in ["Karthik", "Asha"]
-            assert data["model_used"] == settings.GEMINI_MODEL
+            assert data["model_used"] == settings.BEDROCK_MODEL_ID
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

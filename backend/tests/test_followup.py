@@ -7,12 +7,19 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from app.api.followup import draft_followup, send_followup
+from app.core.config import settings
 from app.core.deps import CurrentUser, DEV_USER_ID
 from app.schemas.followup import (
     DraftFollowUpRequest,
     FollowUpTone,
     SendFollowUpRequest,
 )
+
+
+@pytest.fixture(autouse=True)
+def configured_bedrock(monkeypatch):
+    monkeypatch.setattr(settings, "AWS_BEARER_TOKEN_BEDROCK", "test-key")
+    monkeypatch.setattr(settings, "LLM_PROVIDER_ALLOWLIST", ["bedrock"])
 
 
 def test_draft_followup_team_wide_success():
@@ -29,12 +36,12 @@ def test_draft_followup_team_wide_success():
 
     mock_llm = MagicMock()
     mock_llm.invoke.return_value = AIMessage(
-        content="SUBJECT: [ActionPulse] Follow-Up: Sprint 2 Architecture Sync\n---BODY---\n### Executive Summary\nThe team aligned on Sprint 2 milestones.\n- [ ] Configure Brevo"
+        content=[{"type": "text", "text": "SUBJECT: [ActionPulse] Follow-Up: Sprint 2 Architecture Sync\n---BODY---\n### Executive Summary\nThe team aligned on Sprint 2 milestones.\n- [ ] Configure Brevo"}]
     )
 
     with patch("app.api.followup.require_meeting_role", return_value=meeting_record), \
          patch("app.services.llm.followup_generator.get_supabase_client", side_effect=RuntimeError("offline")), \
-         patch("app.services.llm.followup_generator.ChatGoogleGenerativeAI", return_value=mock_llm):
+         patch("app.services.llm.followup_generator.create_chat_model", return_value=mock_llm):
         res = draft_followup(
             meeting_id=meeting_id,
             payload=DraftFollowUpRequest(tone=FollowUpTone.EXECUTIVE),
@@ -47,6 +54,7 @@ def test_draft_followup_team_wide_success():
         assert len(res.content_html) > 0
         assert res.whatsapp_share_url.startswith("https://wa.me/?text=")
         assert len(res.participants) > 0
+        mock_llm.invoke.assert_called_once()
 
 
 def test_draft_followup_personalized_member_success():
@@ -69,7 +77,7 @@ def test_draft_followup_personalized_member_success():
 
     with patch("app.api.followup.require_meeting_role", return_value=meeting_record), \
          patch("app.services.llm.followup_generator.get_supabase_client", side_effect=RuntimeError("offline")), \
-         patch("app.services.llm.followup_generator.ChatGoogleGenerativeAI", return_value=mock_llm):
+         patch("app.services.llm.followup_generator.create_chat_model", return_value=mock_llm):
         res = draft_followup(
             meeting_id=meeting_id,
             payload=DraftFollowUpRequest(
@@ -104,7 +112,7 @@ def test_draft_followup_chat_tone():
 
     with patch("app.api.followup.require_meeting_role", return_value=meeting_record), \
          patch("app.services.llm.followup_generator.get_supabase_client", side_effect=RuntimeError("offline")), \
-         patch("app.services.llm.followup_generator.ChatGoogleGenerativeAI", return_value=mock_llm):
+         patch("app.services.llm.followup_generator.create_chat_model", return_value=mock_llm):
         res = draft_followup(
             meeting_id=meeting_id,
             payload=DraftFollowUpRequest(tone=FollowUpTone.CHAT),
