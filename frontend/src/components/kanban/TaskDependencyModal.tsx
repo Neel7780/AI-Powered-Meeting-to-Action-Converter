@@ -10,6 +10,7 @@ import {
   Bot,
   User,
   Sparkles,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -20,6 +21,7 @@ export interface TaskDependencyModalProps {
   allTasks: KanbanTaskItem[];
   onUpdateDependency: (taskId: string, blockedById: string | null, executionType?: 'human' | 'agent') => Promise<void> | void;
   onStatusChange?: (taskId: string, newStatus: TaskStatus) => Promise<void> | void;
+  onOpenPrereqDialog?: (task: KanbanTaskItem) => void;
 }
 
 export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
@@ -29,6 +31,7 @@ export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
   allTasks,
   onUpdateDependency,
   onStatusChange,
+  onOpenPrereqDialog,
 }) => {
   if (!isOpen || !task) return null;
 
@@ -121,6 +124,28 @@ export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
             <X className="size-5" />
           </button>
         </div>
+
+        {/* Prerequisite Q&A Quick Action */}
+        {onOpenPrereqDialog && (
+          <div className="mt-4 flex items-center justify-between rounded-xl border border-indigo-200/80 bg-indigo-50/70 p-3 text-xs dark:border-indigo-900/60 dark:bg-indigo-950/40">
+            <div className="flex items-center gap-2 text-indigo-950 dark:text-indigo-200">
+              <MessageSquare className="size-4 shrink-0 text-indigo-600 dark:text-indigo-400" />
+              <span>Unsure which prerequisite to pick? Ask your manager directly.</span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                onClose();
+                onOpenPrereqDialog(task);
+              }}
+              className="shrink-0 text-xs text-indigo-700 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-white"
+            >
+              Ask Manager
+            </Button>
+          </div>
+        )}
 
         {/* Current Task Summary Banner */}
         <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-[#121216]">
