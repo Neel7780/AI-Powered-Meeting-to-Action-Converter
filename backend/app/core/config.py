@@ -38,6 +38,15 @@ class Settings:
     GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "")
     CALENDAR_ENCRYPTION_SECRET: str = os.getenv("CALENDAR_ENCRYPTION_SECRET", "")
 
+    # GitHub App integration: server-only credentials, separate from sign-in.
+    GITHUB_APP_ID: str = os.getenv("GITHUB_APP_ID", "")
+    GITHUB_APP_SLUG: str = os.getenv("GITHUB_APP_SLUG", "")
+    GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
+    GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+    GITHUB_PRIVATE_KEY: str = os.getenv("GITHUB_PRIVATE_KEY", "").replace("\\n", "\n")
+    GITHUB_WEBHOOK_SECRET: str = os.getenv("GITHUB_WEBHOOK_SECRET", "")
+    GITHUB_REDIRECT_URI: str = os.getenv("GITHUB_REDIRECT_URI", "")
+
     # SMTP Configuration (Free tier: Gmail App Password or Brevo)
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
