@@ -1,5 +1,4 @@
-import { supabase } from '../lib/supabase';
-import { getApiUrl } from '../lib/api';
+import { requestApi } from '../lib/api';
 
 export interface CalendarAttendee {
   email: string;
@@ -26,31 +25,6 @@ export interface CalendarStatus {
   provider?: string | null;
   account_email?: string | null;
   last_synced_at?: string | null;
-}
-
-/** Authenticated request helper for ActionPulse backend */
-async function requestApi<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const headers = new Headers(options.headers || {});
-  
-  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
-  
-  if (session?.access_token) {
-    headers.set('Authorization', `Bearer ${session.access_token}`);
-  }
-
-  const res = await fetch(getApiUrl(path), {
-    ...options,
-    headers,
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(typeof data.detail === 'string' ? data.detail : `HTTP ${res.status}`);
-  }
-  return data as T;
 }
 
 /** Get Google OAuth authorization URL */

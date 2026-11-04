@@ -15,6 +15,7 @@ import { supabase } from "../lib/supabase";
 import ChatPage from "../pages/ChatPage";
 import TeamPage from "../pages/TeamPage";
 import AnalyticsPage from "../pages/AnalyticsPage";
+import GitHubSettings from "./GitHubSettings";
 import MeetingsPage from "../pages/MeetingsPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
@@ -36,6 +37,7 @@ export default function Dashboard() {
   const isMeetingsPage = location.pathname === "/meetings";
   const isTeamPage = location.pathname === "/team";
   const isAnalyticsPage = location.pathname === "/analytics";
+  const isGitHubPage = location.pathname === "/settings/github";
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [showFollowUp, setShowFollowUp] = useState(false);
@@ -108,7 +110,9 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <main className="min-w-0 flex-1">
-          {isChatPage ? (
+          {isGitHubPage ? (
+            <GitHubSettings key={currentWorkspace?.id} />
+          ) : isChatPage ? (
             <ChatPage />
           ) : isTasksPage ? (
             <KanbanBoard workspaceId={currentWorkspace?.id} />
