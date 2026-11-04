@@ -1,7 +1,7 @@
-"""AI Extraction API (BE-3).
+"""AI extraction API (BE-3).
 
 Endpoint:
-- POST /meetings/{meeting_id}/extract: start Bedrock extraction as a background job (202)
+- POST /meetings/{meeting_id}/extract: start extraction as a background job (202)
 """
 
 from datetime import UTC, datetime, timedelta
@@ -11,7 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 from app.core.deps import ORGANISER_ROLES, CurrentUser, get_current_user, require_meeting_role
 from app.core.supabase import get_supabase_client
-from app.services.llm.bedrock import bedrock_is_configured
+from app.services.llm.bedrock import llm_is_configured
 from app.services.llm.runner import run_extraction
 
 router = APIRouter()
@@ -45,7 +45,7 @@ def start_extraction(
         if datetime.now(UTC) - updated_at < STALE_JOB_AFTER:
             raise HTTPException(status.HTTP_409_CONFLICT, "Extraction is already running")
 
-    if not bedrock_is_configured():
+    if not llm_is_configured():
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI provider is not configured")
 
     db = get_supabase_client()

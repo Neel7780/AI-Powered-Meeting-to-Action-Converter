@@ -24,23 +24,25 @@ Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-Fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and the Bedrock settings:
+Fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, the Bedrock settings, and the optional Gemini fallback key:
 
 ```dotenv
 AWS_BEARER_TOKEN_BEDROCK=your-bedrock-api-key
 AWS_REGION=us-east-1
 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
-LLM_PROVIDER_ALLOWLIST=bedrock
+LLM_PROVIDER_ALLOWLIST=bedrock,gemini
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-3.1-flash-lite
 ```
 
 Generate the key in the Amazon Bedrock console under **API keys**. It is a bearer
 API key, not an AWS access-key/secret-key pair. Keep it in `backend/.env` locally
 and the backend's environment settings on Render; never put it in frontend variables.
-When upgrading an existing deployment, replace the old Gemini variables and change
-any existing `LLM_PROVIDER_ALLOWLIST` value to `bedrock`. Restart the backend afterwards.
+Gemini is called only when Bedrock fails and Gemini is allow-listed and configured.
+Keep both keys in backend environment settings; never put them in frontend variables.
 
-All AI features share LangChain's `ChatBedrockConverse` client in
-`app/services/llm/bedrock.py`. The selected model must support the Converse API
+Bedrock is the primary provider. All AI features share its `ChatBedrockConverse` client in
+`app/services/llm/bedrock.py`, with Gemini used as the configured failure fallback. The Bedrock model must support the Converse API
 and tool calling for structured extraction, summaries, and chat. Use a model ID
 or inference profile ID available to your account in the configured region;
 for example, `us.amazon.nova-lite-v1:0` is a US inference profile alternative.

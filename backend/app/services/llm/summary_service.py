@@ -26,7 +26,7 @@ from app.schemas.meetings import (
     SummaryDiscussionPointItem,
 )
 from app.services.llm.prompt import strip_transcript_tags
-from app.services.llm.bedrock import bedrock_is_configured, create_chat_model
+from app.services.llm.bedrock import create_structured_model, llm_is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -164,14 +164,13 @@ def _try_llm_summary_and_chapters(
     canonical_transcript: str,
 ) -> LLMSummaryAndChapters | None:
     """Call Bedrock if the server has an allowed provider and bearer API key."""
-    if not bedrock_is_configured():
+    if not llm_is_configured():
         return None
 
     try:
         from langchain_core.prompts import ChatPromptTemplate
 
-        llm = create_chat_model()
-        structured_model = llm.with_structured_output(LLMSummaryAndChapters)
+        structured_model = create_structured_model(LLMSummaryAndChapters)
         prompt_tmpl = ChatPromptTemplate.from_messages([
             ("system", SUMMARY_SYSTEM_PROMPT),
             ("human", SUMMARY_HUMAN_PROMPT),

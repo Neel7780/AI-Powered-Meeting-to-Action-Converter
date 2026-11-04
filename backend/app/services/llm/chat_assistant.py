@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.core.supabase import get_supabase_client
 from app.schemas.chat import ChatCitation, ChatMessage, ChatResponse
-from app.services.llm.bedrock import bedrock_is_configured, create_chat_model
+from app.services.llm.bedrock import create_structured_model, llm_is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -527,7 +527,7 @@ def answer_workspace_chat(
             meeting_context_count=0
         )
 
-    if not bedrock_is_configured():
+    if not llm_is_configured():
         return _build_fallback_answer(query, meetings, tasks, extracted_items)
 
     context_xml = _build_context_xml(meetings, tasks, extracted_items, transcripts)
@@ -551,8 +551,7 @@ def answer_workspace_chat(
     payload_hash = hashlib.sha256("\n".join(str(m.content) for m in messages).encode()).hexdigest()
 
     try:
-        llm = create_chat_model(temperature=0.1)
-        structured_llm = llm.with_structured_output(StructuredChatOutput, include_raw=True)
+        structured_llm = create_structured_model(StructuredChatOutput, temperature=0.1, include_raw=True)
         result = structured_llm.invoke(messages)
         if result["parsed"] is None:
             raise ValueError("Bedrock chat response did not match the required schema")

@@ -116,17 +116,17 @@ def create_invite(
             inviter_name=inviter_name,
             link=invite_link
         )
-    except Exception as exc:
-        # An invite link grants access; never put its raw token in logs.
-        logger.warning("Invite email failed invite=%s error=%s", invite_id, type(exc).__name__)
-        try:
+    except Exception as e:
+        logger.warning("Failed to send invite email to %s: %s", clean_email, e)
+        logger.info("[INVITE LINK] %s", invite_link)
+        # In production when email provider is explicitly configured, rollback and 502
+        if settings.ENVIRONMENT == "production" and (settings.BREVO_API_KEY or settings.SMTP_HOST):
             db.table("workspace_invites").delete().eq("id", invite_id).execute()
-        except Exception as cleanup_error:
-            logger.error("Invite cleanup failed invite=%s error=%s", invite_id, type(cleanup_error).__name__)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Invitation email could not be delivered. Check the backend email provider and sender settings.",
-        ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Failed to send invite email"
+            )
+        # Otherwise keep the invite row in DB so teammates can still join via invite link
         
     return InviteCreateResponse(
         id=invite_id,

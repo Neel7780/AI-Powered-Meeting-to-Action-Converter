@@ -5,9 +5,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.stub import Stubber
 from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from app.core.config import settings
-from app.services.llm.bedrock import bedrock_is_configured, create_chat_model
+from app.services.llm.bedrock import bedrock_is_configured, create_chat_model, create_structured_model
 from app.services.llm.chain import extract
 from app.services.llm.prompt import LLMExtraction
 
@@ -95,3 +96,47 @@ def test_extraction_does_not_repair_an_api_error():
     assert result is None and len(calls) == 1
     assert calls[0].error_code == "RuntimeError"
     model.invoke.assert_called_once()
+
+
+def test_structured_call_falls_back_to_gemini_when_bedrock_raises(monkeypatch):
+    class StubModel:
+        def __init__(self, invoke):
+            self.invoke = invoke
+
+        def with_structured_output(self, schema, include_raw=False):
+            return RunnableLambda(self.invoke)
+
+    monkeypatch.setattr("app.services.llm.bedrock.bedrock_is_configured", lambda: True)
+    monkeypatch.setattr("app.services.llm.bedrock.gemini_is_configured", lambda: True)
+    monkeypatch.setattr(
+        "app.services.llm.bedrock._create_bedrock_model",
+        lambda temperature: StubModel(lambda _: (_ for _ in ()).throw(RuntimeError("Bedrock unavailable"))),
+    )
+    monkeypatch.setattr(
+        "app.services.llm.bedrock._create_gemini_model",
+        lambda temperature: StubModel(lambda _: LLMExtraction(items=[])),
+    )
+
+    result = create_structured_model(LLMExtraction).invoke("extract")
+
+    assert result == LLMExtraction(items=[])
+
+
+def test_chat_call_falls_back_to_gemini_when_bedrock_raises(monkeypatch):
+    def unavailable(_):
+        raise RuntimeError("Bedrock unavailable")
+
+    monkeypatch.setattr("app.services.llm.bedrock.bedrock_is_configured", lambda: True)
+    monkeypatch.setattr("app.services.llm.bedrock.gemini_is_configured", lambda: True)
+    monkeypatch.setattr(
+        "app.services.llm.bedrock._create_bedrock_model",
+        lambda temperature: RunnableLambda(unavailable),
+    )
+    monkeypatch.setattr(
+        "app.services.llm.bedrock._create_gemini_model",
+        lambda temperature: RunnableLambda(lambda _: "Gemini answer"),
+    )
+
+    result = create_chat_model().invoke("answer")
+
+    assert result == "Gemini answer"

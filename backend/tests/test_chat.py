@@ -21,7 +21,7 @@ def test_bedrock_chat_usage_fallback_and_provider_allowlist(monkeypatch, allowed
     monkeypatch.setattr(settings, "LLM_PROVIDER_ALLOWLIST", ["bedrock"] if allowed else [])
     db = MagicMock()
     model = MagicMock()
-    model.with_structured_output.return_value.invoke.return_value = {
+    model.invoke.return_value = {
         "raw": AIMessage(content="", usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120}),
         "parsed": StructuredChatOutput(answer="Grounded answer") if valid_response else None,
         "parsing_error": None,
@@ -31,7 +31,7 @@ def test_bedrock_chat_usage_fallback_and_provider_allowlist(monkeypatch, allowed
              [{"id": str(uuid4()), "title": "Sprint sync"}], [], [], [],
          )), \
          patch("app.services.llm.chat_assistant._build_context_xml", return_value="<workspace_meetings_data />"), \
-         patch("app.services.llm.chat_assistant.create_chat_model", return_value=model) as factory, \
+         patch("app.services.llm.chat_assistant.create_structured_model", return_value=model) as factory, \
          patch("app.services.llm.chat_assistant._build_fallback_answer", return_value="fallback"):
         response = answer_workspace_chat(uuid4(), uuid4(), "What did we decide?", [])
 
@@ -47,6 +47,8 @@ def test_bedrock_chat_usage_fallback_and_provider_allowlist(monkeypatch, allowed
         db.table.assert_not_called()
     if not allowed:
         factory.assert_not_called()
+    else:
+        factory.assert_called_once_with(StructuredChatOutput, temperature=0.1, include_raw=True)
 
 
 def test_chat_message_unauthenticated():

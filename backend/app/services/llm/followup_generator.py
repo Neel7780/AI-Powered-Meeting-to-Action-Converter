@@ -19,7 +19,7 @@ from app.schemas.followup import (
     FollowUpParticipant,
     FollowUpTone,
 )
-from app.services.llm.bedrock import bedrock_is_configured, create_chat_model
+from app.services.llm.bedrock import create_chat_model, llm_is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -459,7 +459,7 @@ def generate_meeting_followup(
         recipient_emails = [target_participant["email"]]
 
     # 1. No-AI mode check
-    if not ctx.get("ai_processing", True) or not bedrock_is_configured():
+    if not ctx.get("ai_processing", True) or not llm_is_configured():
         subject, markdown_body = _build_deterministic_followup(ctx, target_user_id, effective_name, tone)
         html_body = _render_email_html(m_title, subject, markdown_body, effective_name)
         wa_url = _generate_whatsapp_url(subject, markdown_body)

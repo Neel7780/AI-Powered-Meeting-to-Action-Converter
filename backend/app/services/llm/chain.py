@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
-from app.services.llm.bedrock import create_chat_model
+from app.services.llm.bedrock import create_structured_model
 from app.services.llm.prompt import PROMPT, LLMExtraction
 
 
@@ -22,7 +22,7 @@ class LLMCall:
 
 
 def _structured_model():
-    return create_chat_model().with_structured_output(LLMExtraction, include_raw=True)
+    return create_structured_model(LLMExtraction, include_raw=True)
 
 
 def _payload_hash(messages: list[BaseMessage]) -> str:
