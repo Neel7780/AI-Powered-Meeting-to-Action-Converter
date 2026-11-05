@@ -22,8 +22,18 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: AWS_BEARER_TOKEN_BEDROCK
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.1-flash-lite
+      - key: AWS_REGION
+        value: us-east-1
+      - key: BEDROCK_MODEL_ID
+        value: amazon.nova-lite-v1:0
+      - key: LLM_PROVIDER_ALLOWLIST
+        value: bedrock,gemini
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASS

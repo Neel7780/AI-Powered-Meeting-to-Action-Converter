@@ -1,7 +1,7 @@
 """Dynamic Summary and Topic-Based Chapter Generator (Sprint 2).
 
 Conditions enforced:
-1. Reuses existing Gemini 3.1 Flash-Lite configuration via LangChain.
+1. Reuses the shared Amazon Bedrock configuration via LangChain.
 2. Derives summaries and chapters from actual meeting transcript segments and extracted_items.
 3. If AI generation is unavailable (no API key, offline, or disabled), uses deterministic
    segment/item synthesis without fabricating data.
@@ -26,12 +26,13 @@ from app.schemas.meetings import (
     SummaryDiscussionPointItem,
 )
 from app.services.llm.prompt import strip_transcript_tags
+from app.services.llm.bedrock import create_structured_model, llm_is_configured
 
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Structured Pydantic schema for Gemini Summary & Chapter generation
+# Structured Pydantic schema for summary and chapter generation
 # ---------------------------------------------------------------------------
 class LLMDiscussionPoint(BaseModel):
     topic: str
@@ -162,22 +163,14 @@ def _try_llm_summary_and_chapters(
     starts_at_str: str,
     canonical_transcript: str,
 ) -> LLMSummaryAndChapters | None:
-    """Call Gemini 3.1 Flash-Lite using existing ChatGoogleGenerativeAI infrastructure if available."""
-    if "gemini" not in settings.LLM_PROVIDER_ALLOWLIST or not settings.GEMINI_API_KEY:
+    """Call Bedrock if the server has an allowed provider and bearer API key."""
+    if not llm_is_configured():
         return None
 
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.prompts import ChatPromptTemplate
 
-        llm = ChatGoogleGenerativeAI(
-            model=settings.GEMINI_MODEL,
-            api_key=settings.GEMINI_API_KEY,
-            temperature=0,
-            timeout=45,
-            max_retries=2,
-        )
-        structured_model = llm.with_structured_output(LLMSummaryAndChapters)
+        structured_model = create_structured_model(LLMSummaryAndChapters)
         prompt_tmpl = ChatPromptTemplate.from_messages([
             ("system", SUMMARY_SYSTEM_PROMPT),
             ("human", SUMMARY_HUMAN_PROMPT),
@@ -194,7 +187,7 @@ def _try_llm_summary_and_chapters(
             return result
         return None
     except Exception as exc:
-        logger.warning("Gemini summary/chapter generation failed or unconfigured, falling back: %s", exc)
+        logger.warning("Bedrock summary/chapter generation failed, falling back: %s", type(exc).__name__)
         return None
 
 
@@ -269,7 +262,7 @@ def generate_meeting_summary(
             next_steps=llm_result.next_steps,
             speaker_insights=speaker_insights,
             generated_at=datetime.now(timezone.utc).isoformat(),
-            model_used=settings.GEMINI_MODEL,
+            model_used=settings.BEDROCK_MODEL_ID,
         )
 
     # 4. Deterministic Fallback based strictly on real segments and extracted items

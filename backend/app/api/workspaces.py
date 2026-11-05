@@ -1,5 +1,6 @@
 import secrets
 import hashlib
+import logging
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 
@@ -12,6 +13,7 @@ from app.services.email import send_invite_email
 from app.core.config import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post("/{workspace_id}/invites", response_model=InviteCreateResponse, status_code=status.HTTP_201_CREATED)
 def create_invite(
@@ -121,7 +123,7 @@ def create_invite(
         if settings.ENVIRONMENT == "production" and (settings.BREVO_API_KEY or settings.SMTP_HOST):
             db.table("workspace_invites").delete().eq("id", invite_id).execute()
             raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY, 
+                status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Failed to send invite email"
             )
         # Otherwise keep the invite row in DB so teammates can still join via invite link

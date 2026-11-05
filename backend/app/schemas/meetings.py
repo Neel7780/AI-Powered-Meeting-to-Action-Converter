@@ -98,4 +98,4 @@ class MeetingSummaryResponse(BaseModel):
     next_steps: list[str]
     speaker_insights: list[SpeakerInsightItem] = Field(default_factory=list)
     generated_at: str
-    model_used: str = "gemini-3.1-flash-lite"
+    model_used: str = "none"

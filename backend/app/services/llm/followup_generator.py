@@ -1,8 +1,7 @@
 """AI-Powered Meeting Follow-Up Generator.
 
 Synthesizes transcripts, decisions, and confirmed tasks into personalized,
-multi-channel follow-up drafts using Gemini 3.1 Flash-Lite (with deterministic fallback).
-Zero-Budget Tech Stack: Brevo/SMTP, wa.me URLs, and free Gemini Flash-Lite.
+multi-channel follow-up drafts using Amazon Bedrock (with deterministic fallback).
 """
 
 import html
@@ -12,7 +11,6 @@ from typing import Any, List, Optional
 from uuid import UUID
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.core.config import settings
 from app.core.supabase import get_supabase_client
@@ -21,6 +19,7 @@ from app.schemas.followup import (
     FollowUpParticipant,
     FollowUpTone,
 )
+from app.services.llm.bedrock import create_chat_model, llm_is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -421,7 +420,7 @@ def generate_meeting_followup(
     target_name: Optional[str] = None,
     tone: FollowUpTone = FollowUpTone.EXECUTIVE
 ) -> DraftFollowUpResponse:
-    """Generate a personalized meeting follow-up draft using Gemini 3.1 Flash-Lite."""
+    """Generate a personalized meeting follow-up draft using Amazon Bedrock."""
     ctx = _load_meeting_context(meeting_id)
     m_title = ctx.get("title", "Meeting")
 
@@ -460,7 +459,7 @@ def generate_meeting_followup(
         recipient_emails = [target_participant["email"]]
 
     # 1. No-AI mode check
-    if not ctx.get("ai_processing", True) or not settings.GEMINI_API_KEY:
+    if not ctx.get("ai_processing", True) or not llm_is_configured():
         subject, markdown_body = _build_deterministic_followup(ctx, target_user_id, effective_name, tone)
         html_body = _render_email_html(m_title, subject, markdown_body, effective_name)
         wa_url = _generate_whatsapp_url(subject, markdown_body)
@@ -479,7 +478,7 @@ def generate_meeting_followup(
             participants=participants_schema
         )
 
-    # 2. Prepare Grounded Prompt for Gemini 3.1 Flash-Lite
+    # 2. Prepare grounded context for Bedrock
     meeting_payload = {
         "title": m_title,
         "starts_at": ctx.get("starts_at"),
@@ -502,12 +501,7 @@ Draft the follow-up according to the requested tone and recipient guidelines.
 """
 
     try:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-3.1-flash-lite",
-            google_api_key=settings.GEMINI_API_KEY,
-            temperature=0.2,
-            timeout=15.0
-        )
+        llm = create_chat_model(temperature=0.2)
         messages = [
             SystemMessage(content=FOLLOWUP_SYSTEM_PROMPT),
             HumanMessage(content=user_instructions)
@@ -517,7 +511,7 @@ Draft the follow-up according to the requested tone and recipient guidelines.
         subject, markdown_body = _parse_subject_and_body(raw_text, m_title)
 
     except Exception as exc:
-        logger.warning("Gemini follow-up generation failed, using deterministic fallback: %s", exc)
+        logger.warning("Bedrock follow-up generation failed, using deterministic fallback: %s", type(exc).__name__)
         subject, markdown_body = _build_deterministic_followup(ctx, target_user_id, effective_name, tone)
 
     html_body = _render_email_html(m_title, subject, markdown_body, effective_name)
