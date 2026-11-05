@@ -17,6 +17,7 @@ const titles: Record<string, string> = {
   "/analytics": "Analytics",
   "/chat": "AI Assistant",
   "/team": "Team",
+  "/settings/github": "GitHub settings",
 };
 
 /** Slim, translucent top bar (Notion-style breadcrumb). Workspace + account controls live in the sidebar. */

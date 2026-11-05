@@ -109,3 +109,8 @@ When setting up a new Supabase project for this backend, you must manually confi
 - JWT Expiry: **900s (15 min)**.
 - Refresh-Token Rotation: **ON**.
 - Site URL & Redirect URLs: `http://localhost:5173` and the deployed Vercel URL.
+
+## GitHub App integration
+
+Setup, migration, access-control behavior, local development and verification are documented in
+[the GitHub integration guide](../doc/github_integration.md).

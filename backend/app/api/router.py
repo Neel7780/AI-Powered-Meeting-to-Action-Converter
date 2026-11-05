@@ -9,6 +9,7 @@ from app.api import (
     chat,
     extraction,
     followup,
+    github,
     health,
     meeting_automation,
     meetings,
@@ -37,6 +38,7 @@ api_router.include_router(analytics.router, prefix="/workspaces", tags=["Workspa
 
 # Calendar integration endpoints
 api_router.include_router(calendar.router, prefix="/calendar", tags=["Calendar"])
+api_router.include_router(github.router, tags=["GitHub Integration"])
 
 # AI extraction (BE-3)
 api_router.include_router(extraction.router, tags=["Extraction"])

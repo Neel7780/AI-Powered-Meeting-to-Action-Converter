@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LogOut,
   Plus,
+  Settings,
   Sparkles,
   SquareKanban,
   Users,
@@ -44,7 +45,10 @@ const navGroups = [
   },
   {
     label: "People",
-    items: [{ label: "Team", path: "/team", icon: Users }],
+    items: [
+      { label: "Team", path: "/team", icon: Users },
+      { label: "Workspace Settings", path: "/settings/github", icon: Settings },
+    ],
   },
 ];
 
