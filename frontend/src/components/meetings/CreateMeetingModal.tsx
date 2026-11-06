@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   X,
   Calendar,
-  Clock,
   Video,
   Users,
   FileText,
@@ -190,7 +189,11 @@ export const CreateMeetingModal: React.FC<CreateMeetingModalProps> = ({
                 text,
               };
             });
-            await supabase.from('transcript_segments').insert(segments).catch(() => null);
+            try {
+              await supabase.from('transcript_segments').insert(segments);
+            } catch {
+              // ignore segment insertion error
+            }
           }
         }
       } else if (transcriptTab === 'upload' && uploadedFile) {
