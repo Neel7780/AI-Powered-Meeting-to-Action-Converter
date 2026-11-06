@@ -23,6 +23,7 @@ interface CreateMeetingModalProps {
   workspaceId: string;
   onMeetingCreated: (meeting: any) => void;
   onSwitchToAdvanced?: () => void;
+  initialDate?: string;
 }
 
 const SAMPLE_TRANSCRIPT = `Madhav Chauhan (00:05): Team, let's review our sprint progress. Bharat, can you verify the transcript parser handles .vtt and .srt subtitle files properly by Friday?
@@ -37,13 +38,21 @@ export const CreateMeetingModal: React.FC<CreateMeetingModalProps> = ({
   workspaceId,
   onMeetingCreated,
   onSwitchToAdvanced,
+  initialDate,
 }) => {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(() => {
+    if (initialDate) return initialDate;
     const now = new Date();
     const pad = (n: number) => n.toString().padStart(2, '0');
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   });
+
+  React.useEffect(() => {
+    if (initialDate && isOpen) {
+      setDate(initialDate);
+    }
+  }, [initialDate, isOpen]);
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [meetingFormat, setMeetingFormat] = useState<'online' | 'in_person'>('online');
   const [conferenceUrl, setConferenceUrl] = useState('');
