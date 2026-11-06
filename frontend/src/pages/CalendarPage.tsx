@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar as CalendarIcon,
@@ -7,29 +7,19 @@ import {
   ChevronRight,
   Clock,
   Video,
-  Users,
-  CheckCircle2,
   ListTodo,
   Sparkles,
   Plus,
-  ExternalLink,
   Download,
   RefreshCw,
-  Filter,
-  Layers,
-  Globe,
   Building2,
   ArrowRight,
   Search,
-  Share2,
   X,
-  AlertCircle,
-  FileText,
   CalendarCheck2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useWorkspace, Workspace } from '../context/WorkspaceContext';
-import { useAuth } from '../context/AuthContext';
+import { useWorkspace, type Workspace } from '../context/WorkspaceContext';
 import { Button } from '../components/ui/button';
 import { CreateMeetingModal } from '../components/meetings/CreateMeetingModal';
 import { FollowUpModal } from '../components/meetings/FollowUpModal';
@@ -37,7 +27,7 @@ import {
   getCalendarStatus,
   getCalendarConnectUrl,
   getUpcomingCalendarEvents,
-  CalendarStatus,
+  type CalendarStatus,
 } from '../services/calendarApi';
 
 export interface CalendarMeeting {
@@ -273,12 +263,10 @@ function exportMeetingToIcs(meeting: CalendarMeeting) {
 
 export default function CalendarPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { workspaces, currentWorkspace } = useWorkspace();
 
   // State
   const [meetings, setMeetings] = useState<CalendarMeeting[]>([]);
-  const [loading, setLoading] = useState(true);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
@@ -318,7 +306,6 @@ export default function CalendarPage() {
 
   // Load meetings across ALL workspaces personal to the user
   const fetchAllWorkspaceMeetings = useCallback(async () => {
-    setLoading(true);
     try {
       const workspaceIds = workspaces.map((w) => w.id);
       let loadedMeetings: CalendarMeeting[] = [];
@@ -388,8 +375,6 @@ export default function CalendarPage() {
     } catch (err) {
       console.warn('Error loading personal calendar meetings:', err);
       setMeetings(generateDemoMeetings(workspaces));
-    } finally {
-      setLoading(false);
     }
   }, [workspaces, workspaceColorMap, workspaceNameMap]);
 
@@ -1362,7 +1347,7 @@ export default function CalendarPage() {
           onClose={() => setShowCreateModal(false)}
           workspaceId={currentWorkspace.id}
           initialDate={createInitialDate}
-          onMeetingCreated={(newMeeting) => {
+          onMeetingCreated={() => {
             setShowCreateModal(false);
             fetchAllWorkspaceMeetings();
           }}
