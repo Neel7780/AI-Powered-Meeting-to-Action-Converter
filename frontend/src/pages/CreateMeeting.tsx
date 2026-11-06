@@ -11,7 +11,12 @@ import { ParticipantPicker } from '../components/meetings/ParticipantPicker';
 import type { CalendarEventItem } from '../services/calendarApi';
 import type { WorkspaceMember } from '../types/review';
 
-export function CreateMeeting() {
+export interface CreateMeetingProps {
+  onSuccess?: (meeting: any) => void;
+  onCancel?: () => void;
+}
+
+export function CreateMeeting({ onSuccess, onCancel }: CreateMeetingProps = {}) {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   const [timezone, setTimezone] = useState('');
@@ -94,7 +99,11 @@ export function CreateMeeting() {
       const audioForm = new FormData();
       audioForm.append('file', input.audio);
       await postApi(`/api/meetings/${meeting.id}/audio`, audioForm);
-      navigate(`/meetings/${meeting.id}/speakers`);
+      if (onSuccess) {
+        onSuccess(meeting);
+      } else {
+        navigate(`/meetings/${meeting.id}/speakers`);
+      }
       return;
     }
 
@@ -110,16 +119,33 @@ export function CreateMeeting() {
       await new Promise(r => setTimeout(r, 2000));
       const { data } = await supabase.from('meetings').select('status').eq('id', meeting.id).single();
       if (data?.status === 'ready') {
-        navigate(`/meetings/${meeting.id}/review`);
+        if (onSuccess) {
+          onSuccess(meeting);
+        } else {
+          navigate(`/meetings/${meeting.id}/review`);
+        }
         return;
       }
       if (data?.status === 'failed') throw new Error('AI extraction failed. Please try again.');
     }
-    throw new Error('Extraction is taking too long; check the meeting later.');
+    if (onSuccess) {
+      onSuccess(meeting);
+    } else {
+      throw new Error('Extraction is taking too long; check the meeting later.');
+    }
   };
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-xs text-neutral-400 hover:text-white transition-colors flex items-center gap-1.5"
+        >
+          ← Back to Meetings
+        </button>
+      )}
       <div>
         <p className="eyebrow">New meeting</p>
         <h1 className="mt-2 text-3xl font-medium tracking-tight text-white">Create meeting</h1>
