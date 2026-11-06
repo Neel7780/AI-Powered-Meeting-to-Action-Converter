@@ -17,6 +17,7 @@ import TeamPage from "../pages/TeamPage";
 import AnalyticsPage from "../pages/AnalyticsPage";
 import GitHubSettings from "./GitHubSettings";
 import MeetingsPage from "../pages/MeetingsPage";
+import CalendarPage from "./CalendarPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
 import { FollowUpModal } from "../components/meetings/FollowUpModal";
@@ -35,6 +36,7 @@ export default function Dashboard() {
   const isChatPage = location.pathname === "/chat";
   const isTasksPage = location.pathname === "/tasks" || location.pathname === "/kanban";
   const isMeetingsPage = location.pathname === "/meetings";
+  const isCalendarPage = location.pathname === "/calendar";
   const isTeamPage = location.pathname === "/team";
   const isAnalyticsPage = location.pathname === "/analytics";
   const isGitHubPage = location.pathname === "/settings/github";
@@ -118,6 +120,8 @@ export default function Dashboard() {
             <KanbanBoard workspaceId={currentWorkspace?.id} />
           ) : isMeetingsPage ? (
             <MeetingsPage />
+          ) : isCalendarPage ? (
+            <CalendarPage />
           ) : isTeamPage ? (
             <TeamPage />
           ) : isAnalyticsPage ? (

@@ -50,6 +50,15 @@ function App() {
           }
         />
 
+        <Route
+          path="/calendar"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
         {/* /tasks and /kanban mount KanbanBoard inside Dashboard shell, wrapped by ProtectedRoute */}
         <Route
           path="/tasks"

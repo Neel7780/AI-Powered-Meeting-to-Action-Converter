@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   BarChart3,
+  CalendarDays,
   CalendarPlus,
   ChevronsUpDown,
   LayoutDashboard,
@@ -32,6 +33,7 @@ const navGroups = [
     items: [
       { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
       { label: "Meetings", path: "/meetings", icon: CalendarPlus },
+      { label: "Calendar", path: "/calendar", icon: CalendarDays },
       { label: "Meeting Studio", path: "/meeting-details", icon: Video },
       { label: "Tasks", path: "/tasks", icon: SquareKanban },
     ],
