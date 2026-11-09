@@ -15,6 +15,7 @@ import { supabase } from "../lib/supabase";
 import ChatPage from "../pages/ChatPage";
 import TeamPage from "../pages/TeamPage";
 import AnalyticsPage from "../pages/AnalyticsPage";
+import SprintVelocityPage from "../pages/SprintVelocityPage";
 import GitHubSettings from "./GitHubSettings";
 import MeetingsPage from "../pages/MeetingsPage";
 import CalendarPage from "./CalendarPage";
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const isCalendarPage = location.pathname === "/calendar";
   const isTeamPage = location.pathname === "/team";
   const isAnalyticsPage = location.pathname === "/analytics";
+  const isVelocityPage = location.pathname === "/velocity";
   const isGitHubPage = location.pathname === "/settings/github";
 
   const [showAddMember, setShowAddMember] = useState(false);
@@ -126,6 +128,8 @@ export default function Dashboard() {
             <TeamPage />
           ) : isAnalyticsPage ? (
             <AnalyticsPage />
+          ) : isVelocityPage ? (
+            <SprintVelocityPage />
           ) : loading ? (
             <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-neutral-500">
               <LoaderCircle className="size-4 animate-spin" />

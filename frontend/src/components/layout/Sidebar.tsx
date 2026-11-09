@@ -12,6 +12,7 @@ import {
   Settings,
   Sparkles,
   SquareKanban,
+  TrendingUp,
   Users,
   Video,
   X,
@@ -42,6 +43,7 @@ const navGroups = [
     label: "Insights",
     items: [
       { label: "Analytics", path: "/analytics", icon: BarChart3 },
+      { label: "Sprint Velocity", path: "/velocity", icon: TrendingUp },
       { label: "AI Assistant", path: "/chat", icon: Sparkles },
     ],
   },

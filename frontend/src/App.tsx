@@ -97,6 +97,15 @@ function App() {
         />
 
         <Route
+          path="/velocity"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/chat"
           element={
             <ProtectedRoute>

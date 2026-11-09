@@ -22,6 +22,7 @@ import {
   LayoutGrid,
   Bot,
   User,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -474,6 +475,19 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
               )}
             </button>
           </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="hidden sm:inline-flex border border-white/10 bg-white/[0.03] text-xs text-neutral-300 hover:text-white"
+            title="View Sprint Velocity & Progress Diff"
+          >
+            <Link to="/velocity">
+              <TrendingUp className="size-3.5 text-emerald-400 mr-1" />
+              <span>Sprint Velocity</span>
+            </Link>
+          </Button>
 
           <Button
             variant="ghost"
