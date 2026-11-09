@@ -15,6 +15,7 @@ from app.api import (
     meetings,
     review,
     tasks,
+    velocity,
     workspaces,
 )
 
@@ -35,6 +36,9 @@ api_router.include_router(tasks.router, prefix="/workspaces", tags=["Tasks"])
 
 # Sprint 2 Analytics (Task 7)
 api_router.include_router(analytics.router, prefix="/workspaces", tags=["Workspace Analytics"])
+
+# Sprint 3 Velocity & Meeting Progress Tracker
+api_router.include_router(velocity.router, prefix="/workspaces", tags=["Sprint Velocity"])
 
 # Calendar integration endpoints
 api_router.include_router(calendar.router, prefix="/calendar", tags=["Calendar"])
