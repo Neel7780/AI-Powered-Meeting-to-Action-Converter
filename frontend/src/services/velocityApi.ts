@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { requestApi } from '../lib/api';
 import type {
   SprintVelocityData,
   MeetingProgressDiff,
@@ -274,6 +275,22 @@ export async function fetchSprintVelocity(
   baseMeetingId?: string,
   currentMeetingId?: string
 ): Promise<SprintVelocityData> {
+  // 1. Try privileged FastAPI backend endpoint first
+  try {
+    const params = new URLSearchParams();
+    if (baseMeetingId) params.set('base_meeting_id', baseMeetingId);
+    if (currentMeetingId) params.set('current_meeting_id', currentMeetingId);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+
+    const backendData = await requestApi<SprintVelocityData>(`/api/workspaces/${workspaceId}/velocity${qs}`);
+    if (backendData && backendData.available_meetings && backendData.available_meetings.length > 0) {
+      return backendData;
+    }
+  } catch (backendErr) {
+    console.warn('Backend velocity endpoint not reachable, attempting direct Supabase query:', backendErr);
+  }
+
+  // 2. Client-side fallback via Supabase
   try {
     // 1. Fetch all meetings in workspace ordered chronologically ascending
     const { data: meetingsData, error: meetingsError } = await supabase
@@ -485,7 +502,23 @@ export async function fetchSprintVelocity(
 /**
  * 1-Click Carryover action: Reassign or rollover an unfinished task to a new meeting
  */
-export async function rolloverTaskToMeeting(taskId: string, targetMeetingId: string): Promise<boolean> {
+export async function rolloverTaskToMeeting(
+  workspaceId: string,
+  taskId: string,
+  targetMeetingId: string
+): Promise<boolean> {
+  // 1. Try privileged FastAPI backend endpoint first (Compliant with column-level security)
+  try {
+    await requestApi(`/api/workspaces/${workspaceId}/tasks/${taskId}/rollover`, {
+      method: 'POST',
+      body: JSON.stringify({ target_meeting_id: targetMeetingId }),
+    });
+    return true;
+  } catch (backendErr) {
+    console.warn('Backend rollover endpoint failed, attempting direct Supabase fallback:', backendErr);
+  }
+
+  // 2. Direct fallback
   try {
     const { error } = await supabase
       .from('tasks')

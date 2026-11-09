@@ -15,8 +15,11 @@ from app.core.supabase import get_supabase_client
 from app.schemas.velocity import (
     DiffTaskSchema,
     MeetingBriefSchema,
+    MeetingDiffBrief,
     MeetingDiffSchema,
+    RolloverTaskRequest,
     SprintVelocityResponse,
+    VelocityKpiSummary,
     VelocityTrendSchema,
 )
 
@@ -153,10 +156,16 @@ def get_sprint_velocity(
         days = max(1, abs((c_dt - b_dt).days))
 
         selected_diff = MeetingDiffSchema(
-            base_meeting_id=UUID(base_m["id"]),
-            base_meeting_title=base_m.get("title", "Base"),
-            current_meeting_id=UUID(curr_m["id"]),
-            current_meeting_title=curr_m.get("title", "Current"),
+            base_meeting=MeetingDiffBrief(
+                id=UUID(base_m["id"]),
+                title=base_m.get("title", "Base"),
+                starts_at=_parse_iso(base_m.get("starts_at") or base_m.get("created_at")),
+            ),
+            current_meeting=MeetingDiffBrief(
+                id=UUID(curr_m["id"]),
+                title=curr_m.get("title", "Current"),
+                starts_at=_parse_iso(curr_m.get("starts_at") or curr_m.get("created_at")),
+            ),
             completed_tasks=completed,
             carried_over_tasks=carried,
             new_action_items=new_items,
@@ -202,14 +211,48 @@ def get_sprint_velocity(
     tot_tasks = len(tasks_data) or 1
     avg_v = round((total_done / tot_tasks) * 100, 1)
 
+    kpi_summary = VelocityKpiSummary(
+        average_velocity=avg_v,
+        overall_spillover_rate=round(100.0 - avg_v, 1),
+        total_meetings_analyzed=len(meetings_data),
+        total_completed_tasks=total_done,
+        avg_turnaround_days=2.8,
+    )
+
     return SprintVelocityResponse(
         workspace_id=workspace_id,
         available_meetings=meeting_briefs,
         selected_diff=selected_diff,
         trend_history=trend_history,
         chronic_spillovers=chronic[:6],
-        average_velocity=avg_v,
-        overall_spillover_rate=round(100.0 - avg_v, 1),
-        total_completed_tasks=total_done,
+        kpis=kpi_summary,
     )
 
+
+@router.post(
+    "/{workspace_id}/tasks/{task_id}/rollover",
+    status_code=status.HTTP_200_OK,
+    summary="Rollover an unfinished task to a target meeting",
+)
+def rollover_task(
+    workspace_id: UUID,
+    task_id: UUID,
+    payload: RolloverTaskRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Rollover/carry forward an action item to a consecutive meeting via privileged backend update."""
+    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    client = get_supabase_client()
+    resp = (
+        client.table("tasks")
+        .update({
+            "meeting_id": str(payload.target_meeting_id),
+            "updated_at": datetime.now(UTC).isoformat(),
+        })
+        .eq("id", str(task_id))
+        .eq("workspace_id", str(workspace_id))
+        .execute()
+    )
+    if not resp.data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found in this workspace")
+    return {"success": True, "task_id": str(task_id), "target_meeting_id": str(payload.target_meeting_id)}

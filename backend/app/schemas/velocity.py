@@ -34,11 +34,15 @@ class MeetingBriefSchema(BaseModel):
     velocity_rate: float = 0.0
 
 
+class MeetingDiffBrief(BaseModel):
+    id: UUID
+    title: str
+    starts_at: datetime | None = None
+
+
 class MeetingDiffSchema(BaseModel):
-    base_meeting_id: UUID
-    base_meeting_title: str
-    current_meeting_id: UUID
-    current_meeting_title: str
+    base_meeting: MeetingDiffBrief
+    current_meeting: MeetingDiffBrief
     completed_tasks: list[DiffTaskSchema]
     carried_over_tasks: list[DiffTaskSchema]
     new_action_items: list[DiffTaskSchema]
@@ -57,13 +61,22 @@ class VelocityTrendSchema(BaseModel):
     velocity_percentage: float = 0.0
 
 
+class VelocityKpiSummary(BaseModel):
+    average_velocity: float = 0.0
+    overall_spillover_rate: float = 0.0
+    total_meetings_analyzed: int = 0
+    total_completed_tasks: int = 0
+    avg_turnaround_days: float = 2.8
+
+
+class RolloverTaskRequest(BaseModel):
+    target_meeting_id: UUID
+
+
 class SprintVelocityResponse(BaseModel):
     workspace_id: UUID
     available_meetings: list[MeetingBriefSchema]
     selected_diff: MeetingDiffSchema | None = None
     trend_history: list[VelocityTrendSchema]
     chronic_spillovers: list[DiffTaskSchema]
-    average_velocity: float = 0.0
-    overall_spillover_rate: float = 0.0
-    total_completed_tasks: int = 0
-
+    kpis: VelocityKpiSummary

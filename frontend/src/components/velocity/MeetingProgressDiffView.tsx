@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { MeetingProgressDiff, DiffTaskItem } from '../../types/velocity';
 import { rolloverTaskToMeeting } from '../../services/velocityApi';
+import { useWorkspace } from '../../context/WorkspaceContext';
 
 interface MeetingProgressDiffViewProps {
   diff: MeetingProgressDiff | null;
@@ -21,6 +22,7 @@ interface MeetingProgressDiffViewProps {
 }
 
 export const MeetingProgressDiffView: React.FC<MeetingProgressDiffViewProps> = ({ diff, onRefresh }) => {
+  const { currentWorkspace } = useWorkspace();
   const [rollingOverId, setRollingOverId] = useState<string | null>(null);
   const [rolledOverSuccess, setRolledOverSuccess] = useState<Set<string>>(new Set());
 
@@ -36,7 +38,8 @@ export const MeetingProgressDiffView: React.FC<MeetingProgressDiffViewProps> = (
 
   const handleRollover = async (task: DiffTaskItem) => {
     setRollingOverId(task.id);
-    const success = await rolloverTaskToMeeting(task.id, current_meeting.id);
+    const wsId = currentWorkspace?.id || '';
+    const success = await rolloverTaskToMeeting(wsId, task.id, current_meeting.id);
     setRollingOverId(null);
     if (success) {
       setRolledOverSuccess((prev) => new Set(prev).add(task.id));
