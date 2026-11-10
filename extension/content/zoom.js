@@ -1,18 +1,19 @@
 /**
- * ActionPulse - Zoom Web Realtime Caption Capture & Lifecycle Engine
+ * ActionPulse - Zoom Web Realtime Caption Capture Engine (High Performance)
  * 
- * Captures live closed captions in Zoom Web Client, filters out system UI text,
- * and auto-detects meeting start and end.
+ * Optimized for zero overhead:
+ * - NEVER accesses document.body.innerText.
+ * - Only observes the dedicated Zoom CC container.
  */
 
 (function () {
-  console.log("[ActionPulse] Zoom Web Client content script active.");
+  console.log("[ActionPulse] Zoom Web Client content script loaded.");
 
   const PLATFORM = "zoom";
-  let observer = null;
-  let pollInterval = null;
+  let captionObserver = null;
+  let activeCaptionContainer = null;
+  let checkTimer = null;
   let isMeetingActive = false;
-  let isCaptionsActive = false;
 
   let currentSpeaker = "";
   let currentUtterance = "";
@@ -20,6 +21,7 @@
   let finalizeTimer = null;
 
   let statusBadge = null;
+  let lastBadgeText = "";
 
   const SYSTEM_ALERT_PATTERNS = [
     /this meeting has ended/i,
@@ -38,7 +40,10 @@
   }
 
   function createStatusBadge() {
-    if (document.getElementById("actionpulse-zoom-badge")) return;
+    if (document.getElementById("actionpulse-zoom-badge")) {
+      statusBadge = document.getElementById("actionpulse-zoom-badge");
+      return;
+    }
     statusBadge = document.createElement("div");
     statusBadge.id = "actionpulse-zoom-badge";
     statusBadge.style.position = "fixed";
@@ -51,8 +56,8 @@
     statusBadge.style.padding = "6px 14px";
     statusBadge.style.borderRadius = "20px";
     statusBadge.style.backgroundColor = "rgba(10, 10, 15, 0.95)";
-    statusBadge.style.border = "1px solid rgba(99, 102, 241, 0.5)";
-    statusBadge.style.boxShadow = "0 4px 14px rgba(0, 0, 0, 0.6)";
+    statusBadge.style.border = "1px solid rgba(99, 102, 241, 0.4)";
+    statusBadge.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.5)";
     statusBadge.style.color = "#ffffff";
     statusBadge.style.fontFamily = "Inter, -apple-system, system-ui, sans-serif";
     statusBadge.style.fontSize = "12px";
@@ -68,16 +73,24 @@
   }
 
   function updateBadgeStatus(active, message) {
+    if (lastBadgeText === message) return;
+    lastBadgeText = message;
+
     if (!statusBadge) createStatusBadge();
     const dot = statusBadge.querySelector("span:first-child");
     const textEl = document.getElementById("actionpulse-zoom-badge-text");
+
     if (active) {
-      dot.style.background = "#10b981";
-      dot.style.boxShadow = "0 0 10px #10b981";
+      if (dot) {
+        dot.style.background = "#10b981";
+        dot.style.boxShadow = "0 0 10px #10b981";
+      }
       if (textEl) textEl.innerText = message || "ActionPulse: Recording Zoom CC";
     } else {
-      dot.style.background = "#6366f1";
-      dot.style.boxShadow = "0 0 8px #6366f1";
+      if (dot) {
+        dot.style.background = "#6366f1";
+        dot.style.boxShadow = "0 0 8px #6366f1";
+      }
       if (textEl) textEl.innerText = message || "ActionPulse: Ready";
     }
   }
@@ -106,15 +119,54 @@
         },
       });
     } catch (e) {
-      console.warn("[ActionPulse] Zoom cue delivery error:", e);
+      // Ignored
     }
   }
 
-  function scanZoomCaptions() {
+  function extractCaptionsFromContainer(container) {
+    if (!container) return;
+    const blocks = container.querySelectorAll(".closed-caption-text, .caption-text, #closed-caption-item");
+    const targetBlocks = blocks.length > 0 ? blocks : [container];
+
+    targetBlocks.forEach((block) => {
+      const speakerEl = block.querySelector(".closed-caption-speaker, .speaker-name, .cc-speaker");
+      const textEl = block.querySelector(".closed-caption-text, .caption-text, .cc-content") || block;
+
+      let speaker = speakerEl ? speakerEl.innerText.trim().replace(/:$/, "") : "";
+      let fullText = textEl.innerText ? textEl.innerText.trim() : "";
+
+      if (!speaker && fullText.includes(":")) {
+        const parts = fullText.split(":");
+        speaker = parts[0].trim();
+        fullText = parts.slice(1).join(":").trim();
+      }
+
+      if (isSystemNotification(fullText)) return;
+      if (!fullText || fullText.length < 2) return;
+
+      updateBadgeStatus(true, `Capturing: ${speaker || "Speaker"}`);
+
+      if (speaker !== currentSpeaker && currentUtterance) {
+        commitCue(currentSpeaker, currentUtterance);
+        currentSpeaker = speaker;
+        currentUtterance = fullText;
+      } else {
+        currentSpeaker = speaker || "Speaker";
+        currentUtterance = fullText;
+      }
+
+      clearTimeout(finalizeTimer);
+      finalizeTimer = setTimeout(() => {
+        if (currentUtterance && currentUtterance !== lastCommittedText) {
+          commitCue(currentSpeaker, currentUtterance);
+        }
+      }, 1000);
+    });
+  }
+
+  function checkMeetingAndCaptions() {
     const leaveBtn = document.querySelector(".footer-button__button[aria-label*='Leave' i], .leave-button, [aria-label*='End' i]");
-    const isEnded = window.location.href.includes("postattendee") ||
-                    document.body.innerText.includes("This meeting has been ended") ||
-                    document.body.innerText.includes("You have left the meeting");
+    const isEnded = window.location.href.includes("postattendee");
 
     if (isEnded && isMeetingActive) {
       handleMeetingEnded();
@@ -123,6 +175,7 @@
 
     if (leaveBtn && !isMeetingActive) {
       isMeetingActive = true;
+      createStatusBadge();
       chrome.runtime.sendMessage({
         type: "MEETING_STARTED",
         data: {
@@ -133,54 +186,39 @@
       });
     }
 
-    // Zoom CC element search
-    const captionBlocks = document.querySelectorAll(
-      ".closed-caption-window, #closed-caption-item, .caption-text, .closed-caption-text"
-    );
+    const captionContainer = document.querySelector(".closed-caption-window, #closed-caption-item, .caption-container");
 
-    if (captionBlocks && captionBlocks.length > 0) {
-      isCaptionsActive = true;
-      captionBlocks.forEach((block) => {
-        const speakerEl = block.querySelector(".closed-caption-speaker, .speaker-name, .cc-speaker");
-        const textEl = block.querySelector(".closed-caption-text, .caption-text, .cc-content") || block;
+    if (captionContainer && captionContainer !== activeCaptionContainer) {
+      if (captionObserver) captionObserver.disconnect();
+      activeCaptionContainer = captionContainer;
 
-        let speaker = speakerEl ? speakerEl.innerText.trim().replace(/:$/, "") : "";
-        let fullText = textEl.innerText ? textEl.innerText.trim() : "";
-
-        if (!speaker && fullText.includes(":")) {
-          const parts = fullText.split(":");
-          speaker = parts[0].trim();
-          fullText = parts.slice(1).join(":").trim();
-        }
-
-        if (isSystemNotification(fullText)) return;
-        if (!fullText || fullText.length < 2) return;
-
-        updateBadgeStatus(true, `Capturing: ${speaker || "Speaker"}`);
-
-        if (speaker !== currentSpeaker && currentUtterance) {
-          commitCue(currentSpeaker, currentUtterance);
-          currentSpeaker = speaker;
-          currentUtterance = fullText;
-        } else {
-          currentSpeaker = speaker || "Speaker";
-          currentUtterance = fullText;
-        }
-
-        clearTimeout(finalizeTimer);
-        finalizeTimer = setTimeout(() => {
-          if (currentUtterance && currentUtterance !== lastCommittedText) {
-            commitCue(currentSpeaker, currentUtterance);
-          }
-        }, 1200);
+      captionObserver = new MutationObserver(() => {
+        extractCaptionsFromContainer(activeCaptionContainer);
       });
+
+      captionObserver.observe(activeCaptionContainer, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+
+      extractCaptionsFromContainer(activeCaptionContainer);
+    } else if (!captionContainer && activeCaptionContainer) {
+      if (captionObserver) captionObserver.disconnect();
+      activeCaptionContainer = null;
+      updateBadgeStatus(false, "ActionPulse: Ready (Turn on Zoom CC)");
     }
   }
 
   function handleMeetingEnded() {
     if (!isMeetingActive) return;
     isMeetingActive = false;
-    isCaptionsActive = false;
+
+    if (captionObserver) {
+      captionObserver.disconnect();
+      captionObserver = null;
+    }
+    activeCaptionContainer = null;
 
     if (currentUtterance && currentUtterance !== lastCommittedText) {
       commitCue(currentSpeaker || "Speaker", currentUtterance);
@@ -198,11 +236,11 @@
         },
       });
     } catch (e) {
-      console.warn("[ActionPulse] Zoom meeting ended send error:", e);
+      // Ignored
     }
   }
 
-  function initCaptionObserver() {
+  function start() {
     createStatusBadge();
 
     window.addEventListener("beforeunload", handleMeetingEnded);
@@ -211,13 +249,11 @@
     document.addEventListener("click", (e) => {
       const target = e.target;
       if (target?.closest?.("[aria-label*='Leave' i]") || target?.closest?.(".leave-button")) {
-        setTimeout(handleMeetingEnded, 500);
+        setTimeout(handleMeetingEnded, 400);
       }
     });
 
-    observer = new MutationObserver(() => scanZoomCaptions());
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    pollInterval = setInterval(scanZoomCaptions, 350);
+    checkTimer = setInterval(checkMeetingAndCaptions, 800);
   }
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -225,7 +261,7 @@
       sendResponse({
         active: isMeetingActive,
         platform: PLATFORM,
-        captionsActive: isCaptionsActive,
+        captionsActive: activeCaptionContainer !== null,
         title: getMeetingTitle(),
         conferenceUrl: window.location.href,
       });
@@ -233,8 +269,8 @@
   });
 
   if (document.readyState === "complete" || document.readyState === "interactive") {
-    setTimeout(initCaptionObserver, 1000);
+    setTimeout(start, 800);
   } else {
-    window.addEventListener("DOMContentLoaded", () => setTimeout(initCaptionObserver, 1000));
+    window.addEventListener("DOMContentLoaded", () => setTimeout(start, 800));
   }
 })();
