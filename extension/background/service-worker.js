@@ -2,7 +2,7 @@
  * ActionPulse - Chrome Service Worker (Manifest V3)
  * 
  * Manages transcript session state, caption buffers, local storage persistence,
- * automatic meeting start/end detection, and 1-click upload to the ActionPulse backend.
+ * automatic meeting start/end detection, and auto-upload on meeting end.
  */
 
 const DEFAULT_SETTINGS = {
@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
   workspaceId: "00000000-0000-0000-0000-000000000002", // G-10 Workspace
   managerRole: "organiser",
   autoExtract: true,
+  autoUploadOnEnd: true,
 };
 
 function createIdleSession() {
@@ -18,6 +19,9 @@ function createIdleSession() {
     id: "session_" + Date.now(),
     isRecording: false,
     isCompleted: false,
+    uploaded: false,
+    uploadResult: null,
+    reviewUrl: null,
     platform: "none",
     title: "",
     conferenceUrl: "",
@@ -33,6 +37,9 @@ function createNewSession(platform = "google_meet", title = "Meeting", conferenc
     id: "session_" + Date.now(),
     isRecording: true,
     isCompleted: false,
+    uploaded: false,
+    uploadResult: null,
+    reviewUrl: null,
     platform: platform,
     title: title || "Meeting",
     conferenceUrl: conferenceUrl || "",
@@ -82,6 +89,67 @@ function buildCanonicalText(cues) {
   return cues.map((c) => `${c.speaker || "Speaker"}: ${c.text}`).join("\n");
 }
 
+async function performBackendUpload(session, settings) {
+  const cues = session.cues && session.cues.length > 0 ? session.cues : [
+    { speaker: "Organiser", text: "Meeting concluded with agreed action items.", timestamp: new Date().toISOString() }
+  ];
+
+  let durationMins = 15;
+  if (session.startTime) {
+    const endTs = session.endTime ? new Date(session.endTime).getTime() : Date.now();
+    durationMins = Math.max(1, Math.round((endTs - new Date(session.startTime).getTime()) / 60000));
+  }
+
+  const vttText = buildVttTranscript(cues, session.startTime);
+
+  const payload = {
+    workspace_id: settings.workspaceId,
+    provider: session.platform && session.platform !== "none" ? session.platform : "google_meet",
+    title: session.title || "Online Meeting Transcript",
+    conference_url: session.conferenceUrl || null,
+    duration_minutes: durationMins,
+    transcript_text: vttText,
+    segments: cues.map((c, i) => ({
+      speaker: c.speaker,
+      text: c.text,
+      timestamp: c.timestamp,
+      start_ms: i * 5000,
+      end_ms: (i + 1) * 5000,
+    })),
+    auto_extract: settings.autoExtract !== false,
+  };
+
+  const targetUrl = `${settings.apiUrl}/api/meetings/automation/extension-upload`;
+  console.log("[ActionPulse] Uploading meeting transcript to:", targetUrl);
+
+  const response = await fetch(targetUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer dev-token-${settings.workspaceId}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Server returned ${response.status}: ${errBody}`);
+  }
+
+  const result = await response.json();
+  const reviewFullUrl = `${settings.appUrl}${result.review_url}`;
+
+  return {
+    success: true,
+    meetingId: result.meeting_id,
+    reviewUrl: reviewFullUrl,
+    relativeReviewUrl: result.review_url,
+    segmentCount: result.segment_count,
+    extractedItemsCount: result.extracted_items_count,
+    message: result.message,
+  };
+}
+
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.local.get(["settings", "session"]);
   if (!current.settings) {
@@ -93,19 +161,32 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log("[ActionPulse] Service worker initialized.");
 });
 
-// Watch tab updates / removals to stop session when user closes meeting tab
+// Watch tab closures to finalize and auto-upload
 chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const store = await chrome.storage.local.get(["session", "meetingTabId"]);
+  const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
   if (store.meetingTabId === tabId && store.session && store.session.isRecording) {
     const session = store.session;
+    const settings = store.settings || DEFAULT_SETTINGS;
     session.isRecording = false;
     session.isCompleted = true;
     session.endTime = new Date().toISOString();
     if (session.startTime) {
       session.durationSeconds = Math.max(0, Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000));
     }
+
+    if (session.cues && session.cues.length > 0 && !session.uploaded) {
+      try {
+        const uploadRes = await performBackendUpload(session, settings);
+        session.uploaded = true;
+        session.uploadResult = uploadRes;
+        session.reviewUrl = uploadRes.reviewUrl;
+        console.log("[ActionPulse] Auto-uploaded on tab close. Review URL:", uploadRes.reviewUrl);
+      } catch (err) {
+        console.warn("[ActionPulse] Auto-upload on tab close failed (cues preserved in local storage):", err);
+      }
+    }
+
     await chrome.storage.local.set({ session, meetingTabId: null });
-    console.log("[ActionPulse] Meeting tab closed, session finalized.");
   }
 });
 
@@ -127,7 +208,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "MEETING_STARTED": {
         const data = message.data || {};
-        // If not already in an active recording session, start one
         if (!session.isRecording || session.isCompleted) {
           session = createNewSession(data.platform, data.title, data.conferenceUrl);
         } else {
@@ -153,6 +233,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000)
             );
           }
+
+          // Auto-trigger upload if captions are present
+          if (session.cues && session.cues.length > 0 && !session.uploaded && settings.autoUploadOnEnd !== false) {
+            try {
+              const uploadRes = await performBackendUpload(session, settings);
+              session.uploaded = true;
+              session.uploadResult = uploadRes;
+              session.reviewUrl = uploadRes.reviewUrl;
+              console.log("[ActionPulse] Auto-upload on meeting ended succeeded! Review URL:", uploadRes.reviewUrl);
+            } catch (uploadErr) {
+              console.warn("[ActionPulse] Auto-upload on meeting end failed (cues preserved locally):", uploadErr);
+            }
+          }
+
           await chrome.storage.local.set({ session, meetingTabId: null });
         }
         sendResponse({ status: "ended", session });
@@ -166,7 +260,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
 
-        // Auto-activate session if not active
         if (!session.isRecording && !session.isCompleted) {
           session.isRecording = true;
           session.startTime = session.startTime || new Date().toISOString();
@@ -176,7 +269,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (cue.title && (!session.title || session.title === "Meeting")) session.title = cue.title;
         if (cue.conferenceUrl && !session.conferenceUrl) session.conferenceUrl = cue.conferenceUrl;
 
-        // Check if last cue from same speaker should be updated with longer text
         const lastCue = session.cues[session.cues.length - 1];
         if (
           lastCue &&
@@ -184,15 +276,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           cue.text.startsWith(lastCue.text) &&
           cue.text.length > lastCue.text.length
         ) {
-          // Streaming extension: update in-place with latest full phrase
           lastCue.text = cue.text;
           lastCue.timestamp = cue.timestamp || new Date().toISOString();
         } else if (lastCue && lastCue.speaker === cue.speaker && lastCue.text === cue.text) {
-          // Exact duplicate, ignore
           sendResponse({ status: "duplicate_ignored" });
           return;
         } else {
-          // New distinct cue
           session.cues.push({
             speaker: cue.speaker || "You",
             text: cue.text,
@@ -220,65 +309,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "UPLOAD_TO_BACKEND": {
-        const cues = session.cues && session.cues.length > 0 ? session.cues : [
-          { speaker: "Organiser", text: "Meeting concluded with agreed action items.", timestamp: new Date().toISOString() }
-        ];
-
-        let durationMins = 15;
-        if (session.startTime) {
-          const endTs = session.endTime ? new Date(session.endTime).getTime() : Date.now();
-          durationMins = Math.max(1, Math.round((endTs - new Date(session.startTime).getTime()) / 60000));
-        }
-
-        const vttText = buildVttTranscript(cues, session.startTime);
-
-        const payload = {
-          workspace_id: settings.workspaceId,
-          provider: session.platform && session.platform !== "none" ? session.platform : "google_meet",
-          title: session.title || "Online Meeting Transcript",
-          conference_url: session.conferenceUrl || null,
-          duration_minutes: durationMins,
-          transcript_text: vttText,
-          segments: cues.map((c, i) => ({
-            speaker: c.speaker,
-            text: c.text,
-            timestamp: c.timestamp,
-            start_ms: i * 5000,
-            end_ms: (i + 1) * 5000,
-          })),
-          auto_extract: settings.autoExtract !== false,
-        };
-
-        const targetUrl = `${settings.apiUrl}/api/meetings/automation/extension-upload`;
-        console.log("[ActionPulse] Uploading meeting transcript to:", targetUrl);
-
         try {
-          const response = await fetch(targetUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer dev-token-${settings.workspaceId}`,
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            const errBody = await response.text();
-            throw new Error(`Server returned ${response.status}: ${errBody}`);
-          }
-
-          const result = await response.json();
-          const reviewFullUrl = `${settings.appUrl}${result.review_url}`;
-
-          sendResponse({
-            success: true,
-            meetingId: result.meeting_id,
-            reviewUrl: reviewFullUrl,
-            relativeReviewUrl: result.review_url,
-            segmentCount: result.segment_count,
-            extractedItemsCount: result.extracted_items_count,
-            message: result.message,
-          });
+          const uploadRes = await performBackendUpload(session, settings);
+          session.uploaded = true;
+          session.uploadResult = uploadRes;
+          session.reviewUrl = uploadRes.reviewUrl;
+          await chrome.storage.local.set({ session });
+          sendResponse(uploadRes);
         } catch (uploadError) {
           console.error("[ActionPulse] Upload failed:", uploadError);
           sendResponse({

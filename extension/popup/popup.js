@@ -119,6 +119,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (meetingTimerEl) {
           meetingTimerEl.innerText = getDurationDisplay(activeSession);
         }
+
+        if (activeSession.uploaded && activeSession.reviewUrl) {
+          resultBanner.classList.remove("hidden");
+          resultBanner.classList.remove("error");
+          const count = activeSession.uploadResult?.extractedItemsCount || 0;
+          const segs = activeSession.uploadResult?.segmentCount || activeSession.cues?.length || 0;
+          resultContent.innerHTML = `
+            <strong>✓ Transcripts Ingested & Parsed!</strong><br/>
+            <span>${segs} segments saved • ${count} tasks generated for review.</span>
+          `;
+          reviewGateLink.href = activeSession.reviewUrl;
+          reviewGateLink.classList.remove("hidden");
+          reviewGateLink.onclick = (e) => {
+            e.preventDefault();
+            chrome.tabs.create({ url: activeSession.reviewUrl });
+          };
+        }
       }
     });
 
