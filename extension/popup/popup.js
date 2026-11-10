@@ -1,16 +1,16 @@
 /**
  * ActionPulse - Popup UI Controller
  * 
- * Coordinates live caption display, 1-click backend upload & AI extraction,
- * manager review gate redirection, and local transcript exports (.vtt/.txt).
+ * Accurately displays live call state, captures spoken closed captions,
+ * freezes duration when call ends, and provides 1-click upload to the Manager Review Gate.
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // UI Elements
   const platformNameEl = document.getElementById("platformName");
   const statusDotEl = document.getElementById("statusDot");
-  const cueCountEl = document.getElementById("cueCount");
   const meetingTimerEl = document.getElementById("meetingTimer");
+  const cueCountStatEl = document.getElementById("cueCountStat");
+  const sessionStateTagEl = document.getElementById("sessionStateTag");
   const transcriptFeedEl = document.getElementById("transcriptFeed");
   const clearBufferBtn = document.getElementById("clearBufferBtn");
 
@@ -30,43 +30,53 @@ document.addEventListener("DOMContentLoaded", async () => {
   let activeSession = null;
   let timerInterval = null;
 
-  // Format seconds to MM:SS
-  function formatDuration(startTime) {
-    if (!startTime) return "00:00";
-    const start = new Date(startTime).getTime();
-    const now = Date.now();
-    const diffSecs = Math.max(0, Math.floor((now - start) / 1000));
-    const mins = Math.floor(diffSecs / 60);
-    const secs = diffSecs % 60;
+  // Format seconds into MM:SS
+  function formatSecs(totalSecs) {
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
     return String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
   }
 
-  // Render rolling captions feed
+  // Calculate duration string
+  function getDurationDisplay(session) {
+    if (!session || !session.startTime) return "00:00";
+    if (session.isCompleted || (!session.isRecording && session.endTime)) {
+      const start = new Date(session.startTime).getTime();
+      const end = new Date(session.endTime).getTime();
+      const diffSecs = Math.max(0, Math.floor((end - start) / 1000));
+      return formatSecs(diffSecs);
+    }
+    if (session.isRecording) {
+      const start = new Date(session.startTime).getTime();
+      const diffSecs = Math.max(0, Math.floor((Date.now() - start) / 1000));
+      return formatSecs(diffSecs);
+    }
+    return "00:00";
+  }
+
   function renderCues(cues) {
     if (!cues || cues.length === 0) {
       transcriptFeedEl.innerHTML = `
         <div class="empty-state">
           <p>Captions are currently idle.</p>
-          <p class="sub">Turn on Closed Captions (CC) in Google Meet, Zoom, or Teams to automatically start capturing.</p>
+          <p class="sub">Turn on Closed Captions (CC) in Google Meet, Zoom, or Teams to automatically capture live speech.</p>
         </div>
       `;
       return;
     }
 
     transcriptFeedEl.innerHTML = "";
-    // Show last 15 cues
-    const displayCues = cues.slice(-15);
+    const displayCues = cues.slice(-20);
     displayCues.forEach((cue) => {
       const item = document.createElement("div");
       item.className = "cue-item";
       item.innerHTML = `
-        <span class="cue-speaker">${escapeHtml(cue.speaker || "Speaker")}:</span>
+        <span class="cue-speaker">${escapeHtml(cue.speaker || "You")}:</span>
         <span class="cue-text">${escapeHtml(cue.text || "")}</span>
       `;
       transcriptFeedEl.appendChild(item);
     });
 
-    // Auto-scroll to bottom
     transcriptFeedEl.scrollTop = transcriptFeedEl.scrollHeight;
   }
 
@@ -79,7 +89,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       .replace(/'/g, "&#039;");
   }
 
-  // Load and refresh state from service worker
+  function formatPlatformTitle(p) {
+    if (p === "google_meet") return "Google Meet";
+    if (p === "zoom") return "Zoom Web";
+    if (p === "teams") return "Microsoft Teams";
+    return "Meeting";
+  }
+
   async function refreshState() {
     chrome.runtime.sendMessage({ type: "GET_STATE" }, (response) => {
       if (!response) return;
@@ -87,68 +103,93 @@ document.addEventListener("DOMContentLoaded", async () => {
       activeSession = response.session;
       const settings = response.settings;
 
-      // Populate settings fields
       if (settings) {
         if (workspaceIdInput) workspaceIdInput.value = settings.workspaceId || "";
         if (apiUrlInput) apiUrlInput.value = settings.apiUrl || "http://localhost:8000";
         if (appUrlInput) appUrlInput.value = settings.appUrl || "http://localhost:5173";
       }
 
-      // Update metrics
-      if (cueCountEl) cueCountEl.innerText = String(response.cueCount || 0);
+      const cueCount = response.cueCount || 0;
+      if (cueCountStatEl) {
+        cueCountStatEl.innerText = `${cueCount} caption${cueCount === 1 ? "" : "s"} captured`;
+      }
 
       if (activeSession) {
         renderCues(activeSession.cues);
+        if (meetingTimerEl) {
+          meetingTimerEl.innerText = getDurationDisplay(activeSession);
+        }
       }
     });
 
-    // Inspect active tab to detect active meeting platform
+    // Inspect active browser tab for real-time meeting status
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const activeTab = tabs && tabs[0];
-      if (!activeTab || !activeTab.url) return;
+      const url = activeTab?.url || "";
 
-      const url = activeTab.url;
-      let detected = "Standby (No Meeting Tab)";
+      let isMeetingTab = false;
+      let platformLabel = "Standby (No Meeting)";
 
       if (url.includes("meet.google.com")) {
-        detected = "Google Meet (Connected)";
+        isMeetingTab = true;
+        platformLabel = "Google Meet";
       } else if (url.includes("zoom.us")) {
-        detected = "Zoom Web (Connected)";
+        isMeetingTab = true;
+        platformLabel = "Zoom Web";
       } else if (url.includes("teams.microsoft.com") || url.includes("teams.live.com")) {
-        detected = "Microsoft Teams (Connected)";
+        isMeetingTab = true;
+        platformLabel = "Microsoft Teams";
       }
 
-      if (platformNameEl) platformNameEl.innerText = detected;
-
-      // Ping content script on active tab for live CC state
-      if (activeTab.id) {
+      if (activeTab?.id && isMeetingTab) {
         chrome.tabs.sendMessage(activeTab.id, { type: "CHECK_PLATFORM_STATUS" }, (res) => {
-          if (chrome.runtime.lastError) {
-            // Content script not loaded or not meeting tab
+          if (chrome.runtime.lastError || !res) {
+            handleTabState(isMeetingTab, platformLabel, false, false);
             return;
           }
-          if (res && res.captionsActive) {
-            statusDotEl.classList.add("pulsing");
-            platformNameEl.innerText = `${formatPlatformName(res.platform)}: Captions Active`;
-          }
+          handleTabState(isMeetingTab, formatPlatformTitle(res.platform), res.active, res.captionsActive);
         });
+      } else {
+        handleTabState(isMeetingTab, platformLabel, false, false);
       }
     });
   }
 
-  function formatPlatformName(p) {
-    if (p === "google_meet") return "Google Meet";
-    if (p === "zoom") return "Zoom";
-    if (p === "teams") return "Microsoft Teams";
-    return "Meeting";
+  function handleTabState(isMeetingTab, platformLabel, isCallActive, isCaptionsActive) {
+    if (!statusDotEl || !platformNameEl || !sessionStateTagEl) return;
+
+    statusDotEl.className = "status-dot";
+    sessionStateTagEl.className = "status-tag";
+
+    if (activeSession?.isCompleted) {
+      statusDotEl.classList.add("ended");
+      platformNameEl.innerText = `${platformLabel}: Call Ended`;
+      sessionStateTagEl.innerText = "Call Completed";
+      sessionStateTagEl.classList.add("ended");
+    } else if (isCallActive) {
+      statusDotEl.classList.add(isCaptionsActive ? "pulsing" : "active");
+      platformNameEl.innerText = isCaptionsActive
+        ? `${platformLabel}: Captions Active`
+        : `${platformLabel}: In Call`;
+      sessionStateTagEl.innerText = isCaptionsActive ? "Recording Live" : "Call Active (Turn on CC)";
+      sessionStateTagEl.classList.add("active");
+    } else if (isMeetingTab) {
+      platformNameEl.innerText = `${platformLabel}: Ready`;
+      sessionStateTagEl.innerText = "Meeting Ready";
+    } else {
+      platformNameEl.innerText = "Standby (No Meeting)";
+      sessionStateTagEl.innerText = "Standby";
+      if (!activeSession?.startTime) {
+        meetingTimerEl.innerText = "00:00";
+      }
+    }
   }
 
-  // Start timer ticking
-  function startTimer() {
+  function startTimerLoop() {
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(() => {
-      if (activeSession && activeSession.startTime) {
-        meetingTimerEl.innerText = formatDuration(activeSession.startTime);
+      if (activeSession && activeSession.isRecording && !activeSession.isCompleted) {
+        meetingTimerEl.innerText = getDurationDisplay(activeSession);
       }
     }, 1000);
   }
@@ -186,15 +227,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         return;
       }
 
-      // Success feedback
       resultBanner.classList.remove("hidden");
       resultBanner.classList.remove("error");
       resultContent.innerHTML = `
-        <strong>✓ Transcripts Auto-Ingested!</strong><br/>
-        <span>${response.segmentCount} segments stored • ${response.extractedItemsCount} tasks generated for review.</span>
+        <strong>✓ Transcripts Ingested & Parsed!</strong><br/>
+        <span>${response.segmentCount} segments saved • ${response.extractedItemsCount} tasks generated for review.</span>
       `;
 
-      // Set Manager Review Gate link
       if (response.reviewUrl) {
         reviewGateLink.href = response.reviewUrl;
         reviewGateLink.classList.remove("hidden");
@@ -206,7 +245,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // Local File Downloader Helper
   function triggerDownload(content, filename, mimeType) {
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -221,7 +259,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }, 100);
   }
 
-  // Save WebVTT (.vtt)
   saveVttBtn.addEventListener("click", () => {
     chrome.runtime.sendMessage({ type: "GET_TRANSCRIPT_EXPORT" }, (res) => {
       if (!res || !res.vtt) {
@@ -234,7 +271,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // Save Plain Text (.txt)
   saveTxtBtn.addEventListener("click", () => {
     chrome.runtime.sendMessage({ type: "GET_TRANSCRIPT_EXPORT" }, (res) => {
       if (!res || !res.txt) {
@@ -247,9 +283,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // Clear Buffer
   clearBufferBtn.addEventListener("click", () => {
-    if (confirm("Are you sure you want to clear the current meeting transcript buffer?")) {
+    if (confirm("Are you sure you want to clear the current transcript buffer?")) {
       chrome.runtime.sendMessage({ type: "CLEAR_BUFFER" }, () => {
         refreshState();
         resultBanner.classList.add("hidden");
@@ -257,7 +292,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // Save Settings
   saveSettingsBtn.addEventListener("click", () => {
     const settings = {
       workspaceId: workspaceIdInput.value.trim(),
@@ -272,8 +306,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // Periodic UI refresh every 2 seconds while popup is open
   await refreshState();
-  startTimer();
-  setInterval(refreshState, 2000);
+  startTimerLoop();
+  setInterval(refreshState, 1500);
 });

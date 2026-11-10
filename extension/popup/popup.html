@@ -30,24 +30,14 @@
     <section class="status-card">
       <div class="status-top">
         <div class="platform-indicator" id="platformIndicator">
-          <span class="status-dot pulsing" id="statusDot"></span>
-          <span class="platform-name" id="platformName">Detecting Meeting...</span>
+          <span class="status-dot" id="statusDot"></span>
+          <span class="platform-name" id="platformName">Standby (No Meeting)</span>
         </div>
         <span class="timer-badge" id="meetingTimer">00:00</span>
       </div>
-      <div class="metrics-row">
-        <div class="metric-item">
-          <span class="metric-label">Captions Buffered</span>
-          <span class="metric-value" id="cueCount">0</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">Manager Sync</span>
-          <span class="metric-value green">Ready</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-label">AI Extraction</span>
-          <span class="metric-value purple">Automated</span>
-        </div>
+      <div class="status-subrow">
+        <span class="captions-stat" id="cueCountStat">0 captions captured</span>
+        <span class="status-tag" id="sessionStateTag">Standby</span>
       </div>
     </section>
 
@@ -60,7 +50,7 @@
       <div class="transcript-feed" id="transcriptFeed">
         <div class="empty-state">
           <p>Captions are currently idle.</p>
-          <p class="sub">Turn on Closed Captions (CC) in Google Meet, Zoom, or Teams to automatically start capturing.</p>
+          <p class="sub">Turn on Closed Captions (CC) in Google Meet, Zoom, or Teams to automatically capture live speech.</p>
         </div>
       </div>
     </section>

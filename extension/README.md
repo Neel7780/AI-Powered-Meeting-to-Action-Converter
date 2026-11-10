@@ -62,3 +62,4 @@ A Manifest V3 Chrome Extension built specifically for **ActionPulse** to automat
    - Click **"Upload & Generate AI Tasks"**.
    - Click the green **"Open Manager Review Gate ↗"** button to review, edit, approve, or reject extracted tasks and assign them to team members!
    - (Optional) Click **"Save Backup (.VTT)"** to keep a local copy on your disk.
+

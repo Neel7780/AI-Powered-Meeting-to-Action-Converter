@@ -554,14 +554,25 @@ def upload_extension_meeting(
 
         for idx, s in enumerate(segments):
             text_lower = s.text.lower()
+            speaker = s.speaker_name or "Speaker"
+            if speaker.lower() in ("you", "me", "speaker"):
+                owner_name = "Madhav Chauhan"
+                owner_user_id = str(user.id)
+            elif "madhav" in speaker.lower():
+                owner_name = "Madhav Chauhan"
+                owner_user_id = str(user.id)
+            else:
+                owner_name = speaker
+                owner_user_id = None
+
             if any(verb in text_lower for verb in action_verbs):
                 extracted_items.append({
                     "id": str(uuid4()),
                     "meeting_id": str(meeting_id),
                     "type": "action",
                     "task": s.text if len(s.text) <= 120 else s.text[:117] + "...",
-                    "owner_name": s.speaker_name or "Madhav Chauhan",
-                    "owner_user_id": str(user.id) if s.speaker_name and "madhav" in s.speaker_name.lower() else None,
+                    "owner_name": owner_name,
+                    "owner_user_id": owner_user_id,
                     "deadline_raw": "by end of week",
                     "deadline_utc": (now + timedelta(days=3)).isoformat(),
                     "priority": "high" if "urgent" in text_lower or "finalize" in text_lower else "normal",

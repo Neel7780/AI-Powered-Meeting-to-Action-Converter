@@ -100,7 +100,7 @@ body {
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .status-top {
@@ -122,12 +122,23 @@ body {
   height: 8px;
   border-radius: 50%;
   background: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.status-dot.active {
+  background: var(--accent-success);
+  box-shadow: 0 0 8px var(--accent-success);
 }
 
 .status-dot.pulsing {
   background: var(--accent-success);
   box-shadow: 0 0 8px var(--accent-success);
   animation: pulse 1.8s infinite;
+}
+
+.status-dot.ended {
+  background: var(--accent-primary);
+  box-shadow: 0 0 6px var(--accent-primary);
 }
 
 @keyframes pulse {
@@ -139,39 +150,45 @@ body {
 .timer-badge {
   font-size: 11px;
   font-family: monospace;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.status-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.captions-stat {
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.05);
+}
+
+.status-tag {
+  font-size: 10px;
+  font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
-}
-
-.metrics-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.metric-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.metric-label {
-  font-size: 10px;
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-muted);
 }
 
-.metric-value {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
+.status-tag.active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
 }
 
-.metric-value.green { color: var(--accent-success); }
-.metric-value.purple { color: #a5b4fc; }
+.status-tag.ended {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+}
 
 /* Transcript Live Feed */
 .transcript-section {
@@ -214,8 +231,8 @@ body {
 }
 
 .transcript-feed {
-  max-height: 120px;
-  min-height: 70px;
+  max-height: 140px;
+  min-height: 75px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -235,9 +252,10 @@ body {
 .cue-item {
   background: rgba(255, 255, 255, 0.02);
   border-left: 2px solid var(--accent-primary);
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   font-size: 11px;
+  line-height: 1.4;
 }
 
 .cue-speaker {
