@@ -39,8 +39,19 @@ function App() {
           }
         />
 
+        {/* /meetings — Create Meeting form embedded in Dashboard layout */}
         <Route
           path="/meetings"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* /meetings-list — Meetings list page rendered inside Dashboard layout */}
+        <Route
+          path="/meetings-list"
           element={
             <ProtectedRoute>
               <Dashboard />

@@ -22,7 +22,12 @@ from app.core.deps import (
 )
 from app.core.supabase import get_supabase_client
 from app.parsers import TranscriptParseError, parse_transcript, to_canonical_text
+from datetime import datetime
 from app.schemas.meetings import (
+    MeetingDetail,
+    MeetingListItem,
+    ParticipantOut,
+    WorkspaceStatsResponse,
     CreateMeetingRequest,
     MeetingChaptersResponse,
     MeetingChapterItem,
@@ -471,3 +476,163 @@ def get_meeting_chapters(
     )
 
 
+
+
+# ---------------------------------------------------------------------------
+# Workspace Meetings & Stats Endpoints (Sprint 1 BE-2)
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/workspaces/{workspace_id}/meetings",
+    response_model=list[MeetingListItem],
+    summary="List all active meetings in a workspace",
+)
+def list_meetings(
+    workspace_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+) -> list[MeetingListItem]:
+    """List all active meetings in *workspace_id*. Requires any member role."""
+    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+
+    db = get_supabase_client()
+    res = (
+        db.table("meetings")
+        .select("id, title, starts_at, timezone, status, visibility, created_at, organiser_id, conference_url")
+        .eq("workspace_id", str(workspace_id))
+        .eq("lifecycle", "active")
+        .order("starts_at", desc=True)
+        .execute()
+    )
+
+    return [
+        MeetingListItem(
+            id=UUID(r["id"]),
+            title=r["title"],
+            starts_at=datetime.fromisoformat(r["starts_at"]),
+            timezone=r["timezone"],
+            status=r["status"],
+            visibility=r.get("visibility", "workspace"),
+            created_at=datetime.fromisoformat(r["created_at"]),
+            organiser_id=UUID(r["organiser_id"]),
+            conference_url=r.get("conference_url"),
+        )
+        for r in (res.data or [])
+    ]
+
+
+@router.get(
+    "/workspaces/{workspace_id}/meetings/{meeting_id}",
+    response_model=MeetingDetail,
+    summary="Get meeting detail",
+)
+def get_meeting(
+    workspace_id: UUID,
+    meeting_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+) -> MeetingDetail:
+    """Return full meeting detail including participants and transcript id."""
+    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+
+    db = get_supabase_client()
+
+    meeting_res = (
+        db.table("meetings")
+        .select("*")
+        .eq("id", str(meeting_id))
+        .eq("workspace_id", str(workspace_id))
+        .eq("lifecycle", "active")
+        .execute()
+    )
+    if not meeting_res.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    meeting = meeting_res.data[0]
+
+    part_res = (
+        db.table("meeting_participants")
+        .select("id, user_id, external_name")
+        .eq("meeting_id", str(meeting_id))
+        .execute()
+    )
+    participants = [
+        ParticipantOut(
+            user_id=UUID(p["user_id"]) if p.get("user_id") else None,
+            external_name=p.get("external_name"),
+        )
+        for p in (part_res.data or [])
+    ]
+
+    transcript_res = (
+        db.table("transcripts")
+        .select("id")
+        .eq("meeting_id", str(meeting_id))
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    transcript_id = (
+        UUID(transcript_res.data[0]["id"]) if transcript_res.data else None
+    )
+
+    return MeetingDetail(
+        id=UUID(meeting["id"]),
+        workspace_id=UUID(meeting["workspace_id"]),
+        title=meeting["title"],
+        starts_at=datetime.fromisoformat(meeting["starts_at"]),
+        timezone=meeting["timezone"],
+        status=meeting["status"],
+        visibility=meeting.get("visibility", "workspace"),
+        created_at=datetime.fromisoformat(meeting["created_at"]),
+        organiser_id=UUID(meeting["organiser_id"]),
+        conference_url=meeting.get("conference_url"),
+        participants=participants,
+        transcript_id=transcript_id,
+    )
+
+
+@router.get(
+    "/workspaces/{workspace_id}/stats",
+    response_model=WorkspaceStatsResponse,
+    summary="Get workspace dashboard statistics",
+)
+def get_workspace_stats(
+    workspace_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+) -> WorkspaceStatsResponse:
+    """Return meeting count, open task count, and member count for the dashboard."""
+    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+
+    db = get_supabase_client()
+    ws_id = str(workspace_id)
+
+    meeting_res = (
+        db.table("meetings")
+        .select("id", count="exact")
+        .eq("workspace_id", ws_id)
+        .eq("lifecycle", "active")
+        .execute()
+    )
+    meeting_count = meeting_res.count or 0
+
+    task_res = (
+        db.table("tasks")
+        .select("id", count="exact")
+        .eq("workspace_id", ws_id)
+        .neq("status", "done")
+        .execute()
+    )
+    open_task_count = task_res.count or 0
+
+    member_res = (
+        db.table("workspace_members")
+        .select("user_id", count="exact")
+        .eq("workspace_id", ws_id)
+        .execute()
+    )
+    member_count = member_res.count or 0
+
+    return WorkspaceStatsResponse(
+        meeting_count=meeting_count,
+        open_task_count=open_task_count,
+        member_count=member_count,
+    )
