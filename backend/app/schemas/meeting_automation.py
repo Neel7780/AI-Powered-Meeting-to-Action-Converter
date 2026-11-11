@@ -79,6 +79,38 @@ class SimulateMeetingResponse(BaseModel):
     review_url: str
 
 
+class ExtensionSegment(BaseModel):
+    speaker: Optional[str] = Field(default="Speaker", description="Identified speaker from live captions")
+    text: str = Field(..., description="Captured spoken text segment")
+    timestamp: Optional[str] = Field(default=None, description="ISO timestamp or formatted time string")
+    start_ms: Optional[int] = Field(default=None, description="Segment start in milliseconds")
+    end_ms: Optional[int] = Field(default=None, description="Segment end in milliseconds")
+
+
+class ExtensionMeetingUploadRequest(BaseModel):
+    workspace_id: UUID = Field(..., description="Target workspace ID")
+    provider: ProviderType = Field(default=ProviderType.GOOGLE_MEET, description="Online meeting platform (google_meet, zoom, teams)")
+    title: str = Field(default="Automated Meeting Transcript", min_length=1, max_length=300, description="Meeting title")
+    conference_url: Optional[str] = Field(default=None, description="Meeting URL (e.g. meet.google.com/xyz)")
+    duration_minutes: int = Field(default=15, ge=1, le=480, description="Meeting duration in minutes")
+    transcript_text: Optional[str] = Field(default=None, description="Formatted transcript text or WebVTT string")
+    segments: Optional[List[ExtensionSegment]] = Field(default=None, description="Structured live caption segments")
+    auto_extract: bool = Field(default=True, description="Trigger AI action item extraction for Manager Review Gate")
+
+
+class ExtensionMeetingUploadResponse(BaseModel):
+    success: bool
+    meeting_id: UUID
+    title: str
+    provider: ProviderType
+    starts_at: datetime
+    transcript_id: Optional[UUID] = None
+    segment_count: int = 0
+    extracted_items_count: int = 0
+    message: str
+    review_url: str
+
+
 class AutomatedMeetingFeedItem(BaseModel):
     id: UUID
     title: str

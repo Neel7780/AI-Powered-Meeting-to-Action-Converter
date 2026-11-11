@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "ActionPulse - Meeting Transcriber & AI Actions",
+  "version": "1.0.0",
+  "description": "Live meeting captions capture & AI action item generator for Google Meet, Zoom, and Microsoft Teams. Manager-only sync to ActionPulse.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "https://*.zoom.us/*",
+    "https://teams.microsoft.com/*",
+    "https://teams.live.com/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*",
+    "http://localhost:5173/*",
+    "https://*.onrender.com/*",
+    "https://*.vercel.app/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content/meet.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.zoom.us/*"],
+      "js": ["content/zoom.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://teams.microsoft.com/*",
+        "https://teams.live.com/*"
+      ],
+      "js": ["content/teams.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "ActionPulse Meeting Transcriber",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  }
+}
+

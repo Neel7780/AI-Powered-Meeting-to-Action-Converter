@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ActionPulse Meeting Transcriber</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="logo-mark">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">ActionPulse</h1>
+          <p class="brand-subtitle">Meeting Captions & Action AI</p>
+        </div>
+      </div>
+      <div class="header-badge">
+        <span class="role-pill">ORGANISER</span>
+      </div>
+    </header>
+
+    <!-- Platform & Live Status Banner -->
+    <section class="status-card">
+      <div class="status-top">
+        <div class="platform-indicator" id="platformIndicator">
+          <span class="status-dot" id="statusDot"></span>
+          <span class="platform-name" id="platformName">Standby (No Meeting)</span>
+        </div>
+        <span class="timer-badge" id="meetingTimer">00:00</span>
+      </div>
+      <div class="status-subrow">
+        <span class="captions-stat" id="cueCountStat">0 captions captured</span>
+        <span class="status-tag" id="sessionStateTag">Standby</span>
+      </div>
+    </section>
+
+    <!-- Realtime Transcript Preview -->
+    <section class="transcript-section">
+      <div class="section-header">
+        <span class="section-title">Live Transcript Stream</span>
+        <button class="clear-btn" id="clearBufferBtn" title="Clear current buffer">Clear</button>
+      </div>
+      <div class="transcript-feed" id="transcriptFeed">
+        <div class="empty-state">
+          <p>Captions are currently idle.</p>
+          <p class="sub">Turn on Closed Captions (CC) in Google Meet, Zoom, or Teams to automatically capture live speech.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Primary 1-Click Action Controls -->
+    <section class="actions-section">
+      <!-- 1-Click Upload to Backend Button -->
+      <button class="btn-primary" id="uploadBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="17 8 12 3 7 8"></polyline>
+          <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        <span>Upload & Generate AI Tasks</span>
+      </button>
+
+      <!-- Local Backup Export Button -->
+      <div class="backup-row">
+        <button class="btn-secondary" id="saveVttBtn" title="Save standard WebVTT file locally">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <span>Save Backup (.VTT)</span>
+        </button>
+        <button class="btn-secondary" id="saveTxtBtn" title="Save plain transcript file locally">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+          </svg>
+          <span>Save (.TXT)</span>
+        </button>
+      </div>
+
+      <!-- Result Feedback Banner -->
+      <div class="result-banner hidden" id="resultBanner">
+        <div class="result-content" id="resultContent"></div>
+        <a href="#" class="review-gate-link hidden" id="reviewGateLink" target="_blank">
+          <span>Open Manager Review Gate</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        </a>
+      </div>
+    </section>
+
+    <!-- Manager Workspace Settings (Collapsible) -->
+    <details class="settings-details">
+      <summary class="settings-summary">Manager Sync & Server Settings</summary>
+      <div class="settings-content">
+        <div class="input-group">
+          <label for="workspaceIdInput">Workspace ID</label>
+          <input type="text" id="workspaceIdInput" value="00000000-0000-0000-0000-000000000002" />
+        </div>
+        <div class="input-group">
+          <label for="apiUrlInput">Backend API URL</label>
+          <input type="text" id="apiUrlInput" value="http://localhost:8000" />
+        </div>
+        <div class="input-group">
+          <label for="appUrlInput">Website URL</label>
+          <input type="text" id="appUrlInput" value="http://localhost:5173" />
+        </div>
+        <button class="btn-save-settings" id="saveSettingsBtn">Save Configuration</button>
+      </div>
+    </details>
+
+    <footer class="app-footer">
+      <span>ActionPulse v1.0 • Manager Automated Ingestion</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
