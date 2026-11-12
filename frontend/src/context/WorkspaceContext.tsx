@@ -117,9 +117,16 @@ export function WorkspaceProvider({
       setWorkspaces(loadedWorkspaces);
 
       if (loadedWorkspaces.length === 0) {
-        setWorkspaces([DEFAULT_DEMO_WORKSPACE]);
-        setCurrentWorkspace(DEFAULT_DEMO_WORKSPACE);
-        setCurrentRole("admin");
+        setCurrentWorkspace(null);
+        setCurrentRole(null);
+        localStorage.removeItem("currentWorkspaceId");
+        localStorage.removeItem("currentWorkspaceName");
+        localStorage.removeItem("currentWorkspaceRole");
+        window.dispatchEvent(
+          new CustomEvent("actionpulse:workspace-changed", {
+            detail: { workspaceId: "", workspaceName: "", role: "" },
+          })
+        );
         return;
       }
 
@@ -158,11 +165,29 @@ export function WorkspaceProvider({
         "currentWorkspaceId",
         selectedWorkspace.id
       );
+      localStorage.setItem(
+        "currentWorkspaceName",
+        selectedWorkspace.name || ""
+      );
+      if (selectedMembership?.role) {
+        localStorage.setItem("currentWorkspaceRole", selectedMembership.role);
+      } else {
+        localStorage.removeItem("currentWorkspaceRole");
+      }
+      window.dispatchEvent(
+        new CustomEvent("actionpulse:workspace-changed", {
+          detail: {
+            workspaceId: selectedWorkspace.id,
+            workspaceName: selectedWorkspace.name || "",
+            role: selectedMembership?.role || "",
+          },
+        })
+      );
     } catch (error) {
-      console.warn("Fallback to demo workspace:", error);
-      setWorkspaces([DEFAULT_DEMO_WORKSPACE]);
-      setCurrentWorkspace(DEFAULT_DEMO_WORKSPACE);
-      setCurrentRole("admin");
+      console.error("Failed to load workspaces from Supabase:", error);
+      setWorkspaces([]);
+      setCurrentWorkspace(null);
+      setCurrentRole(null);
     } finally {
       setLoading(false);
     }
@@ -219,6 +244,10 @@ export function WorkspaceProvider({
       "currentWorkspaceId",
       workspace.id
     );
+    localStorage.setItem(
+      "currentWorkspaceName",
+      workspace.name || ""
+    );
 
     const loadRole = async () => {
       if (!user) {
@@ -241,6 +270,18 @@ export function WorkspaceProvider({
       }
 
       setCurrentRole(data.role as AppRole);
+      if (data.role) {
+        localStorage.setItem("currentWorkspaceRole", data.role);
+      }
+      window.dispatchEvent(
+        new CustomEvent("actionpulse:workspace-changed", {
+          detail: {
+            workspaceId: workspace.id,
+            workspaceName: workspace.name || "",
+            role: data.role || "",
+          },
+        })
+      );
     };
 
     loadRole();

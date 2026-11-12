@@ -1,11 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  Play,
-  Pause,
   Search,
   Clock,
   Sparkles,
-  Volume2,
   Maximize2,
   Minimize2,
   Copy,
@@ -40,8 +37,6 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>('all');
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSeconds, setPlaybackSeconds] = useState(12);
   const [copied, setCopied] = useState(false);
   const [isCompact, setIsCompact] = useState(false);
 
@@ -49,12 +44,6 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
 
   const speakers = useMemo(() => {
     return Array.from(new Set(segments.map(s => s.speaker_name)));
-  }, [segments]);
-
-  const maxSeconds = useMemo(() => {
-    if (segments.length === 0) return 2520;
-    const last = segments[segments.length - 1];
-    return Math.max(last.start_seconds + 90, 2520);
   }, [segments]);
 
   const filteredSegments = useMemo(() => {
@@ -80,30 +69,6 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
     }
   }, [highlightedSegmentId]);
 
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setPlaybackSeconds(prev => {
-          if (prev >= maxSeconds) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isPlaying, maxSeconds]);
-
-  const formatSeconds = (sec: number) => {
-    const mins = Math.floor(sec / 60);
-    const secs = sec % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
   const handleCopyTranscript = () => {
     const text = segments.map(s => `[${s.timestamp}] ${s.speaker_name}: ${s.text}`).join('\n\n');
     navigator.clipboard.writeText(text);
@@ -112,7 +77,6 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
   };
 
   const handleSegmentClick = (segment: TranscriptSegment) => {
-    setPlaybackSeconds(segment.start_seconds);
     if (onSelectTimestamp) {
       onSelectTimestamp(segment.timestamp, segment.id);
     }
@@ -162,42 +126,6 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
             >
               {isCompact ? <Maximize2 className="size-3.5" /> : <Minimize2 className="size-3.5" />}
             </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 rounded-md border border-white/10 bg-black p-2.5">
-          <button
-            type="button"
-            onClick={() => setIsPlaying(!isPlaying)}
-            aria-label={isPlaying ? 'Pause playback' : 'Play audio transcript'}
-            className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-black transition-colors hover:bg-neutral-200"
-          >
-            {isPlaying ? <Pause className="size-4" /> : <Play className="ml-0.5 size-4" />}
-          </button>
-
-          <div className="flex-1 space-y-1">
-            <div className="flex items-center justify-between font-mono text-[11px] text-neutral-500">
-              <span className="text-neutral-300">{formatSeconds(playbackSeconds)}</span>
-              <span>{formatSeconds(maxSeconds)}</span>
-            </div>
-            <div
-              className="relative h-1.5 cursor-pointer overflow-hidden rounded-full bg-white/10"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const pos = (e.clientX - rect.left) / rect.width;
-                const newSec = Math.floor(pos * maxSeconds);
-                setPlaybackSeconds(newSec);
-              }}
-            >
-              <div
-                className="h-full rounded-full bg-white transition-all"
-                style={{ width: `${(playbackSeconds / maxSeconds) * 100}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center border-l border-white/10 pl-2 text-neutral-500">
-            <Volume2 className="size-3.5" />
           </div>
         </div>
 
@@ -318,7 +246,7 @@ export const TranscriptViewer: React.FC<TranscriptViewerProps> = ({
         <span>{filteredSegments.length} segments displayed</span>
         <span className="flex items-center gap-1.5">
           <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-          Audio synchronized
+          Transcript synchronized
         </span>
       </div>
     </div>

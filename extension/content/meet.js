@@ -19,12 +19,30 @@
   let currentSpeaker = "";
   let currentUtterance = "";
   let lastCommittedText = "";
+  let activeBlock = null;
+  const blockStates = new WeakMap();
   let finalizeTimer = null;
 
   let statusBadge = null;
   let lastBadgeText = "";
 
-  // Strict system alerts filter
+  const UI_SPEAKER_NAMES = new Set([
+    "language",
+    "format_size",
+    "settings",
+    "circle",
+    "more_vert",
+    "arrow_drop_down",
+    "expand_more",
+    "expand_less",
+    "close",
+    "closed_caption",
+    "subtitles",
+    "font size",
+    "font color",
+  ]);
+
+  // Strict system alerts & Meet caption-settings UI toolbar filter
   const SYSTEM_ALERT_PATTERNS = [
     /you have joined the call/i,
     /you are the first one here/i,
@@ -44,11 +62,25 @@
     /screen sharing/i,
     /call quality/i,
     /network is unstable/i,
+    /\bformat_size\b/i,
+    /open caption settings/i,
+    /caption settings/i,
+    /\bfont size\b/i,
+    /\bfont color\b/i,
+    /^(english|hindi|spanish|french|german|portuguese|japanese|korean|auto-detected)(\s*\([^)]+\))?$/i,
+    /^(language|settings|circle|arrow_drop_down|expand_more|expand_less|closed_caption)$/i,
   ];
 
-  function isSystemNotification(text) {
-    if (!text || text.length < 2) return true;
-    return SYSTEM_ALERT_PATTERNS.some((pattern) => pattern.test(text.trim()));
+  function normalizeText(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
+  function isSystemNotification(text, speaker = "") {
+    const cleanText = normalizeText(text);
+    const cleanSpeaker = normalizeText(speaker).toLowerCase();
+    if (!cleanText || cleanText.length < 2) return true;
+    if (cleanSpeaker && UI_SPEAKER_NAMES.has(cleanSpeaker)) return true;
+    return SYSTEM_ALERT_PATTERNS.some((pattern) => pattern.test(cleanText));
   }
 
   function createStatusBadge() {
@@ -119,25 +151,24 @@
   }
 
   function commitCue(speaker, text) {
-    if (!text || text.length < 2) return;
-    if (isSystemNotification(text)) return;
-
-    let cleanSpeaker = speaker || "You";
+    const cleanText = normalizeText(text);
+    let cleanSpeaker = normalizeText(speaker) || "You";
     if (cleanSpeaker.toLowerCase() === "you") {
       cleanSpeaker = "You";
     }
 
-    if (text === lastCommittedText) return;
-    lastCommittedText = text;
+    if (isSystemNotification(cleanText, cleanSpeaker)) return;
+    if (cleanText === lastCommittedText) return;
+    lastCommittedText = cleanText;
 
-    console.log(`[ActionPulse] Captured: [${cleanSpeaker}]: ${text}`);
+    console.log(`[ActionPulse] Captured: [${cleanSpeaker}]: ${cleanText}`);
 
     try {
       chrome.runtime.sendMessage({
         type: "CAPTION_CUE",
         data: {
           speaker: cleanSpeaker,
-          text: text,
+          text: cleanText,
           timestamp: new Date().toISOString(),
           platform: PLATFORM,
           title: getMeetingTitle(),
@@ -149,6 +180,22 @@
     }
   }
 
+  function isToolbarOrControlElement(el) {
+    if (!el || typeof el.closest !== "function") return true;
+    if (el.closest("button, [role='toolbar'], [role='menu'], [role='menuitem'], [role='listbox'], [role='dialog']")) {
+      return true;
+    }
+    if (
+      typeof el.querySelector === "function" &&
+      el.querySelector(
+        "[role='toolbar'], [role='menu'], button[aria-label*='caption' i], button[aria-label*='Font' i], [aria-label*='Open caption settings' i]"
+      )
+    ) {
+      return true;
+    }
+    return false;
+  }
+
   /**
    * Fast, targeted caption extractor.
    * Runs only on the caption container without touching the rest of Google Meet.
@@ -156,13 +203,27 @@
   function extractCaptionsFromContainer(container) {
     if (!container) return;
 
-    // Google Meet caption blocks inside container
-    const blocks = container.querySelectorAll(".nM7Ebe, .T4LgNb, .VbkSUe, div[class*='caption' i]");
-    const targetBlocks = blocks.length > 0 ? blocks : [container];
+    // Prefer dedicated speaker-turn nodes (.nM7Ebe); exclude toolbar/settings wrappers and nested duplicates.
+    const turnBlocks = Array.from(container.querySelectorAll(".nM7Ebe")).filter(
+      (el) => !isToolbarOrControlElement(el)
+    );
+    const fallbackBlocks =
+      turnBlocks.length > 0
+        ? turnBlocks
+        : Array.from(container.querySelectorAll(".T4LgNb, .VbkSUe")).filter(
+            (el) => !isToolbarOrControlElement(el)
+          );
 
-    targetBlocks.forEach((block) => {
+    const leafBlocks = fallbackBlocks.filter(
+      (el, idx, arr) => !arr.some((other, oIdx) => oIdx !== idx && el.contains(other))
+    );
+    if (leafBlocks.length === 0) return;
+
+    leafBlocks.forEach((block) => {
       const speakerEl = block.querySelector(".zs7PeP, .jxFHg, .NWbcqb, [data-sender-name]");
-      let speaker = speakerEl ? (speakerEl.getAttribute("data-sender-name") || speakerEl.innerText).trim() : "";
+      let speaker = speakerEl
+        ? normalizeText(speakerEl.getAttribute("data-sender-name") || speakerEl.innerText)
+        : "";
 
       const textEl = block.querySelector(".iTTPOb, .bh44bd, .yg30fd") || block;
       let fullText = textEl.innerText ? textEl.innerText.trim() : "";
@@ -175,28 +236,46 @@
         }
       }
 
+      fullText = normalizeText(fullText);
       if (speaker && fullText.startsWith(speaker)) {
-        fullText = fullText.slice(speaker.length).trim();
+        fullText = normalizeText(fullText.slice(speaker.length));
       }
 
-      if (isSystemNotification(fullText)) return;
-      if (!fullText || fullText.length < 2) return;
+      if (isSystemNotification(fullText, speaker)) return;
 
-      updateBadgeStatus(true, `Capturing: ${speaker || "You"}`);
-
-      if (speaker !== currentSpeaker && currentUtterance) {
-        commitCue(currentSpeaker, currentUtterance);
-        currentSpeaker = speaker;
-        currentUtterance = fullText;
-      } else {
-        currentSpeaker = speaker || "You";
-        currentUtterance = fullText;
+      const resolvedSpeaker = speaker || "You";
+      const prevState = blockStates.get(block);
+      if (prevState && prevState.speaker === resolvedSpeaker && prevState.text === fullText) {
+        return;
       }
+
+      blockStates.set(block, {
+        speaker: resolvedSpeaker,
+        text: fullText,
+        lastSentText: prevState ? prevState.lastSentText : "",
+      });
+
+      updateBadgeStatus(true, `Capturing: ${resolvedSpeaker}`);
+
+      // Flush prior active turn once before switching to a new speaker turn block
+      if (activeBlock && activeBlock !== block) {
+        const prevActive = blockStates.get(activeBlock);
+        if (prevActive && prevActive.text && prevActive.text !== prevActive.lastSentText) {
+          commitCue(prevActive.speaker, prevActive.text);
+          prevActive.lastSentText = prevActive.text;
+        }
+      }
+
+      activeBlock = block;
+      currentSpeaker = resolvedSpeaker;
+      currentUtterance = fullText;
 
       clearTimeout(finalizeTimer);
       finalizeTimer = setTimeout(() => {
-        if (currentUtterance && currentUtterance !== lastCommittedText) {
-          commitCue(currentSpeaker, currentUtterance);
+        const latest = blockStates.get(block);
+        if (latest && latest.text && latest.text !== latest.lastSentText) {
+          commitCue(latest.speaker, latest.text);
+          latest.lastSentText = latest.text;
         }
       }, 1000);
     });

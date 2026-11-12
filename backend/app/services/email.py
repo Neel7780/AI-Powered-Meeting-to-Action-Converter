@@ -158,7 +158,10 @@ def _format_deadline(deadline_utc_str: Optional[str], tz_name: str) -> str:
         try:
             tz = ZoneInfo(tz_name)
         except Exception:
-            tz = ZoneInfo("Asia/Kolkata")
+            try:
+                tz = ZoneInfo("Asia/Kolkata")
+            except Exception:
+                tz = timezone.utc
         local_dt = dt.astimezone(tz)
         return local_dt.strftime("%d %b %Y, %I:%M %p (%Z)")
     except Exception:

@@ -146,6 +146,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = async () => {
     localStorage.removeItem("actionpulse_dev_session");
+    localStorage.removeItem("currentWorkspaceId");
+    localStorage.removeItem("currentWorkspaceName");
+    localStorage.removeItem("currentWorkspaceRole");
+    window.dispatchEvent(
+      new CustomEvent("actionpulse:workspace-changed", {
+        detail: { workspaceId: "", workspaceName: "", role: "" },
+      })
+    );
     setUser(null);
     setSession(null);
     try {

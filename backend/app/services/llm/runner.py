@@ -1,15 +1,21 @@
 """Background extraction job (BE-3): transcript -> extracted_items + llm_runs."""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import UUID
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.config import settings
 from app.core.supabase import get_supabase_client
+from app.services.caption_cleaner import prepare_transcript_for_llm
 from app.services.llm.chain import extract
 from app.services.llm.prompt import build_roster, strip_transcript_tags
 from app.services.llm.validate import validate_items
+
+_FALLBACK_TIMEZONES = {
+    "Asia/Kolkata": timezone(timedelta(hours=5, minutes=30), name="IST"),
+    "Asia/Calcutta": timezone(timedelta(hours=5, minutes=30), name="IST"),
+}
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +49,12 @@ def run_extraction(meeting_id: UUID | str) -> None:
         roster_text, refs = build_roster(members)
 
         starts_at = datetime.fromisoformat(meeting["starts_at"])
-        local_start = starts_at.astimezone(ZoneInfo(meeting["timezone"]))
+        tz_key = (meeting.get("timezone") or "UTC").strip()
+        try:
+            tz_info = ZoneInfo(tz_key)
+        except ZoneInfoNotFoundError:
+            tz_info = _FALLBACK_TIMEZONES.get(tz_key, UTC)
+        local_start = starts_at.astimezone(tz_info)
         canonical_text = transcript["canonical_text"] or ""
 
         result, calls = extract({
@@ -52,7 +63,7 @@ def run_extraction(meeting_id: UUID | str) -> None:
             "weekday": local_start.strftime("%A"),
             "timezone": meeting["timezone"],
             "roster": roster_text,
-            "transcript": strip_transcript_tags(canonical_text),
+            "transcript": prepare_transcript_for_llm(strip_transcript_tags(canonical_text)),
         })
 
         db.table("llm_runs").insert([

@@ -744,43 +744,12 @@ async draftFollowUp(
       tone?: FollowUpTone;
     }
   ): Promise<DraftFollowUpResponse> {
-    try {
-      const data = await postApi(`/api/meetings/${meetingId}/draft-followup`, {
-        target_user_id: options?.targetUserId || null,
-        target_name: options?.targetName || null,
-        tone: options?.tone || 'executive',
-      });
-      return data;
-    } catch (err) {
-      console.warn('Backend draftFollowUp failed, generating offline demo draft:', err);
-      const target = options?.targetName || (options?.targetUserId ? 'Attendee' : null);
-      const tone = options?.tone || 'executive';
-      const subject = target
-        ? `[ActionPulse] Follow-Up & Action Items for ${target}: Sprint 2 Architecture Review`
-        : `[ActionPulse] Meeting Follow-Up: Sprint 2 Architecture Review`;
-      const waText = encodeURIComponent(`*${subject}*\n\nHere are the deliverables agreed in today's sync.`);
-      return {
-        meeting_id: meetingId,
-        meeting_title: 'Sprint 2 Architecture & AI Staging Review',
-        target_user_id: options?.targetUserId || null,
-        target_name: options?.targetName || null,
-        tone,
-        subject,
-        content_markdown: target
-          ? `### Hi ${target},\n\nThanks for your active contribution in our meeting today. Here is your personalized follow-up:\n\n### 🚀 Assigned Action Items\n- [ ] **Configure Brevo free SMTP and email delivery fallback** (Due: Nov 3, Priority: URGENT)\n- [ ] **Complete review gate verification** (Due: Nov 4, Priority: NORMAL)\n\n### 📌 Key Decisions\n- Confirmed zero-budget stack: Gemini Flash-Lite and Supabase free tier.\n- WhatsApp links use free \`wa.me\` sharing format.\n\n---\n*ActionPulse Meeting Copilot*`
-          : `### 🎯 Executive Summary\nThe team convened to review Sprint 2 architecture, review gate workflows, and zero-budget notifications.\n\n### 📌 Key Decisions & Consensus\n- Confirmed zero-budget architecture using FastAPI, Supabase free tier, and Gemini 3.1 Flash-Lite.\n- All candidate action items require human organizer approval before publishing to Kanban.\n- WhatsApp sharing will use zero-cost \`wa.me\` prefilled URL links instead of paid Business API.\n\n### 🚀 Critical Action Items\n- [ ] **Build 1-Click WhatsApp share link generator** — Assigned to Harshil Patel (Due: Nov 2)\n- [ ] **Configure Brevo free SMTP and email delivery fallback** — Assigned to Bharat Odedara (Due: Nov 3)\n- [ ] **Implement RLS database policies for workspace invites** — Assigned to Arnav Pandita (Due: Nov 4)\n\n---\n*ActionPulse Meeting Copilot*`,
-        content_html: '',
-        whatsapp_share_url: `https://wa.me/?text=${waText}`,
-        recipient_emails: ['bharat.odedara@workspace.io', 'harshil.patel@workspace.io', 'arnav.pandita@workspace.io'],
-        participants: [
-          { user_id: 'mem-1', name: 'Arnav Pandita', email: 'arnav.pandita@workspace.io', is_organiser: false, task_count: 1 },
-          { user_id: 'mem-2', name: 'Bharat Odedara', email: 'bharat.odedara@workspace.io', is_organiser: false, task_count: 1 },
-          { user_id: 'mem-3', name: 'Yuvraj Katara', email: 'yuvraj.katara@workspace.io', is_organiser: false, task_count: 0 },
-          { user_id: 'mem-4', name: 'Madhav Chauhan', email: 'madhav.chauhan@workspace.io', is_organiser: true, task_count: 0 },
-          { user_id: 'mem-5', name: 'Harshil Patel', email: 'harshil.patel@workspace.io', is_organiser: false, task_count: 1 },
-        ]
-      };
-    }
+    const data = await postApi(`/api/meetings/${meetingId}/draft-followup`, {
+      target_user_id: options?.targetUserId || null,
+      target_name: options?.targetName || null,
+      tone: options?.tone || 'executive',
+    });
+    return data;
   },
 
   async sendFollowUp(
@@ -792,15 +761,6 @@ async draftFollowUp(
       content_html?: string;
     }
   ): Promise<SendFollowUpResponse> {
-    try {
-      return await postApi(`/api/meetings/${meetingId}/send-followup`, payload);
-    } catch (err) {
-      console.warn('Backend sendFollowUp failed, returning mock success in dev:', err);
-      return {
-        success: true,
-        recipients_count: payload.recipient_emails.length,
-        message: `Follow-up email dispatched to ${payload.recipient_emails.length} recipient(s).`
-      };
-    }
+    return await postApi(`/api/meetings/${meetingId}/send-followup`, payload);
   }
 };

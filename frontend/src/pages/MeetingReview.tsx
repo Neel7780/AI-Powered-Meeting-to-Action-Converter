@@ -345,16 +345,6 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => navigate('/meeting-details')}
-                title="View Meeting Summary, Chapters & Video Studio"
-              >
-                <Sparkles />
-                Studio view
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
                 onClick={goKanban}
                 title="View published tasks on the task board"
               >

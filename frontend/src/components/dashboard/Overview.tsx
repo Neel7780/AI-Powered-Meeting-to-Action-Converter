@@ -13,7 +13,6 @@ import {
   SquareKanban,
   UserPlus,
   Users,
-  Video,
 } from "lucide-react";
 
 import { Button } from "../ui/button";
@@ -237,7 +236,6 @@ export default function Overview({
     ...(canCreate
       ? [{ label: "Record meeting", hint: "In-person, with speaker detection", icon: Mic, tint: tints.indigo, onClick: () => navigate("/meetings") }]
       : []),
-    { label: "Meeting Studio", hint: "Summaries & chapters", icon: Video, tint: tints.sky, onClick: () => navigate("/meeting-details") },
     { label: "Ask AI Copilot", hint: "Query decisions & tasks", icon: Sparkles, tint: tints.violet, onClick: () => navigate("/chat") },
     { label: "Analytics", hint: "Bottlenecks & turnaround", icon: BarChart3, tint: tints.emerald, onClick: () => navigate("/analytics") },
     {
@@ -250,8 +248,7 @@ export default function Overview({
     { label: "Task board", hint: "Drag work across columns", icon: SquareKanban, tint: tints.amber, onClick: () => navigate("/tasks") },
   ];
 
-  const openMeeting = (m: MeetingRow) =>
-    navigate(m.status === "ready" ? `/meetings/${m.id}/review` : `/meetings/${m.id}`);
+  const openMeeting = (m: MeetingRow) => navigate(`/meetings/${m.id}/review`);
 
   return (
     <div className="relative">

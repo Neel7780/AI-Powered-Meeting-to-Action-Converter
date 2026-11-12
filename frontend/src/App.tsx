@@ -9,7 +9,6 @@ import MeetingReview from "./pages/MeetingReview";
 import AcceptInvite from "./pages/AcceptInvite";
 import CalendarCallback from "./pages/CalendarCallback";
 import GitHubCallback from "./pages/GitHubCallback";
-import MeetingDetailsPage from "./pages/MeetingDetailsPage";
 import SpeakerMapping from "./pages/SpeakerMapping";
 
 function App() {
@@ -28,9 +27,8 @@ function App() {
         <Route path="/settings/github" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/meetings/:id/review" element={<MeetingReview />} />
         <Route path="/meetings/:id/speakers" element={<ProtectedRoute><SpeakerMapping /></ProtectedRoute>} />
-        <Route path="/meeting-details" element={<MeetingDetailsPage />} />
-        <Route path="/meetings/:id" element={<MeetingDetailsPage />} />
-        <Route path="/meetings/design-sprint-review" element={<MeetingDetailsPage />} />
+        <Route path="/meetings/:id" element={<MeetingReview />} />
+        <Route path="/meeting-details" element={<Navigate to="/meetings" replace />} />
 
         <Route
           path="/dashboard"

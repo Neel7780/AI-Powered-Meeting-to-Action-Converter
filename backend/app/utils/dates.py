@@ -1,8 +1,24 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import importlib.util
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from datetime import time as dtime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+_MISSING_TZDATA_FALLBACKS: dict[str, tzinfo] = {
+    "Asia/Kolkata": timezone(timedelta(hours=5, minutes=30), name="IST"),
+    "Asia/Calcutta": timezone(timedelta(hours=5, minutes=30), name="IST"),
+}
+
+
+def _load_zone(tz_name: str) -> tzinfo:
+    key = tz_name.strip()
+    try:
+        return ZoneInfo(key)
+    except ZoneInfoNotFoundError:
+        if key in _MISSING_TZDATA_FALLBACKS and importlib.util.find_spec("tzdata") is None:
+            return _MISSING_TZDATA_FALLBACKS[key]
+        raise
 
 
 def is_valid_timezone(tz: str) -> bool:
@@ -14,7 +30,7 @@ def is_valid_timezone(tz: str) -> bool:
     if not isinstance(tz, str) or not tz.strip():
         return False
     try:
-        ZoneInfo(tz.strip())
+        _load_zone(tz)
         return True
     except (ZoneInfoNotFoundError, ValueError, TypeError):
         return False
@@ -64,7 +80,7 @@ def to_utc(date: str | None, time: str | None, tz: str) -> datetime | None:
         parsed_time = parsed_time_val
 
     try:
-        zone = ZoneInfo(tz.strip())
+        zone = _load_zone(tz)
         local_dt = datetime.combine(parsed_date, parsed_time, tzinfo=zone)
         return local_dt.astimezone(UTC)
     except (ZoneInfoNotFoundError, ValueError, TypeError, OverflowError):

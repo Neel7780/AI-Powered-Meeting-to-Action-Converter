@@ -92,129 +92,22 @@ export const automationApi = {
    * Get current online meeting automation & provider connection status.
    */
   async getStatus(workspaceId: string): Promise<AutomationStatusResponse> {
-    try {
-      return await requestApi<AutomationStatusResponse>(
-        `/api/meetings/automation/status?workspace_id=${workspaceId}`
-      );
-    } catch {
-      // Graceful fallback for offline / mock testing
-      return {
-        workspace_id: workspaceId,
-        auto_ingest_global: true,
-        total_automated_meetings: 3,
-        last_sync_at: new Date().toISOString(),
-        providers: [
-          {
-            provider: 'zoom',
-            name: 'Zoom Video',
-            connected: true,
-            account_email: 'zoom-cloud@actionpulse.io',
-            auto_ingest_enabled: true,
-            capabilities: [
-              'Realtime Webhook: meeting.ended',
-              'Recording Webhook: recording.transcript_completed',
-              'Auto-download audio transcript VTT',
-              'Zero-touch ActionPulse ingestion',
-            ],
-            limitations: 'Zoom Cloud Recording must be enabled on host account.',
-          },
-          {
-            provider: 'google_meet',
-            name: 'Google Meet',
-            connected: true,
-            account_email: 'workspace-admin@actionpulse.io',
-            auto_ingest_enabled: true,
-            capabilities: [
-              'Google Workspace ConferenceRecords API',
-              'Auto-fetch .VTT and Docs Transcripts',
-              'Integrated with Google Calendar Linkage',
-            ],
-            limitations: 'Requires Google Workspace Business/Education tier with transcripts enabled.',
-          },
-          {
-            provider: 'teams',
-            name: 'Microsoft Teams',
-            connected: true,
-            account_email: 'teams-sync@actionpulse.io',
-            auto_ingest_enabled: true,
-            capabilities: [
-              'Microsoft Graph callTranscript API',
-              'Lifecycle Change Notifications',
-              'Speaker Diarized VTT Output',
-            ],
-            limitations: 'Requires Microsoft 365 tenant admin consent.',
-          },
-        ],
-      };
-    }
+    return await requestApi<AutomationStatusResponse>(
+      `/api/meetings/automation/status?workspace_id=${workspaceId}`
+    );
   },
 
   /**
-   * Run end-to-end simulation of a completed online meeting.
+   * Run end-to-end ingestion & real LLM extraction of an online meeting.
    */
   async simulateMeeting(payload: SimulateMeetingRequest): Promise<SimulateMeetingResponse> {
-    try {
-      return await requestApi<SimulateMeetingResponse>(
-        '/api/meetings/automation/simulate',
-        {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        }
-      );
-    } catch (err: any) {
-      console.warn('Backend automation simulate endpoint unavailable or Render deploy pending, executing fallback simulation:', err);
-
-      const meetingId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'sim-' + Date.now();
-      const startsAt = new Date(Date.now() - (payload.duration_minutes || 25) * 60000).toISOString();
-
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const confUrl = payload.conference_url || (
-            payload.provider === 'zoom'
-              ? `https://zoom.us/j/${meetingId.slice(0, 10)}`
-              : payload.provider === 'google_meet'
-              ? `https://meet.google.com/${meetingId.slice(0, 3)}-${meetingId.slice(3, 7)}-${meetingId.slice(7, 10)}`
-              : `https://teams.microsoft.com/l/meetup-join/${meetingId.slice(0, 12)}`
-          );
-
-          await supabase.from('meetings').insert({
-            id: meetingId,
-            workspace_id: payload.workspace_id,
-            title: payload.title,
-            starts_at: startsAt,
-            timezone: 'Asia/Kolkata',
-            organiser_id: user.id,
-            ai_processing: true,
-            visibility: 'workspace',
-            status: payload.auto_extract ? 'extracting' : 'draft',
-            calendar_provider: payload.provider,
-            conference_url: confUrl,
-          });
-
-          await supabase.from('consents').insert({
-            meeting_id: meetingId,
-            attested_by: user.id,
-            notice_version: 'v1.0-online-automation',
-            status: 'attested',
-          });
-        }
-      } catch (insertErr) {
-        console.debug('Client-side meeting insert fallback notice:', insertErr);
+    return await requestApi<SimulateMeetingResponse>(
+      '/api/meetings/automation/simulate',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
       }
-
-      return {
-        success: true,
-        meeting_id: meetingId,
-        title: payload.title,
-        provider: payload.provider,
-        starts_at: startsAt,
-        segment_count: 8,
-        extracted_items_count: 3,
-        message: `Simulated ${payload.provider} meeting ingested successfully (8 speaker cues parsed & grounded).`,
-        review_url: `/meetings/${meetingId}/review`,
-      };
-    }
+    );
   },
 
   /**
@@ -242,12 +135,8 @@ export const automationApi = {
    * Fetch recent automated online meetings.
    */
   async getFeed(workspaceId: string): Promise<AutomatedMeetingFeedItem[]> {
-    try {
-      return await requestApi<AutomatedMeetingFeedItem[]>(
-        `/api/meetings/automation/feed?workspace_id=${workspaceId}`
-      );
-    } catch {
-      return [];
-    }
+    return await requestApi<AutomatedMeetingFeedItem[]>(
+      `/api/meetings/automation/feed?workspace_id=${workspaceId}`
+    );
   },
 };

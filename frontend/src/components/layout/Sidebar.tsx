@@ -14,7 +14,6 @@ import {
   SquareKanban,
   TrendingUp,
   Users,
-  Video,
   X,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
@@ -35,7 +34,6 @@ const navGroups = [
       { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
       { label: "Meetings", path: "/meetings", icon: CalendarPlus },
       { label: "Calendar", path: "/calendar", icon: CalendarDays },
-      { label: "Meeting Studio", path: "/meeting-details", icon: Video },
       { label: "Tasks", path: "/tasks", icon: SquareKanban },
     ],
   },
