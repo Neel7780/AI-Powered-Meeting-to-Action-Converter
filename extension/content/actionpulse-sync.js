@@ -79,5 +79,6 @@
     if (!document.hidden) syncContext(false);
   });
 
-  setInterval(() => syncContext(false), 10000);
+  setInterval(() => syncContext(false), 2500);
 })();
+

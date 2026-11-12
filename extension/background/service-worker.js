@@ -107,8 +107,95 @@ function buildCanonicalText(cues) {
   return cues.map((c) => `${c.speaker || "Speaker"}: ${c.text}`).join("\n");
 }
 
+function readPageAuthContext() {
+  let accessToken = "";
+  let tokenExpiresAt = 0;
+  let userEmail = "";
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && /^sb-.*-auth-token$/.test(key)) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || "null");
+        const session = parsed && parsed.currentSession ? parsed.currentSession : parsed;
+        if (session && typeof session.access_token === "string") {
+          accessToken = session.access_token;
+          tokenExpiresAt = Number(session.expires_at || 0);
+          userEmail = (session.user && session.user.email) || "";
+          break;
+        }
+      } catch {
+        // Ignore malformed entries
+      }
+    }
+  }
+  return {
+    appUrl: window.location.origin,
+    accessToken,
+    tokenExpiresAt,
+    userEmail,
+    workspaceId: localStorage.getItem("currentWorkspaceId") || "",
+    workspaceName: localStorage.getItem("currentWorkspaceName") || "",
+    managerRole: localStorage.getItem("currentWorkspaceRole") || "",
+  };
+}
+
+async function syncFromOpenActionPulseTabs(settings) {
+  try {
+    const patterns = [
+      "http://localhost:5173/*",
+      "http://127.0.0.1:5173/*",
+      "https://*.vercel.app/*",
+    ];
+    if (settings.appUrl && /^https?:\/\//i.test(settings.appUrl)) {
+      const cleanOrigin = settings.appUrl.replace(/\/+$/, "");
+      if (!patterns.includes(`${cleanOrigin}/*`)) {
+        patterns.push(`${cleanOrigin}/*`);
+      }
+    }
+
+    const tabs = await chrome.tabs.query({ url: patterns });
+    if (!tabs || tabs.length === 0) return settings;
+
+    // Prefer active tab first so multi-tab users sync their focused ActionPulse tab
+    const sortedTabs = [...tabs].sort((a, b) => Number(b.active) - Number(a.active));
+    for (const tab of sortedTabs) {
+      if (!tab.id || !chrome.scripting) continue;
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: readPageAuthContext,
+        });
+        const ctx = results && results[0] && results[0].result;
+        if (ctx && (ctx.accessToken || ctx.workspaceId)) {
+          const updated = sanitizeSettings({
+            ...settings,
+            appUrl: ctx.appUrl || settings.appUrl,
+            accessToken: ctx.accessToken || "",
+            tokenExpiresAt: Number(ctx.tokenExpiresAt || 0),
+            userEmail: ctx.userEmail || "",
+            workspaceId: ctx.workspaceId || "",
+            workspaceName: ctx.workspaceName || "",
+            managerRole: ctx.managerRole || "",
+            lastSyncedAt: Date.now(),
+          });
+          await chrome.storage.local.set({ settings: updated });
+          return updated;
+        }
+      } catch {
+        // Skip tabs that cannot be scripted (e.g., unloading/restricted)
+      }
+    }
+  } catch (err) {
+    console.debug("[ActionPulse] Open tab auth sync skipped:", err);
+  }
+  return settings;
+}
+
 async function performBackendUpload(session, rawSettings) {
-  const settings = sanitizeSettings(rawSettings);
+  let settings = sanitizeSettings(rawSettings);
+  if (!settings.accessToken || !settings.workspaceId || !settings.managerRole) {
+    settings = await syncFromOpenActionPulseTabs(settings);
+  }
   const cues = session.cues && session.cues.length > 0 ? session.cues : [];
 
   if (cues.length === 0) {
@@ -242,6 +329,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     switch (message.type) {
       case "GET_STATE": {
+        const isStale = !settings.lastSyncedAt || Date.now() - settings.lastSyncedAt > 4000;
+        if (!settings.accessToken || !settings.workspaceId || !settings.managerRole || isStale) {
+          settings = await syncFromOpenActionPulseTabs(settings);
+        }
         sendResponse({
           session,
           settings: {
