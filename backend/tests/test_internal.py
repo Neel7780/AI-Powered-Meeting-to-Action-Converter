@@ -84,3 +84,23 @@ class TestInternalTick:
             data = response.json()
             assert data["status"] == "active"
             assert data["db"] == "degraded"
+
+    @patch("app.api.internal.process_deadline_24h_reminders")
+    def test_process_deadline_reminders_endpoint(self, mock_process_deadlines):
+        secret = "my-test-secret-key-minimum-32-characters"
+        mock_process_deadlines.return_value = 3
+
+        with patch.object(settings, "INTERNAL_TICK_SECRET", secret):
+            response = client.post(
+                "/internal/process-deadline-reminders",
+                headers={"X-Tick-Secret": secret}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["status"] == "ok"
+            assert data["processed"]["deadline_24h_reminders_sent"] == 3
+            assert "timestamp" in data
+
+    def test_process_deadline_reminders_without_secret_returns_401(self):
+        response = client.post("/internal/process-deadline-reminders")
+        assert response.status_code == 401

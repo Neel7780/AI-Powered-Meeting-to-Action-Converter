@@ -956,10 +956,299 @@ def process_post_meeting_nudges(min_age_minutes: int = 15, max_age_hours: int = 
 
 
 def process_all_meeting_notifications() -> dict[str, int]:
-    """Execute both pre-meeting reminders and post-meeting transcript nudges safely."""
+    """Execute pre-meeting reminders, post-meeting transcript nudges, and 24h task deadline reminders safely."""
     reminders = process_pre_meeting_reminders()
     nudges = process_post_meeting_nudges()
+    deadline_reminders = process_deadline_24h_reminders()
     return {
         "pre_meeting_reminders_sent": reminders,
         "post_meeting_nudges_sent": nudges,
+        "deadline_24h_reminders_sent": deadline_reminders,
     }
+
+
+process_all_background_notifications = process_all_meeting_notifications
+
+
+def send_task_deadline_reminder_email(
+    to: str,
+    user_name: str,
+    task_title: str,
+    deadline_utc_str: str,
+    priority: str = "normal",
+    tz_name: str = "Asia/Kolkata",
+    source_excerpt: Optional[str] = None,
+    board_url: str = "",
+) -> None:
+    """Send an upcoming 24-hour task deadline reminder email with task details."""
+    safe_name = html.escape(user_name)
+    safe_title = html.escape(task_title)
+    formatted_time = _format_deadline(deadline_utc_str, tz_name)
+    safe_time = html.escape(formatted_time)
+    safe_priority = html.escape((priority or "normal").upper())
+    safe_quote = html.escape(source_excerpt or "")
+    safe_board_url = html.escape(board_url, quote=True) if board_url else ""
+
+    p_lower = (priority or "normal").lower()
+    if p_lower == "urgent":
+        badge_bg = "#fef3c7"
+        badge_color = "#92400e"
+    elif p_lower == "high":
+        badge_bg = "#fee2e2"
+        badge_color = "#991b1b"
+    else:
+        badge_bg = "#e0e7ff"
+        badge_color = "#3730a3"
+
+    subject = f"[ActionPulse] 24h Deadline Reminder: {task_title}"
+
+    quote_text = f'\nMeeting Context: "{source_excerpt}"\n' if source_excerpt else ""
+    text_body = (
+        f"Hello {user_name},\n\n"
+        f"This is a reminder that the deadline for your assigned action item is approaching in less than 24 hours:\n\n"
+        f"Task: {task_title}\n"
+        f"Priority: {priority.upper()}\n"
+        f"Deadline: {formatted_time}\n"
+        f"{quote_text}\n"
+    )
+    if board_url:
+        text_body += f"View in Kanban Board: {board_url}\n"
+    text_body += (
+        f"\nPlease ensure this item is updated or moved to 'Done' once completed.\n\n"
+        f"— ActionPulse Notification System"
+    )
+
+    quote_block = (
+        f'<blockquote style="margin: 12px 0 0 0; padding: 8px 14px; background: #f8fafc; border-left: 3px solid #cbd5e1; font-style: italic; color: #475569; font-size: 13px;">"{safe_quote}"</blockquote>'
+        if safe_quote else ""
+    )
+
+    board_button = ""
+    if safe_board_url:
+        board_button = (
+            f'<div style="margin: 24px 0; text-align: center;">'
+            f'<a href="{safe_board_url}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 28px; '
+            f'text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block;">'
+            f'Open Kanban Board</a>'
+            f'</div>'
+        )
+
+    html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>24h Task Deadline Reminder</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <tr>
+      <td style="padding: 28px; background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);">
+        <h1 style="color: #ffffff; margin: 0; font-size: 20px; font-weight: 700;">ActionPulse</h1>
+        <p style="color: #c7d2fe; margin: 4px 0 0 0; font-size: 13px;">Upcoming Task Deadline (24 Hours)</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 28px;">
+        <h2 style="font-size: 18px; margin-top: 0; color: #0f172a;">Hello {safe_name},</h2>
+        <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+          The deadline for your assigned action item is approaching in less than 24 hours:
+        </p>
+        <div style="margin: 20px 0; padding: 18px; background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #f59e0b; border-radius: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+            <strong style="font-size: 16px; color: #0f172a;">{safe_title}</strong>
+            <span style="display: inline-block; background-color: {badge_bg}; color: {badge_color}; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px; text-transform: uppercase;">{safe_priority}</span>
+          </div>
+          <p style="margin: 6px 0 0 0; font-size: 14px; color: #475569;">
+            ⏰ <strong>Deadline:</strong> {safe_time}
+          </p>
+          {quote_block}
+        </div>
+        {board_button}
+        <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 24px; text-align: center;">
+          Once completed, please update the card status on your Kanban board.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px 28px; background-color: #f1f5f9; text-align: center; border-top: 1px solid #e2e8f0;">
+        <p style="margin: 0; font-size: 12px; color: #94a3b8;">ActionPulse Notification System &bull; Zero-Budget Meeting Automation</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    send_email(to=to, subject=subject, html_body=html_body, text_body=text_body)
+
+
+def process_deadline_24h_reminders(window_hours: int = 24) -> int:
+    """Find incomplete tasks with deadlines within the next window_hours and notify assignees.
+
+    Ensures idempotency via unique key in notifications table:
+    idempotency_key = f"deadline_24h:email:{task_id}:{user_id}"
+    """
+    try:
+        supabase = get_supabase_client()
+    except Exception as exc:
+        logger.error("process_deadline_24h_reminders: Supabase connection failed: %s", exc)
+        return 0
+
+    now = datetime.now(timezone.utc)
+    window_end = now + timedelta(hours=window_hours)
+
+    try:
+        tasks_resp = (
+            supabase.table("tasks")
+            .select("id, title, description, deadline_utc, priority, status, workspace_id, source_excerpt, external_owner_label")
+            .gte("deadline_utc", now.isoformat())
+            .lte("deadline_utc", window_end.isoformat())
+            .neq("status", "done")
+            .execute()
+        )
+        tasks = tasks_resp.data or []
+        if not tasks:
+            return 0
+
+        # Filter out external owner tasks without internal member assignees
+        candidate_tasks = [t for t in tasks if not t.get("external_owner_label")]
+        if not candidate_tasks:
+            return 0
+
+        task_ids = [t["id"] for t in candidate_tasks]
+        tasks_map = {t["id"]: t for t in candidate_tasks}
+
+        # Fetch assignees from task_assignees
+        assignees_resp = (
+            supabase.table("task_assignees")
+            .select("task_id, user_id, is_primary")
+            .in_("task_id", task_ids)
+            .execute()
+        )
+        assignees = assignees_resp.data or []
+        if not assignees:
+            return 0
+
+        user_ids = list({a["user_id"] for a in assignees if a.get("user_id")})
+        workspace_ids = list({t["workspace_id"] for t in candidate_tasks if t.get("workspace_id")})
+
+        if not user_ids or not workspace_ids:
+            return 0
+
+        # Verify active workspace memberships
+        wm_resp = (
+            supabase.table("workspace_members")
+            .select("workspace_id, user_id")
+            .in_("workspace_id", workspace_ids)
+            .in_("user_id", user_ids)
+            .execute()
+        )
+        active_memberships = {(r["workspace_id"], r["user_id"]) for r in (wm_resp.data or [])}
+
+        # Fetch profiles
+        prof_resp = (
+            supabase.table("profiles")
+            .select("id, email, display_name, timezone")
+            .in_("id", user_ids)
+            .execute()
+        )
+        profiles_map = {p["id"]: p for p in (prof_resp.data or [])}
+
+        total_reminders_sent = 0
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Track processed (task_id, user_id) pairs in this run
+        processed_pairs: set[tuple[str, str]] = set()
+
+        for a in assignees:
+            t_id = a.get("task_id")
+            u_id = a.get("user_id")
+            if not t_id or not u_id:
+                continue
+
+            pair = (str(t_id), str(u_id))
+            if pair in processed_pairs:
+                continue
+            processed_pairs.add(pair)
+
+            task = tasks_map.get(t_id)
+            if not task:
+                continue
+
+            ws_id = task.get("workspace_id")
+            if (ws_id, u_id) not in active_memberships:
+                continue
+
+            profile = profiles_map.get(u_id)
+            if not profile or not profile.get("email"):
+                continue
+
+            user_email = profile["email"]
+            user_name = profile.get("display_name") or user_email.split("@")[0]
+            user_tz = profile.get("timezone") or "Asia/Kolkata"
+
+            key = f"deadline_24h:email:{t_id}:{u_id}"
+
+            # Idempotency check via notifications table insert
+            try:
+                payload = {
+                    "user_id": u_id,
+                    "task_id": t_id,
+                    "channel": "email",
+                    "event_type": "deadline_24h",
+                    "status": "pending",
+                    "attempt": 0,
+                    "idempotency_key": key,
+                }
+                supabase.table("notifications").insert(payload).execute()
+            except Exception:
+                # Key already exists or insert conflict -> skip
+                continue
+
+            # In-app notification (best-effort)
+            in_app_key = f"deadline_24h:in_app:{t_id}:{u_id}"
+            try:
+                supabase.table("notifications").insert({
+                    "user_id": u_id,
+                    "task_id": t_id,
+                    "channel": "in_app",
+                    "event_type": "deadline_24h",
+                    "status": "sent",
+                    "sent_at": now_iso,
+                    "attempt": 0,
+                    "idempotency_key": in_app_key,
+                }).execute()
+            except Exception:
+                pass
+
+            board_url = f"{settings.APP_URL.rstrip('/')}/kanban"
+
+            # Dispatch email
+            try:
+                send_task_deadline_reminder_email(
+                    to=user_email,
+                    user_name=user_name,
+                    task_title=task.get("title") or "Untitled Task",
+                    deadline_utc_str=task.get("deadline_utc"),
+                    priority=task.get("priority", "normal"),
+                    tz_name=user_tz,
+                    source_excerpt=task.get("source_excerpt"),
+                    board_url=board_url,
+                )
+                supabase.table("notifications").update({
+                    "status": "sent",
+                    "sent_at": now_iso,
+                }).eq("idempotency_key", key).execute()
+                total_reminders_sent += 1
+            except Exception as send_err:
+                logger.error("Failed to send deadline reminder to %s for task %s: %s", user_email, t_id, send_err)
+                supabase.table("notifications").update({
+                    "status": "failed",
+                    "last_error": str(send_err)[:500],
+                    "attempt": 1,
+                }).eq("idempotency_key", key).execute()
+
+        return total_reminders_sent
+    except Exception as exc:
+        logger.error("process_deadline_24h_reminders error: %s", exc, exc_info=True)
+        return 0

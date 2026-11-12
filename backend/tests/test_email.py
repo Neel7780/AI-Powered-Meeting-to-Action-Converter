@@ -415,3 +415,197 @@ class TestMeetingRemindersAndNudges:
         nudges_sent = process_post_meeting_nudges(min_age_minutes=15, max_age_hours=24)
         assert nudges_sent == 1
         assert mock_send_nudge.call_count == 1
+
+    @patch("app.services.email.send_email")
+    def test_send_task_deadline_reminder_email(self, mock_send_email):
+        from app.services.email import send_task_deadline_reminder_email
+
+        send_task_deadline_reminder_email(
+            to="developer@example.com",
+            user_name="Priya",
+            task_title="Implement OAuth 2.0 PKCE flow",
+            deadline_utc_str="2026-10-28T18:00:00Z",
+            priority="urgent",
+            tz_name="Asia/Kolkata",
+            source_excerpt="Priya will complete the PKCE flow before Wednesday demo.",
+            board_url="https://actionpulse.app/kanban"
+        )
+
+        assert mock_send_email.call_count == 1
+        kwargs = mock_send_email.call_args[1]
+        assert kwargs["to"] == "developer@example.com"
+        assert "24h Deadline Reminder: Implement OAuth 2.0 PKCE flow" in kwargs["subject"]
+        assert "Implement OAuth 2.0 PKCE flow" in kwargs["html_body"]
+        assert "URGENT" in kwargs["html_body"]
+        assert "Priya will complete the PKCE flow" in kwargs["html_body"]
+        assert "actionpulse.app/kanban" in kwargs["html_body"]
+        assert "Priya" in kwargs["text_body"]
+        assert "URGENT" in kwargs["text_body"]
+
+    @patch("app.services.email.send_task_deadline_reminder_email")
+    @patch("app.services.email.get_supabase_client")
+    def test_process_deadline_24h_reminders(self, mock_get_client, mock_send_reminder):
+        from app.services.email import process_deadline_24h_reminders
+
+        task_id_1 = str(uuid4())
+        task_id_2 = str(uuid4())
+        user_id_1 = str(uuid4())
+        user_id_2 = str(uuid4())
+        workspace_id = str(uuid4())
+
+        client = MagicMock()
+        tasks_mock = MagicMock()
+        tasks_mock.select.return_value.gte.return_value.lte.return_value.neq.return_value.execute.return_value = MagicMock(
+            data=[
+                {
+                    "id": task_id_1,
+                    "title": "Fix memory leak in parser",
+                    "description": "Investigate stream leak",
+                    "deadline_utc": "2026-10-28T12:00:00Z",
+                    "priority": "high",
+                    "status": "todo",
+                    "workspace_id": workspace_id,
+                    "source_excerpt": "I will fix the memory leak by tomorrow.",
+                    "external_owner_label": None,
+                },
+                {
+                    "id": task_id_2,
+                    "title": "Update API spec docs",
+                    "description": "Align OpenAPI routes",
+                    "deadline_utc": "2026-10-28T15:00:00Z",
+                    "priority": "normal",
+                    "status": "in_progress",
+                    "workspace_id": workspace_id,
+                    "source_excerpt": "Docs will be done by tomorrow afternoon.",
+                    "external_owner_label": None,
+                },
+            ]
+        )
+
+        assignees_mock = MagicMock()
+        assignees_mock.select.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[
+                {"task_id": task_id_1, "user_id": user_id_1, "is_primary": True},
+                {"task_id": task_id_2, "user_id": user_id_2, "is_primary": True},
+            ]
+        )
+
+        wm_mock = MagicMock()
+        wm_mock.select.return_value.in_.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[
+                {"workspace_id": workspace_id, "user_id": user_id_1},
+                {"workspace_id": workspace_id, "user_id": user_id_2},
+            ]
+        )
+
+        prof_mock = MagicMock()
+        prof_mock.select.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[
+                {"id": user_id_1, "email": "dev1@example.com", "display_name": "Dev One", "timezone": "Asia/Kolkata"},
+                {"id": user_id_2, "email": "dev2@example.com", "display_name": "Dev Two", "timezone": "Asia/Kolkata"},
+            ]
+        )
+
+        notif_mock = MagicMock()
+        notif_mock.insert.return_value.execute.return_value = MagicMock(data=[{"id": "1"}])
+        notif_mock.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"id": "1"}])
+
+        def table_router(name):
+            if name == "tasks":
+                return tasks_mock
+            elif name == "task_assignees":
+                return assignees_mock
+            elif name == "workspace_members":
+                return wm_mock
+            elif name == "profiles":
+                return prof_mock
+            elif name == "notifications":
+                return notif_mock
+            return MagicMock()
+
+        client.table.side_effect = table_router
+        mock_get_client.return_value = client
+
+        reminders_sent = process_deadline_24h_reminders(window_hours=24)
+        assert reminders_sent == 2
+        assert mock_send_reminder.call_count == 2
+
+    @patch("app.services.email.send_task_deadline_reminder_email")
+    @patch("app.services.email.get_supabase_client")
+    def test_process_deadline_24h_reminders_skips_duplicates(self, mock_get_client, mock_send_reminder):
+        from app.services.email import process_deadline_24h_reminders
+
+        task_id = str(uuid4())
+        user_id = str(uuid4())
+        workspace_id = str(uuid4())
+
+        client = MagicMock()
+        tasks_mock = MagicMock()
+        tasks_mock.select.return_value.gte.return_value.lte.return_value.neq.return_value.execute.return_value = MagicMock(
+            data=[{
+                "id": task_id,
+                "title": "Fix CSS alignment",
+                "deadline_utc": "2026-10-28T12:00:00Z",
+                "priority": "low",
+                "status": "todo",
+                "workspace_id": workspace_id,
+                "source_excerpt": "CSS alignment fix tomorrow.",
+                "external_owner_label": None,
+            }]
+        )
+
+        assignees_mock = MagicMock()
+        assignees_mock.select.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[{"task_id": task_id, "user_id": user_id, "is_primary": True}]
+        )
+
+        wm_mock = MagicMock()
+        wm_mock.select.return_value.in_.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[{"workspace_id": workspace_id, "user_id": user_id}]
+        )
+
+        prof_mock = MagicMock()
+        prof_mock.select.return_value.in_.return_value.execute.return_value = MagicMock(
+            data=[{"id": user_id, "email": "dev@example.com", "display_name": "Dev", "timezone": "Asia/Kolkata"}]
+        )
+
+        notif_mock = MagicMock()
+        # Simulate duplicate key exception on notifications insert
+        notif_mock.insert.return_value.execute.side_effect = Exception("duplicate key value violates unique constraint")
+
+        def table_router(name):
+            if name == "tasks":
+                return tasks_mock
+            elif name == "task_assignees":
+                return assignees_mock
+            elif name == "workspace_members":
+                return wm_mock
+            elif name == "profiles":
+                return prof_mock
+            elif name == "notifications":
+                return notif_mock
+            return MagicMock()
+
+        client.table.side_effect = table_router
+        mock_get_client.return_value = client
+
+        reminders_sent = process_deadline_24h_reminders(window_hours=24)
+        assert reminders_sent == 0
+        assert mock_send_reminder.call_count == 0
+
+    @patch("app.services.email.process_deadline_24h_reminders")
+    @patch("app.services.email.process_post_meeting_nudges")
+    @patch("app.services.email.process_pre_meeting_reminders")
+    def test_process_all_meeting_notifications_includes_deadlines(
+        self, mock_pre, mock_nudges, mock_deadlines
+    ):
+        from app.services.email import process_all_meeting_notifications
+
+        mock_pre.return_value = 3
+        mock_nudges.return_value = 1
+        mock_deadlines.return_value = 2
+
+        stats = process_all_meeting_notifications()
+        assert stats["pre_meeting_reminders_sent"] == 3
+        assert stats["post_meeting_nudges_sent"] == 1
+        assert stats["deadline_24h_reminders_sent"] == 2
