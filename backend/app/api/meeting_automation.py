@@ -37,6 +37,7 @@ from app.schemas.meeting_automation import (
     SimulateMeetingRequest,
     SimulateMeetingResponse,
 )
+from app.services.caption_cleaner import deduplicate_caption_segments
 from app.services.llm.bedrock import llm_is_configured
 from app.services.llm.runner import run_extraction
 
@@ -480,24 +481,36 @@ def upload_extension_meeting(
     raw_text = (payload.transcript_text or "").strip()
     if payload.segments:
         speaker_alias = _resolve_speaker_name(client, user)
-        vtt_parts = ["WEBVTT\n"]
+        normalized_segments = []
         for idx, seg in enumerate(payload.segments):
             clean_text = (seg.text or "").strip()
             if not clean_text:
                 continue
             start_ms = seg.start_ms if seg.start_ms is not None else idx * 6000
             end_ms = seg.end_ms if seg.end_ms is not None else (idx + 1) * 6000
-            start_tc = _format_ms_to_vtt(start_ms)
-            end_tc = _format_ms_to_vtt(end_ms)
             raw_speaker = (seg.speaker or "").strip()
             speaker_tag = (
                 speaker_alias
                 if not raw_speaker or raw_speaker.lower() in ("you", "me", "speaker", "organiser")
                 else raw_speaker
             )
-            vtt_parts.append(f"{idx + 1}\n{start_tc} --> {end_tc}\n<v {speaker_tag}>{clean_text}\n")
+            normalized_segments.append({
+                "speaker": speaker_tag,
+                "text": clean_text,
+                "start_ms": start_ms,
+                "end_ms": end_ms,
+            })
+
+        cleaned_segments = deduplicate_caption_segments(normalized_segments)
+        vtt_parts = ["WEBVTT\n"]
+        for idx, seg in enumerate(cleaned_segments):
+            start_tc = _format_ms_to_vtt(seg["start_ms"])
+            end_tc = _format_ms_to_vtt(seg["end_ms"])
+            vtt_parts.append(f"{idx + 1}\n{start_tc} --> {end_tc}\n<v {seg['speaker']}>{seg['text']}\n")
         if len(vtt_parts) > 1:
             raw_text = "\n".join(vtt_parts)
+        else:
+            raw_text = ""
 
     if not raw_text:
         raise HTTPException(

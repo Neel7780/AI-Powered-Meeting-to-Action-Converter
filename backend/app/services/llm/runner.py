@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.config import settings
 from app.core.supabase import get_supabase_client
+from app.services.caption_cleaner import prepare_transcript_for_llm
 from app.services.llm.chain import extract
 from app.services.llm.prompt import build_roster, strip_transcript_tags
 from app.services.llm.validate import validate_items
@@ -62,7 +63,7 @@ def run_extraction(meeting_id: UUID | str) -> None:
             "weekday": local_start.strftime("%A"),
             "timezone": meeting["timezone"],
             "roster": roster_text,
-            "transcript": strip_transcript_tags(canonical_text),
+            "transcript": prepare_transcript_for_llm(strip_transcript_tags(canonical_text)),
         })
 
         db.table("llm_runs").insert([

@@ -1167,31 +1167,17 @@ export default function CalendarPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {isPast ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/meetings/${meeting.id}`);
-                            }}
-                            className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-cyan-300 transition"
-                          >
-                            <span>Meeting Studio</span>
-                            <ArrowRight className="size-3" />
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/meetings/${meeting.id}/review`);
-                            }}
-                            className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-cyan-300 transition"
-                          >
-                            <span>Review Gate</span>
-                            <ArrowRight className="size-3" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/meetings/${meeting.id}/review`);
+                          }}
+                          className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-cyan-300 transition"
+                        >
+                          <span>Review Gate</span>
+                          <ArrowRight className="size-3" />
+                        </button>
                       </div>
                     </div>
                   </div>
