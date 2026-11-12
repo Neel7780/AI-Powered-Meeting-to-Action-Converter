@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, status
 from app.core.config import settings
 from app.core.supabase import get_supabase_client
-from app.services.email import process_all_meeting_notifications
+from app.services.email import process_all_meeting_notifications, process_deadline_24h_reminders
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def internal_tick(x_tick_secret: Optional[str] = Header(None, alias="X-Tick-Secr
     1. Authenticates request via X-Tick-Secret header (timing-safe comparison).
     2. Executes a trivial query against Supabase to prevent the free database from pausing.
     3. Keeps Render free web service awake.
-    4. Dispatches scheduled pre-meeting reminders and post-meeting transcript nudges.
+    4. Dispatches scheduled pre-meeting reminders, post-meeting transcript nudges, and 24h deadline reminders.
     """
     if not settings.INTERNAL_TICK_SECRET or not x_tick_secret:
         raise HTTPException(
@@ -80,5 +80,28 @@ def trigger_meeting_reminders(x_tick_secret: Optional[str] = Header(None, alias=
     return {
         "status": "ok",
         "processed": stats,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@router.post("/internal/process-deadline-reminders", status_code=status.HTTP_200_OK)
+def trigger_deadline_reminders(x_tick_secret: Optional[str] = Header(None, alias="X-Tick-Secret")):
+    """Explicitly trigger 24h task deadline reminders."""
+    if not settings.INTERNAL_TICK_SECRET or not x_tick_secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or unconfigured tick secret."
+        )
+
+    if not hmac.compare_digest(x_tick_secret, settings.INTERNAL_TICK_SECRET):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid tick secret."
+        )
+
+    sent = process_deadline_24h_reminders()
+    return {
+        "status": "ok",
+        "processed": {"deadline_24h_reminders_sent": sent},
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
