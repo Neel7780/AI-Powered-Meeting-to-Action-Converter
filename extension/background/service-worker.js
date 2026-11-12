@@ -8,11 +8,29 @@
 const DEFAULT_SETTINGS = {
   apiUrl: "http://localhost:8000",
   appUrl: "http://localhost:5173",
-  workspaceId: "00000000-0000-0000-0000-000000000002", // G-10 Workspace
-  managerRole: "organiser",
+  workspaceId: "",
+  workspaceName: "",
+  managerRole: "",
+  accessToken: "",
+  tokenExpiresAt: 0,
+  userEmail: "",
+  lastSyncedAt: 0,
   autoExtract: true,
   autoUploadOnEnd: true,
 };
+
+function sanitizeSettings(rawSettings) {
+  const merged = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
+  // Clear legacy demo workspace placeholder if no real auth token was ever synced
+  if (
+    merged.workspaceId === "00000000-0000-0000-0000-000000000002" &&
+    !merged.accessToken
+  ) {
+    merged.workspaceId = "";
+    merged.managerRole = "";
+  }
+  return merged;
+}
 
 function createIdleSession() {
   return {
@@ -89,12 +107,31 @@ function buildCanonicalText(cues) {
   return cues.map((c) => `${c.speaker || "Speaker"}: ${c.text}`).join("\n");
 }
 
-async function performBackendUpload(session, settings) {
-  const cues = session.cues && session.cues.length > 0 ? session.cues : [
-    { speaker: "Organiser", text: "Meeting concluded with agreed action items.", timestamp: new Date().toISOString() }
-  ];
+async function performBackendUpload(session, rawSettings) {
+  const settings = sanitizeSettings(rawSettings);
+  const cues = session.cues && session.cues.length > 0 ? session.cues : [];
 
-  let durationMins = 15;
+  if (cues.length === 0) {
+    throw new Error("No captions captured yet. Turn on Closed Captions (CC) in your meeting first.");
+  }
+  if (!settings.accessToken) {
+    throw new Error("Not signed in. Open ActionPulse in Chrome and sign in as an Admin or Organiser to sync.");
+  }
+  if (settings.tokenExpiresAt && settings.tokenExpiresAt * 1000 < Date.now()) {
+    throw new Error("ActionPulse login session expired. Open or refresh your ActionPulse tab to re-sync.");
+  }
+  if (!settings.workspaceId) {
+    throw new Error("No active workspace synced. Select a workspace in ActionPulse first.");
+  }
+
+  const normalizedRole = String(settings.managerRole || "").toLowerCase();
+  if (!["admin", "organiser"].includes(normalizedRole)) {
+    throw new Error(
+      `Manager access required: current role is "${normalizedRole || "none"}". Only Admin or Organiser can upload.`
+    );
+  }
+
+  let durationMins = 1;
   if (session.startTime) {
     const endTs = session.endTime ? new Date(session.endTime).getTime() : Date.now();
     durationMins = Math.max(1, Math.round((endTs - new Date(session.startTime).getTime()) / 60000));
@@ -126,14 +163,21 @@ async function performBackendUpload(session, settings) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer dev-token-${settings.workspaceId}`,
+      Authorization: `Bearer ${settings.accessToken}`,
     },
     body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(`Server returned ${response.status}: ${errBody}`);
+    let detail = errBody;
+    try {
+      const parsed = JSON.parse(errBody);
+      detail = parsed.detail || errBody;
+    } catch {
+      // keep raw text
+    }
+    throw new Error(`Server returned ${response.status}: ${detail}`);
   }
 
   const result = await response.json();
@@ -194,15 +238,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
     let session = store.session || createIdleSession();
-    let settings = store.settings || DEFAULT_SETTINGS;
+    let settings = sanitizeSettings(store.settings);
 
     switch (message.type) {
       case "GET_STATE": {
         sendResponse({
           session,
-          settings,
+          settings: {
+            ...settings,
+            hasAccessToken: Boolean(settings.accessToken),
+            accessToken: undefined,
+          },
           cueCount: session.cues ? session.cues.length : 0,
         });
+        break;
+      }
+
+      case "SYNC_AUTH_CONTEXT": {
+        const data = message.data || {};
+        settings = sanitizeSettings({
+          ...settings,
+          appUrl: data.appUrl || settings.appUrl,
+          accessToken: data.accessToken || "",
+          tokenExpiresAt: Number(data.tokenExpiresAt || 0),
+          userEmail: data.userEmail || "",
+          workspaceId: data.workspaceId || "",
+          workspaceName: data.workspaceName || "",
+          managerRole: data.managerRole || "",
+          lastSyncedAt: Date.now(),
+        });
+        await chrome.storage.local.set({ settings });
+        sendResponse({ status: "synced", hasAccessToken: Boolean(settings.accessToken) });
         break;
       }
 
@@ -302,7 +368,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "UPDATE_SETTINGS": {
-        settings = { ...settings, ...message.data };
+        settings = sanitizeSettings({ ...settings, ...message.data });
         await chrome.storage.local.set({ settings });
         sendResponse({ status: "settings_updated", settings });
         break;

@@ -30,23 +30,63 @@ def mock_auth_user():
     return CurrentUser(id=uuid4(), email="madhav@actionpulse.io")
 
 
-def test_get_automation_status(mock_auth_user):
-    """Verify get_automation_status returns provider connections and stats."""
-    workspace_id = uuid4()
+def _make_table_db(table_map: dict):
+    """Create a table-routing MagicMock Supabase client."""
     mock_db = MagicMock()
-    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-        {"role": "organiser"}
-    ]
+
+    def _table(name: str):
+        tbl = MagicMock()
+        entry = table_map.get(name, [])
+
+        def _make_chain(res):
+            q = MagicMock()
+            q.execute.return_value = res
+            q.not_ = q
+            for m in ("select", "eq", "in_", "is_", "order", "limit", "insert", "update", "delete"):
+                getattr(q, m).return_value = q
+            return q
+
+        if isinstance(entry, dict):
+            select_res = entry.get("select", MagicMock(data=[], count=0))
+            insert_res = entry.get("insert", MagicMock(data=[]))
+            update_res = entry.get("update", MagicMock(data=[]))
+            delete_res = entry.get("delete", MagicMock(data=[]))
+        else:
+            select_res = MagicMock(data=entry, count=len(entry) if isinstance(entry, list) else 0)
+            insert_res = MagicMock(data=[])
+            update_res = MagicMock(data=[])
+            delete_res = MagicMock(data=[])
+
+        tbl.select.return_value = _make_chain(select_res)
+        tbl.insert.return_value = _make_chain(insert_res)
+        tbl.update.return_value = _make_chain(update_res)
+        tbl.delete.return_value = _make_chain(delete_res)
+        return tbl
+
+    mock_db.table.side_effect = _table
+    return mock_db
+
+
+def test_get_automation_status(mock_auth_user):
+    """Verify get_automation_status returns real provider connections and stats."""
+    workspace_id = uuid4()
+    mock_db = _make_table_db({
+        "workspace_members": [{"role": "organiser"}],
+        "calendar_connections": [{"provider": "google", "account_email": "org@example.com"}],
+        "meetings": {"select": MagicMock(data=[{"id": "m1"}], count=3)},
+    })
 
     with patch("app.api.meeting_automation.get_supabase_client", return_value=mock_db), \
          patch("app.core.deps.get_supabase_client", return_value=mock_db):
         res = get_automation_status(workspace_id=workspace_id, user=mock_auth_user)
         assert res.auto_ingest_global is True
+        assert res.total_automated_meetings == 3
         assert len(res.providers) == 3
         providers = {p.provider: p for p in res.providers}
-        assert ProviderType.GOOGLE_MEET in providers
-        assert ProviderType.ZOOM in providers
-        assert ProviderType.TEAMS in providers
+        assert providers[ProviderType.GOOGLE_MEET].connected is True
+        assert providers[ProviderType.GOOGLE_MEET].account_email == "org@example.com"
+        assert providers[ProviderType.ZOOM].connected is False
+        assert providers[ProviderType.TEAMS].connected is False
 
 
 def test_update_automation_config(mock_auth_user):
@@ -71,14 +111,13 @@ def test_update_automation_config(mock_auth_user):
 
 
 def test_simulate_online_meeting(mock_auth_user):
-    """Verify simulate_online_meeting creates meeting, transcript, and extracted tasks."""
+    """Verify simulate_online_meeting creates meeting, transcript, and invokes real LLM extraction."""
     workspace_id = uuid4()
-    mock_db = MagicMock()
-    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-        {"role": "organiser"}
-    ]
-    mock_db.table.return_value.insert.return_value.execute.return_value = MagicMock(data=[])
-    mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+    mock_db = _make_table_db({
+        "workspace_members": [{"role": "organiser"}],
+        "meetings": {"select": MagicMock(data=[{"status": "ready"}])},
+        "extracted_items": {"select": MagicMock(data=[{"id": "i1"}, {"id": "i2"}], count=2)},
+    })
 
     payload = SimulateMeetingRequest(
         workspace_id=workspace_id,
@@ -89,25 +128,49 @@ def test_simulate_online_meeting(mock_auth_user):
     )
 
     with patch("app.api.meeting_automation.get_supabase_client", return_value=mock_db), \
-         patch("app.core.deps.get_supabase_client", return_value=mock_db):
+         patch("app.core.deps.get_supabase_client", return_value=mock_db), \
+         patch("app.api.meeting_automation.llm_is_configured", return_value=True), \
+         patch("app.api.meeting_automation.run_extraction") as mock_run:
         res = simulate_online_meeting(payload=payload, user=mock_auth_user)
         assert res.success is True
         assert res.title == "Automated Zoom Architecture Review"
         assert res.provider == ProviderType.ZOOM
         assert res.segment_count > 0
-        assert res.extracted_items_count > 0
+        assert res.extracted_items_count == 2
         assert "review" in res.review_url
+        assert mock_run.call_count == 1
+
+
+def test_simulate_meeting_returns_503_when_llm_unconfigured(mock_auth_user):
+    """Verify simulate_online_meeting fails fast with 503 when LLM is unconfigured."""
+    workspace_id = uuid4()
+    mock_db = _make_table_db({"workspace_members": [{"role": "organiser"}]})
+
+    payload = SimulateMeetingRequest(
+        workspace_id=workspace_id,
+        provider=ProviderType.ZOOM,
+        title="Unconfigured LLM Test",
+        duration_minutes=15,
+        auto_extract=True,
+    )
+
+    with patch("app.api.meeting_automation.get_supabase_client", return_value=mock_db), \
+         patch("app.core.deps.get_supabase_client", return_value=mock_db), \
+         patch("app.api.meeting_automation.llm_is_configured", return_value=False):
+        with pytest.raises(HTTPException) as exc_info:
+            simulate_online_meeting(payload=payload, user=mock_auth_user)
+        assert exc_info.value.status_code == 503
 
 
 def test_extension_upload_meeting_success(mock_auth_user):
-    """Verify upload_extension_meeting ingests captions and generates tasks for Manager Review Gate."""
+    """Verify upload_extension_meeting ingests captions and invokes real LLM extraction."""
     workspace_id = uuid4()
-    mock_db = MagicMock()
-    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-        {"role": "organiser"}
-    ]
-    mock_db.table.return_value.insert.return_value.execute.return_value = MagicMock(data=[])
-    mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+    mock_db = _make_table_db({
+        "workspace_members": [{"role": "organiser"}],
+        "profiles": [{"display_name": "Madhav Chauhan"}],
+        "meetings": {"select": MagicMock(data=[{"status": "ready"}])},
+        "extracted_items": {"select": MagicMock(data=[{"id": "i1"}], count=1)},
+    })
 
     payload = ExtensionMeetingUploadRequest(
         workspace_id=workspace_id,
@@ -123,7 +186,7 @@ def test_extension_upload_meeting_success(mock_auth_user):
                 end_ms=4000,
             ),
             ExtensionSegment(
-                speaker="Madhav Chauhan",
+                speaker="You",
                 text="I will finalize the browser extension and push the updates before Friday.",
                 start_ms=4500,
                 end_ms=9000,
@@ -139,14 +202,39 @@ def test_extension_upload_meeting_success(mock_auth_user):
     )
 
     with patch("app.api.meeting_automation.get_supabase_client", return_value=mock_db), \
-         patch("app.core.deps.get_supabase_client", return_value=mock_db):
+         patch("app.core.deps.get_supabase_client", return_value=mock_db), \
+         patch("app.api.meeting_automation.llm_is_configured", return_value=True), \
+         patch("app.api.meeting_automation.run_extraction") as mock_run:
         res = upload_extension_meeting(payload=payload, user=mock_auth_user)
         assert res.success is True
         assert res.title == "Client Requirements Sync"
         assert res.provider == ProviderType.GOOGLE_MEET
         assert res.segment_count == 3
-        assert res.extracted_items_count >= 1
+        assert res.extracted_items_count == 1
         assert "review" in res.review_url
+        assert mock_run.call_count == 1
+
+
+def test_extension_upload_empty_transcript_returns_422(mock_auth_user):
+    """Verify upload_extension_meeting rejects empty transcripts instead of inserting fake cues."""
+    workspace_id = uuid4()
+    mock_db = _make_table_db({"workspace_members": [{"role": "organiser"}]})
+
+    payload = ExtensionMeetingUploadRequest(
+        workspace_id=workspace_id,
+        provider=ProviderType.GOOGLE_MEET,
+        title="Empty Capture",
+        duration_minutes=10,
+        transcript_text="",
+        segments=[],
+        auto_extract=True,
+    )
+
+    with patch("app.api.meeting_automation.get_supabase_client", return_value=mock_db), \
+         patch("app.core.deps.get_supabase_client", return_value=mock_db):
+        with pytest.raises(HTTPException) as exc_info:
+            upload_extension_meeting(payload=payload, user=mock_auth_user)
+        assert exc_info.value.status_code == 422
 
 
 def test_extension_upload_meeting_forbidden_for_non_manager(mock_auth_user):
@@ -171,9 +259,9 @@ def test_extension_upload_meeting_forbidden_for_non_manager(mock_auth_user):
         assert exc_info.value.status_code == 403
 
 
-def test_zoom_webhook_url_validation():
+@pytest.mark.anyio
+async def test_zoom_webhook_url_validation():
     """Verify Zoom webhook responds to url_validation challenge."""
-    import asyncio
     mock_request = AsyncMock()
     mock_request.body = AsyncMock(
         return_value=b'{"event": "endpoint.url_validation", "payload": {"plainToken": "sample_plain_token_123"}}'
@@ -182,42 +270,44 @@ def test_zoom_webhook_url_validation():
         return_value={"event": "endpoint.url_validation", "payload": {"plainToken": "sample_plain_token_123"}}
     )
 
-    res = asyncio.run(zoom_webhook_receiver(request=mock_request))
+    res = await zoom_webhook_receiver(request=mock_request)
     assert res["plainToken"] == "sample_plain_token_123"
     assert "encryptedToken" in res
 
 
-def test_teams_webhook_validation_handshake():
+@pytest.mark.anyio
+async def test_teams_webhook_validation_handshake():
     """Verify Microsoft Teams webhook lifecycle notification validation token handshake."""
-    import asyncio
     mock_request = AsyncMock()
-    res = asyncio.run(teams_webhook_receiver(request=mock_request, validationToken="test_validation_token_xyz"))
+    res = await teams_webhook_receiver(request=mock_request, validationToken="test_validation_token_xyz")
     assert res.body.decode() == "test_validation_token_xyz"
 
 
 def test_get_automation_feed(mock_auth_user):
-    """Verify get_automation_feed returns auto-ingested meetings."""
+    """Verify get_automation_feed returns real transcript and extracted_items counts."""
     workspace_id = uuid4()
-    mock_db = MagicMock()
-    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-        {"role": "member"}
-    ]
+    meeting_id = str(uuid4())
     mock_meeting_row = {
-        "id": str(uuid4()),
+        "id": meeting_id,
         "title": "Weekly Sprint Zoom Review",
         "starts_at": "2026-10-31T10:00:00Z",
         "timezone": "Asia/Kolkata",
-        "status": "completed",
+        "status": "ready",
         "conference_url": "https://zoom.us/j/1234567890",
         "calendar_provider": "zoom",
         "created_at": "2026-10-31T10:30:00Z",
     }
-    mock_db.table.return_value.select.return_value.eq.return_value.not_.is_.return_value.order.return_value.limit.return_value.execute.return_value.data = [
-        mock_meeting_row
-    ]
+    mock_db = _make_table_db({
+        "workspace_members": [{"role": "member"}],
+        "meetings": [mock_meeting_row],
+        "transcripts": [{"meeting_id": meeting_id}],
+        "extracted_items": [{"meeting_id": meeting_id}, {"meeting_id": meeting_id}],
+    })
 
     with patch("app.api.meeting_automation.get_supabase_client", return_value=mock_db), \
          patch("app.core.deps.get_supabase_client", return_value=mock_db):
         res = get_automation_feed(workspace_id=workspace_id, user=mock_auth_user)
-        assert len(res) >= 1
+        assert len(res) == 1
         assert res[0].provider == "zoom"
+        assert res[0].has_transcript is True
+        assert res[0].task_count == 2

@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, R
 from app.core.config import settings
 from app.core.deps import CurrentUser, get_current_user, require_role, ORGANISER_ROLES
 from app.core.supabase import get_supabase_client
-from app.parsers import parse_transcript, to_canonical_text
+from app.parsers import TranscriptParseError, parse_transcript, to_canonical_text
 from app.schemas.meeting_automation import (
     AutomationConfigPayload,
     AutomationProviderStatus,
@@ -37,6 +37,8 @@ from app.schemas.meeting_automation import (
     SimulateMeetingRequest,
     SimulateMeetingResponse,
 )
+from app.services.llm.bedrock import llm_is_configured
+from app.services.llm.runner import run_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -100,20 +102,19 @@ def get_automation_status(
     try:
         cal_res = (
             client.table("calendar_connections")
-            .select("connected_account_email, is_active")
+            .select("account_email, sync_enabled")
             .eq("workspace_id", str(workspace_id))
             .eq("provider", "google")
-            .eq("is_active", True)
+            .eq("sync_enabled", True)
             .execute()
         )
         if cal_res.data and len(cal_res.data) > 0:
             google_connected = True
-            google_email = cal_res.data[0].get("connected_account_email")
+            google_email = cal_res.data[0].get("account_email")
     except Exception as exc:
-        logger.debug("Calendar connections table check skipped: %s", exc)
+        logger.warning("Calendar connections lookup error: %s", exc)
 
     # Count automated meetings created in this workspace
-    total_automated = 0
     try:
         mtg_res = (
             client.table("meetings")
@@ -122,50 +123,53 @@ def get_automation_status(
             .not_.is_("conference_url", "null")
             .execute()
         )
-        total_automated = mtg_res.count or len(mtg_res.data or [])
-    except Exception:
-        total_automated = 2  # Seeded baseline count for demo UI
+        total_automated = mtg_res.count if mtg_res.count is not None else len(mtg_res.data or [])
+    except Exception as exc:
+        logger.error("Failed to count automated meetings: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to query automated meetings count: {exc}",
+        ) from exc
 
     providers = [
         AutomationProviderStatus(
             provider=ProviderType.GOOGLE_MEET,
             name="Google Meet",
-            connected=google_connected or True,
-            account_email=google_email or "workspace-admin@actionpulse.io",
+            connected=google_connected,
+            account_email=google_email,
             auto_ingest_enabled=True,
             capabilities=[
-                "OAuth 2.0 Webhook Integration",
+                "Chrome Extension Live Caption Capture",
                 "Google Workspace ConferenceRecords API",
                 "Auto-fetch .VTT and Google Docs Transcripts",
             ],
-            limitations="Requires Google Workspace Business/Education tier with transcript recording enabled.",
+            limitations="Live caption capture works via ActionPulse Chrome Extension; cloud recording sync requires Google Workspace API.",
         ),
         AutomationProviderStatus(
             provider=ProviderType.ZOOM,
             name="Zoom Video",
-            connected=True,
-            account_email="zoom-cloud@actionpulse.io",
+            connected=False,
+            account_email=None,
             auto_ingest_enabled=True,
             capabilities=[
-                "Realtime Webhook: meeting.ended",
-                "Recording Webhook: recording.transcript_completed",
-                "Auto-download audio transcript VTT",
+                "Chrome Extension Live Caption Capture",
+                "Webhook URL Validation (/webhook/zoom)",
                 "Zero-touch ActionPulse ingestion",
             ],
-            limitations="Zoom Cloud Recording must be enabled on the host user account.",
+            limitations="Zoom Web Client captions work via Extension; cloud webhooks require Zoom OAuth app credentials.",
         ),
         AutomationProviderStatus(
             provider=ProviderType.TEAMS,
             name="Microsoft Teams",
-            connected=True,
-            account_email="teams-sync@actionpulse.io",
+            connected=False,
+            account_email=None,
             auto_ingest_enabled=True,
             capabilities=[
-                "Microsoft Graph callTranscript API",
-                "Lifecycle Change Notifications",
+                "Chrome Extension Live Caption Capture",
+                "Graph Validation Handshake (/webhook/teams)",
                 "Speaker Diarized VTT Output",
             ],
-            limitations="Requires Microsoft 365 tenant admin consent for OnlineMeetingArtifact.Read.All.",
+            limitations="Teams Web captions work via Extension; Microsoft Graph cloud sync requires M365 tenant admin consent.",
         ),
     ]
 
@@ -197,199 +201,243 @@ def update_automation_config(
     }
 
 
-@router.post(
-    "/meetings/automation/simulate",
-    response_model=SimulateMeetingResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Simulate a completed online meeting with automated transcript ingestion & task extraction",
-)
-def simulate_online_meeting(
-    payload: SimulateMeetingRequest,
-    user: CurrentUser = Depends(get_current_user),
-) -> SimulateMeetingResponse:
-    """End-to-End Test Engine for Online Meeting Automation.
+def _resolve_speaker_name(client: Any, user: CurrentUser) -> str:
+    """Resolve authenticated user's display name for mapping generic 'You'/'Speaker' captions."""
+    try:
+        resp = (
+            client.table("profiles")
+            .select("display_name, email")
+            .eq("id", str(user.id))
+            .limit(1)
+            .execute()
+        )
+        if resp.data:
+            row = resp.data[0]
+            name = (row.get("display_name") or "").strip()
+            if name:
+                return name
+            email = (row.get("email") or "").strip()
+            if email:
+                return email.split("@")[0]
+    except Exception as exc:
+        logger.debug("Profile lookup skipped during speaker resolution: %s", exc)
+    return (user.email or "Organiser").split("@")[0]
 
-    Creates an automated meeting attributed to Google Meet, Zoom, or Teams,
-    generates canonical transcript segments, stores them, and produces
-    grounded extracted action items ready for organiser review.
+
+def _build_conference_url(provider: ProviderType, meeting_id: UUID, explicit_url: Optional[str]) -> str:
+    if explicit_url and explicit_url.strip():
+        return explicit_url.strip()
+    if provider == ProviderType.ZOOM:
+        return f"https://zoom.us/j/{meeting_id.hex[:10]}"
+    if provider == ProviderType.GOOGLE_MEET:
+        return f"https://meet.google.com/{meeting_id.hex[:3]}-{meeting_id.hex[3:7]}-{meeting_id.hex[7:10]}"
+    return f"https://teams.microsoft.com/l/meetup-join/{meeting_id.hex[:12]}"
+
+
+def _ingest_and_extract_meeting(
+    *,
+    client: Any,
+    user: CurrentUser,
+    workspace_id: UUID,
+    provider: ProviderType,
+    title: str,
+    duration_minutes: int,
+    conference_url: Optional[str],
+    raw_text: str,
+    file_stem: str,
+    auto_extract: bool,
+) -> tuple[UUID, datetime, UUID, int, int]:
+    """Persist meeting + consent + transcript + segments and execute real LLM extraction.
+
+    Rolls back the created meeting row if transcript persistence fails.
     """
-    require_role(payload.workspace_id, ORGANISER_ROLES, user)
-    client = get_supabase_client()
+    if auto_extract and not llm_is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI provider is not configured (configure GEMINI_API_KEY or AWS_BEARER_TOKEN_BEDROCK in backend/.env).",
+        )
 
-    meeting_id = uuid4()
-    now = datetime.now(timezone.utc)
-    meeting_starts_at = now - timedelta(minutes=payload.duration_minutes)
-
-    conf_url = payload.conference_url
-    if not conf_url:
-        if payload.provider == ProviderType.ZOOM:
-            conf_url = f"https://zoom.us/j/{meeting_id.hex[:10]}"
-        elif payload.provider == ProviderType.GOOGLE_MEET:
-            conf_url = f"https://meet.google.com/{meeting_id.hex[:3]}-{meeting_id.hex[3:7]}-{meeting_id.hex[7:10]}"
+    ext = ".vtt" if raw_text.lstrip().startswith("WEBVTT") else ".txt"
+    try:
+        segments = parse_transcript(f"{file_stem}{ext}", raw_text)
+    except TranscriptParseError as exc:
+        if ext == ".vtt":
+            try:
+                segments = parse_transcript(f"{file_stem}.txt", raw_text)
+                ext = ".txt"
+            except TranscriptParseError as txt_exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid transcript content: {txt_exc}",
+                ) from txt_exc
         else:
-            conf_url = f"https://teams.microsoft.com/l/meetup-join/{meeting_id.hex[:12]}"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid transcript content: {exc}",
+            ) from exc
 
-    # 1. Create meeting record with automation linkage
+    canonical_text = to_canonical_text(segments)
+    meeting_id = uuid4()
+    transcript_id = uuid4()
+    now = datetime.now(timezone.utc)
+    meeting_starts_at = now - timedelta(minutes=duration_minutes)
+    conf_url = _build_conference_url(provider, meeting_id, conference_url)
+
     created_meeting = {
         "id": str(meeting_id),
-        "workspace_id": str(payload.workspace_id),
-        "title": payload.title,
+        "workspace_id": str(workspace_id),
+        "title": title.strip(),
         "starts_at": meeting_starts_at.isoformat(),
         "timezone": "Asia/Kolkata",
         "organiser_id": str(user.id),
         "ai_processing": True,
         "visibility": "workspace",
-        "status": "extracting" if payload.auto_extract else "draft",
+        "status": "draft",
         "lifecycle": "active",
         "conference_url": conf_url,
-        "calendar_provider": payload.provider.value,
+        "calendar_provider": provider.value,
         "created_at": now.isoformat(),
     }
 
     try:
         client.table("meetings").insert(created_meeting).execute()
     except Exception as exc:
-        logger.error("Failed to insert simulated meeting: %s", exc)
+        logger.error("Failed to insert automated meeting: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create automated meeting record: {exc}",
-        )
+        ) from exc
 
-    # 2. Add AI consent attestation row
     try:
         client.table("consents").insert(
             {
                 "meeting_id": str(meeting_id),
                 "attested_by": str(user.id),
-                "notice_version": "v1.0-online-automation",
+                "notice_version": settings.AI_NOTICE_VERSION,
                 "status": "attested",
                 "created_at": now.isoformat(),
             }
         ).execute()
-    except Exception as exc:
-        logger.debug("Consent insert skipped: %s", exc)
 
-    # 3. Parse and store automated transcript
-    transcript_text = payload.transcript_text or DEFAULT_AUTOMATED_TRANSCRIPTS.get(
+        transcript_row = {
+            "id": str(transcript_id),
+            "meeting_id": str(meeting_id),
+            "source": "vtt" if ext == ".vtt" else "paste",
+            "storage_path": f"{workspace_id}/{meeting_id}/{file_stem}{ext}",
+            "raw_text": raw_text,
+            "canonical_text": canonical_text,
+            "file_name": f"{file_stem}{ext}",
+            "file_size_bytes": len(raw_text.encode("utf-8")),
+            "mime_type": "text/vtt" if ext == ".vtt" else "text/plain",
+            "created_at": now.isoformat(),
+        }
+        client.table("transcripts").insert(transcript_row).execute()
+
+        segment_rows = [
+            {
+                "transcript_id": str(transcript_id),
+                "segment_index": idx,
+                "speaker_name": s.speaker_name,
+                "start_ms": s.start_ms,
+                "end_ms": s.end_ms,
+                "text": s.text,
+            }
+            for idx, s in enumerate(segments)
+        ]
+        if segment_rows:
+            client.table("transcript_segments").insert(segment_rows).execute()
+    except Exception as exc:
+        logger.error("Failed to store transcript/consent for meeting %s, rolling back: %s", meeting_id, exc)
+        try:
+            client.table("meetings").delete().eq("id", str(meeting_id)).execute()
+        except Exception as rollback_exc:
+            logger.error("Rollback failed for meeting %s: %s", meeting_id, rollback_exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to persist transcript and consent records: {exc}",
+        ) from exc
+
+    extracted_items_count = 0
+    if auto_extract:
+        client.table("meetings").update({"status": "processing"}).eq("id", str(meeting_id)).execute()
+        run_extraction(meeting_id)
+
+        m_check = (
+            client.table("meetings")
+            .select("status")
+            .eq("id", str(meeting_id))
+            .limit(1)
+            .execute()
+        )
+        final_status = (m_check.data or [{}])[0].get("status")
+        if final_status == "failed":
+            err_detail = "AI extraction failed"
+            try:
+                run_check = (
+                    client.table("llm_runs")
+                    .select("error_code")
+                    .eq("meeting_id", str(meeting_id))
+                    .order("created_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                if run_check.data and run_check.data[0].get("error_code"):
+                    err_detail = f"AI extraction failed ({run_check.data[0]['error_code']})"
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=err_detail,
+            )
+
+        items_res = (
+            client.table("extracted_items")
+            .select("id", count="exact")
+            .eq("meeting_id", str(meeting_id))
+            .execute()
+        )
+        extracted_items_count = (
+            items_res.count if items_res.count is not None else len(items_res.data or [])
+        )
+
+    return meeting_id, meeting_starts_at, transcript_id, len(segments), extracted_items_count
+
+
+@router.post(
+    "/meetings/automation/simulate",
+    response_model=SimulateMeetingResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Ingest an online meeting transcript and execute real AI action extraction",
+)
+def simulate_online_meeting(
+    payload: SimulateMeetingRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> SimulateMeetingResponse:
+    """End-to-End Online Meeting Automation Ingestion & Real AI Extraction.
+
+    Creates an automated meeting attributed to Google Meet, Zoom, or Teams,
+    persists canonical transcript segments in Supabase, and executes the real LLM
+    extraction pipeline so extracted items appear in the organiser Review Gate.
+    """
+    require_role(payload.workspace_id, ORGANISER_ROLES, user)
+    client = get_supabase_client()
+
+    transcript_text = (payload.transcript_text or "").strip() or DEFAULT_AUTOMATED_TRANSCRIPTS.get(
         payload.provider, DEFAULT_AUTOMATED_TRANSCRIPTS[ProviderType.ZOOM]
     )
-    ext = ".vtt" if transcript_text.startswith("WEBVTT") else ".txt"
 
-    segments = parse_transcript(f"automated_recording{ext}", transcript_text)
-    canonical_text = to_canonical_text(segments)
-
-    transcript_id = uuid4()
-    transcript_row = {
-        "id": str(transcript_id),
-        "meeting_id": str(meeting_id),
-        "source": "vtt" if ext == ".vtt" else "paste",
-        "storage_path": f"{payload.workspace_id}/{meeting_id}/auto_transcript{ext}",
-        "raw_text": transcript_text,
-        "canonical_text": canonical_text,
-        "file_name": f"automated_recording{ext}",
-        "file_size_bytes": len(transcript_text.encode("utf-8")),
-        "mime_type": "text/vtt" if ext == ".vtt" else "text/plain",
-        "created_at": now.isoformat(),
-    }
-
-    try:
-        client.table("transcripts").insert(transcript_row).execute()
-    except Exception as exc:
-        logger.error("Failed to insert transcript: %s", exc)
-
-    # 4. Insert transcript segments with millisecond timestamps
-    segment_rows = [
-        {
-            "transcript_id": str(transcript_id),
-            "segment_index": idx,
-            "speaker_name": s.speaker_name,
-            "start_ms": s.start_ms,
-            "end_ms": s.end_ms,
-            "text": s.text,
-        }
-        for idx, s in enumerate(segments)
-    ]
-    if segment_rows:
-        try:
-            client.table("transcript_segments").insert(segment_rows).execute()
-        except Exception as exc:
-            logger.debug("Segment rows insert skipped: %s", exc)
-
-    # 5. Generate Grounded Extracted Items for instant Review Gate readiness
-    extracted_items_count = 0
-    if payload.auto_extract:
-        # Realistic grounded action items with source excerpts from the automated transcript
-        task_1_id = str(uuid4())
-        task_2_id = str(uuid4())
-        task_3_id = str(uuid4())
-
-        demo_extracted_items = [
-            {
-                "id": task_1_id,
-                "meeting_id": str(meeting_id),
-                "type": "action",
-                "task": f"Finalize online meeting webhook receiver endpoints ({payload.provider.value})",
-                "owner_name": "Madhav Chauhan",
-                "owner_user_id": str(user.id),
-                "deadline_raw": "before Friday",
-                "deadline_utc": (now + timedelta(days=3)).isoformat(),
-                "priority": "high",
-                "source_excerpt": "Madhav will finalize the webhook receiver endpoints and test payloads before this Friday.",
-                "confidence": 0.95,
-                "uncertainty_flag": False,
-                "review_status": "needs_review",
-                "rejection_reason": None,
-                "provider": payload.provider.value,
-                "model_version": "demo",
-                "created_at": now.isoformat(),
-            },
-            {
-                "id": task_2_id,
-                "meeting_id": str(meeting_id),
-                "type": "action",
-                "task": "Prepare UI status indicators and dark theme integration",
-                "owner_name": "Bharat Odedara",
-                "owner_user_id": None,
-                "deadline_raw": "by Thursday afternoon",
-                "deadline_utc": (now + timedelta(days=2)).isoformat(),
-                "priority": "normal",
-                "source_excerpt": "Bharat will prepare the UI status indicators and dark theme integration by Thursday afternoon.",
-                "confidence": 0.91,
-                "uncertainty_flag": False,
-                "review_status": "needs_review",
-                "rejection_reason": f"depends_on:{task_1_id}",
-                "provider": payload.provider.value,
-                "model_version": "demo",
-                "created_at": now.isoformat(),
-            },
-            {
-                "id": task_3_id,
-                "meeting_id": str(meeting_id),
-                "type": "decision",
-                "task": "ActionPulse will auto-fetch transcripts directly upon online meeting completion",
-                "owner_name": None,
-                "owner_user_id": None,
-                "deadline_raw": None,
-                "deadline_utc": None,
-                "priority": "normal",
-                "source_excerpt": "ActionPulse will handle both human tasks and automated agent routing.",
-                "confidence": 0.97,
-                "uncertainty_flag": False,
-                "review_status": "needs_review",
-                "rejection_reason": None,
-                "provider": payload.provider.value,
-                "model_version": "demo",
-                "created_at": now.isoformat(),
-            },
-        ]
-
-        try:
-            client.table("extracted_items").insert(demo_extracted_items).execute()
-            extracted_items_count = len(demo_extracted_items)
-            # Update meeting status to ready for review
-            client.table("meetings").update({"status": "completed"}).eq("id", str(meeting_id)).execute()
-        except Exception as exc:
-            logger.warning("Extracted items insertion fallback: %s", exc)
+    meeting_id, meeting_starts_at, transcript_id, segment_count, extracted_items_count = _ingest_and_extract_meeting(
+        client=client,
+        user=user,
+        workspace_id=payload.workspace_id,
+        provider=payload.provider,
+        title=payload.title,
+        duration_minutes=payload.duration_minutes,
+        conference_url=payload.conference_url,
+        raw_text=transcript_text,
+        file_stem="automated_recording",
+        auto_extract=payload.auto_extract,
+    )
 
     return SimulateMeetingResponse(
         success=True,
@@ -398,9 +446,12 @@ def simulate_online_meeting(
         provider=payload.provider,
         starts_at=meeting_starts_at,
         transcript_id=transcript_id,
-        segment_count=len(segments),
+        segment_count=segment_count,
         extracted_items_count=extracted_items_count,
-        message=f"Successfully auto-ingested online meeting from {payload.provider.value} with {len(segments)} segments and {extracted_items_count} extracted action items.",
+        message=(
+            f"Successfully ingested online meeting from {payload.provider.value} "
+            f"({segment_count} segments, {extracted_items_count} AI-extracted items ready for review)."
+        ),
         review_url=f"/meetings/{meeting_id}/review",
     )
 
@@ -409,7 +460,7 @@ def simulate_online_meeting(
     "/meetings/automation/extension-upload",
     response_model=ExtensionMeetingUploadResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload live meeting captions from Browser Extension and trigger AI parsing",
+    summary="Upload live meeting captions from Browser Extension and trigger real AI parsing",
 )
 def upload_extension_meeting(
     payload: ExtensionMeetingUploadRequest,
@@ -420,210 +471,52 @@ def upload_extension_meeting(
     - Validates manager/organiser role in target workspace.
     - Persists meeting record with platform tagging (Google Meet, Zoom, MS Teams).
     - Stores full transcript & timestamps in Supabase.
-    - Triggers AI extraction of tasks into extracted_items (needs_review).
+    - Executes real LLM extraction into extracted_items (needs_review).
     - Returns 1-click Review Gate URL (/meetings/{meeting_id}/review).
     """
     require_role(payload.workspace_id, ORGANISER_ROLES, user)
+    client = get_supabase_client()
 
-    client = None
-    try:
-        client = get_supabase_client()
-    except Exception as exc:
-        logger.warning("Supabase client not initialized (%s); operating in resilient dev mode", exc)
-
-    meeting_id = uuid4()
-    now = datetime.now(timezone.utc)
-    meeting_starts_at = now - timedelta(minutes=payload.duration_minutes)
-
-    conf_url = payload.conference_url
-    if not conf_url:
-        if payload.provider == ProviderType.ZOOM:
-            conf_url = f"https://zoom.us/j/{meeting_id.hex[:10]}"
-        elif payload.provider == ProviderType.GOOGLE_MEET:
-            conf_url = f"https://meet.google.com/{meeting_id.hex[:3]}-{meeting_id.hex[3:7]}-{meeting_id.hex[7:10]}"
-        else:
-            conf_url = f"https://teams.microsoft.com/l/meetup-join/{meeting_id.hex[:12]}"
-
-    # 1. Create meeting record
-    created_meeting = {
-        "id": str(meeting_id),
-        "workspace_id": str(payload.workspace_id),
-        "title": payload.title,
-        "starts_at": meeting_starts_at.isoformat(),
-        "timezone": "Asia/Kolkata",
-        "organiser_id": str(user.id),
-        "ai_processing": True,
-        "visibility": "workspace",
-        "status": "completed",
-        "lifecycle": "active",
-        "conference_url": conf_url,
-        "calendar_provider": payload.provider.value,
-        "created_at": now.isoformat(),
-    }
-
-    if client is not None:
-        try:
-            client.table("meetings").insert(created_meeting).execute()
-        except Exception as exc:
-            logger.warning("Meeting DB record insert fallback: %s", exc)
-
-    # 2. Add AI consent attestation row
-    if client is not None:
-        try:
-            client.table("consents").insert(
-                {
-                    "meeting_id": str(meeting_id),
-                    "attested_by": str(user.id),
-                    "notice_version": "v1.0-extension-automation",
-                    "status": "attested",
-                    "created_at": now.isoformat(),
-                }
-            ).execute()
-        except Exception as exc:
-            logger.debug("Consent insert skipped: %s", exc)
-
-    # 3. Process transcript text and structured segments
-    raw_text = payload.transcript_text
-    if not raw_text and payload.segments:
-        # Build WebVTT format from structured segments
+    raw_text = (payload.transcript_text or "").strip()
+    if payload.segments:
+        speaker_alias = _resolve_speaker_name(client, user)
         vtt_parts = ["WEBVTT\n"]
         for idx, seg in enumerate(payload.segments):
+            clean_text = (seg.text or "").strip()
+            if not clean_text:
+                continue
             start_ms = seg.start_ms if seg.start_ms is not None else idx * 6000
             end_ms = seg.end_ms if seg.end_ms is not None else (idx + 1) * 6000
             start_tc = _format_ms_to_vtt(start_ms)
             end_tc = _format_ms_to_vtt(end_ms)
-            speaker_tag = seg.speaker or "Speaker"
-            vtt_parts.append(f"{idx + 1}\n{start_tc} --> {end_tc}\n<v {speaker_tag}>{seg.text}\n")
-        raw_text = "\n".join(vtt_parts)
+            raw_speaker = (seg.speaker or "").strip()
+            speaker_tag = (
+                speaker_alias
+                if not raw_speaker or raw_speaker.lower() in ("you", "me", "speaker", "organiser")
+                else raw_speaker
+            )
+            vtt_parts.append(f"{idx + 1}\n{start_tc} --> {end_tc}\n<v {speaker_tag}>{clean_text}\n")
+        if len(vtt_parts) > 1:
+            raw_text = "\n".join(vtt_parts)
 
     if not raw_text:
-        raw_text = DEFAULT_AUTOMATED_TRANSCRIPTS.get(
-            payload.provider, DEFAULT_AUTOMATED_TRANSCRIPTS[ProviderType.GOOGLE_MEET]
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Captured transcript is empty. Ensure Closed Captions (CC) captured speech before uploading.",
         )
 
-    ext = ".vtt" if "WEBVTT" in raw_text else ".txt"
-    try:
-        segments = parse_transcript(f"extension_transcript{ext}", raw_text)
-    except Exception:
-        segments = parse_transcript("extension_transcript.txt", raw_text)
-    canonical_text = to_canonical_text(segments)
-
-    transcript_id = uuid4()
-    transcript_row = {
-        "id": str(transcript_id),
-        "meeting_id": str(meeting_id),
-        "source": "vtt" if ext == ".vtt" else "paste",
-        "storage_path": f"{payload.workspace_id}/{meeting_id}/extension_transcript{ext}",
-        "raw_text": raw_text,
-        "canonical_text": canonical_text,
-        "file_name": f"extension_transcript{ext}",
-        "file_size_bytes": len(raw_text.encode("utf-8")),
-        "mime_type": "text/vtt" if ext == ".vtt" else "text/plain",
-        "created_at": now.isoformat(),
-    }
-
-    if client is not None:
-        try:
-            client.table("transcripts").insert(transcript_row).execute()
-        except Exception as exc:
-            logger.warning("Transcript DB insertion skipped: %s", exc)
-
-    # 4. Insert transcript segments
-    segment_rows = [
-        {
-            "transcript_id": str(transcript_id),
-            "segment_index": idx,
-            "speaker_name": s.speaker_name or "Speaker",
-            "start_ms": s.start_ms or (idx * 5000),
-            "end_ms": s.end_ms or ((idx + 1) * 5000),
-            "text": s.text,
-        }
-        for idx, s in enumerate(segments)
-    ]
-    if segment_rows and client is not None:
-        try:
-            client.table("transcript_segments").insert(segment_rows).execute()
-        except Exception as exc:
-            logger.debug("Segment rows insert skipped: %s", exc)
-
-    # 5. Extract action items for Manager Review Gate
-    extracted_items_count = 0
-    if payload.auto_extract:
-        extracted_items = []
-        action_verbs = [
-            "will", "shall", "need to", "action", "prepare", "test",
-            "finalize", "review", "fix", "update", "implement",
-            "deploy", "investigate", "create", "assign"
-        ]
-
-        # Use None for owner_user_id if dev user to avoid foreign key violation
-        is_dev_user = str(user.id) == "00000000-0000-0000-0000-000000000001"
-
-        for idx, s in enumerate(segments):
-            text_lower = s.text.lower()
-            speaker = s.speaker_name or "Speaker"
-            if speaker.lower() in ("you", "me", "speaker"):
-                owner_name = "Madhav Chauhan"
-                owner_user_id = None if is_dev_user else str(user.id)
-            elif "madhav" in speaker.lower():
-                owner_name = "Madhav Chauhan"
-                owner_user_id = None if is_dev_user else str(user.id)
-            else:
-                owner_name = speaker
-                owner_user_id = None
-
-            if any(verb in text_lower for verb in action_verbs):
-                extracted_items.append({
-                    "id": str(uuid4()),
-                    "meeting_id": str(meeting_id),
-                    "type": "action",
-                    "task": s.text if len(s.text) <= 120 else s.text[:117] + "...",
-                    "owner_name": owner_name,
-                    "owner_user_id": owner_user_id,
-                    "deadline_raw": "by end of week",
-                    "deadline_utc": (now + timedelta(days=3)).isoformat(),
-                    "priority": "high" if "urgent" in text_lower or "finalize" in text_lower else "normal",
-                    "source_excerpt": s.text,
-                    "confidence": 0.94,
-                    "uncertainty_flag": False,
-                    "review_status": "needs_review",
-                    "rejection_reason": None,
-                    "provider": payload.provider.value,
-                    "model_version": "extension-ai-v1",
-                    "created_at": now.isoformat(),
-                })
-
-        # Ensure at least 1-2 items exist so manager review gate is immediately actionable
-        if not extracted_items:
-            extracted_items = [
-                {
-                    "id": str(uuid4()),
-                    "meeting_id": str(meeting_id),
-                    "type": "action",
-                    "task": f"Follow up on action items from {payload.title}",
-                    "owner_name": "Madhav Chauhan",
-                    "owner_user_id": None if is_dev_user else str(user.id),
-                    "deadline_raw": "next sprint",
-                    "deadline_utc": (now + timedelta(days=5)).isoformat(),
-                    "priority": "normal",
-                    "source_excerpt": segments[0].text if segments else payload.title,
-                    "confidence": 0.90,
-                    "uncertainty_flag": False,
-                    "review_status": "needs_review",
-                    "rejection_reason": None,
-                    "provider": payload.provider.value,
-                    "model_version": "extension-ai-v1",
-                    "created_at": now.isoformat(),
-                }
-            ]
-
-        extracted_items_count = len(extracted_items)
-        if client is not None:
-            try:
-                client.table("extracted_items").insert(extracted_items).execute()
-                client.table("meetings").update({"status": "completed"}).eq("id", str(meeting_id)).execute()
-            except Exception as exc:
-                logger.warning("Extracted items insertion skipped or fallback: %s", exc)
+    meeting_id, meeting_starts_at, transcript_id, segment_count, extracted_items_count = _ingest_and_extract_meeting(
+        client=client,
+        user=user,
+        workspace_id=payload.workspace_id,
+        provider=payload.provider,
+        title=payload.title,
+        duration_minutes=payload.duration_minutes,
+        conference_url=payload.conference_url,
+        raw_text=raw_text,
+        file_stem="extension_transcript",
+        auto_extract=payload.auto_extract,
+    )
 
     return ExtensionMeetingUploadResponse(
         success=True,
@@ -632,9 +525,12 @@ def upload_extension_meeting(
         provider=payload.provider,
         starts_at=meeting_starts_at,
         transcript_id=transcript_id,
-        segment_count=len(segments),
+        segment_count=segment_count,
         extracted_items_count=extracted_items_count,
-        message=f"Successfully ingested live {payload.provider.value} transcript via Chrome Extension ({len(segments)} segments, {extracted_items_count} items ready for manager review).",
+        message=(
+            f"Successfully ingested live {payload.provider.value} transcript via Chrome Extension "
+            f"({segment_count} segments, {extracted_items_count} AI-extracted items ready for manager review)."
+        ),
         review_url=f"/meetings/{meeting_id}/review",
     )
 
@@ -701,7 +597,7 @@ def get_automation_feed(
     workspace_id: UUID = Query(..., description="Target workspace ID"),
     user: CurrentUser = Depends(get_current_user),
 ) -> List[AutomatedMeetingFeedItem]:
-    """Returns a list of auto-ingested online meetings with provider attribution."""
+    """Returns a list of auto-ingested online meetings with real transcript & task counts."""
     require_role(workspace_id, WORKSPACE_ROLES, user)
     client = get_supabase_client()
 
@@ -715,9 +611,37 @@ def get_automation_feed(
             .limit(20)
             .execute()
         )
+        rows = res.data or []
+        if not rows:
+            return []
+
+        meeting_ids = [str(r["id"]) for r in rows]
+        transcript_meeting_ids: set[str] = set()
+        task_counts: Dict[str, int] = {}
+
+        t_res = (
+            client.table("transcripts")
+            .select("meeting_id")
+            .in_("meeting_id", meeting_ids)
+            .execute()
+        )
+        for tr in t_res.data or []:
+            transcript_meeting_ids.add(str(tr["meeting_id"]))
+
+        e_res = (
+            client.table("extracted_items")
+            .select("meeting_id")
+            .in_("meeting_id", meeting_ids)
+            .execute()
+        )
+        for ex in e_res.data or []:
+            mid = str(ex["meeting_id"])
+            task_counts[mid] = task_counts.get(mid, 0) + 1
+
         items = []
-        for row in res.data or []:
-            provider = row.get("calendar_provider") or "zoom"
+        for row in rows:
+            mid = str(row["id"])
+            provider = row.get("calendar_provider") or "google_meet"
             items.append(
                 AutomatedMeetingFeedItem(
                     id=row["id"],
@@ -725,14 +649,17 @@ def get_automation_feed(
                     provider=provider,
                     starts_at=row["starts_at"],
                     timezone=row.get("timezone", "Asia/Kolkata"),
-                    status=row.get("status", "completed"),
+                    status=row.get("status", "draft"),
                     conference_url=row.get("conference_url"),
-                    has_transcript=True,
-                    task_count=3,
+                    has_transcript=mid in transcript_meeting_ids,
+                    task_count=task_counts.get(mid, 0),
                     created_at=row["created_at"],
                 )
             )
         return items
     except Exception as exc:
-        logger.warning("Automation feed fetch error: %s", exc)
-        return []
+        logger.error("Automation feed fetch error: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to load automated meetings feed: {exc}",
+        ) from exc

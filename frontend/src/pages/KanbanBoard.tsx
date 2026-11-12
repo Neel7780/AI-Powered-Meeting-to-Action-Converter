@@ -195,6 +195,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       }
     } catch (err: unknown) {
       console.error('Network exception while fetching tasks:', err);
+      setErrorMsg(`Failed to load tasks: ${err instanceof Error ? err.message : String(err)}`);
       setTasks([]);
     } finally {
       setIsLoading(false);

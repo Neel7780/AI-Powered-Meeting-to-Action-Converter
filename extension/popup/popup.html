@@ -22,7 +22,7 @@
         </div>
       </div>
       <div class="header-badge">
-        <span class="role-pill">ORGANISER</span>
+        <span class="role-pill" id="rolePill">NOT SYNCED</span>
       </div>
     </header>
 
@@ -38,6 +38,10 @@
       <div class="status-subrow">
         <span class="captions-stat" id="cueCountStat">0 captions captured</span>
         <span class="status-tag" id="sessionStateTag">Standby</span>
+      </div>
+      <div class="status-subrow auth-sync-row" id="authSyncRow" style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #22222e;">
+        <span class="captions-stat" id="syncAccountStat">Auth: Open ActionPulse tab &amp; sign in</span>
+        <span class="status-tag" id="syncWorkspaceTag">No workspace</span>
       </div>
     </section>
 
@@ -107,8 +111,8 @@
       <summary class="settings-summary">Manager Sync & Server Settings</summary>
       <div class="settings-content">
         <div class="input-group">
-          <label for="workspaceIdInput">Workspace ID</label>
-          <input type="text" id="workspaceIdInput" value="00000000-0000-0000-0000-000000000002" />
+          <label for="workspaceIdInput">Workspace ID (Auto-synced from ActionPulse)</label>
+          <input type="text" id="workspaceIdInput" value="" placeholder="Sign in to ActionPulse to auto-sync" />
         </div>
         <div class="input-group">
           <label for="apiUrlInput">Backend API URL</label>

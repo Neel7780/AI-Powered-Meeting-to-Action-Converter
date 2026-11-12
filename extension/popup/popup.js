@@ -17,6 +17,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const uploadBtn = document.getElementById("uploadBtn");
   const saveVttBtn = document.getElementById("saveVttBtn");
   const saveTxtBtn = document.getElementById("saveTxtBtn");
+  const rolePillEl = document.getElementById("rolePill");
+  const syncAccountStatEl = document.getElementById("syncAccountStat");
+  const syncWorkspaceTagEl = document.getElementById("syncWorkspaceTag");
 
   const resultBanner = document.getElementById("resultBanner");
   const resultContent = document.getElementById("resultContent");
@@ -107,6 +110,53 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (workspaceIdInput) workspaceIdInput.value = settings.workspaceId || "";
         if (apiUrlInput) apiUrlInput.value = settings.apiUrl || "http://localhost:8000";
         if (appUrlInput) appUrlInput.value = settings.appUrl || "http://localhost:5173";
+
+        const role = String(settings.managerRole || "").toLowerCase();
+        const isSignedIn = Boolean(settings.hasAccessToken);
+        const isManager = role === "admin" || role === "organiser";
+
+        if (rolePillEl) {
+          if (!isSignedIn) {
+            rolePillEl.innerText = "SIGN IN REQUIRED";
+            rolePillEl.style.color = "#fca5a5";
+            rolePillEl.style.background = "rgba(239, 68, 68, 0.15)";
+            rolePillEl.style.borderColor = "rgba(239, 68, 68, 0.35)";
+          } else if (isManager) {
+            rolePillEl.innerText = role.toUpperCase();
+            rolePillEl.style.color = "#6ee7b7";
+            rolePillEl.style.background = "rgba(16, 185, 129, 0.15)";
+            rolePillEl.style.borderColor = "rgba(16, 185, 129, 0.35)";
+          } else {
+            rolePillEl.innerText = `${(role || "MEMBER").toUpperCase()} (READ-ONLY)`;
+            rolePillEl.style.color = "#fcd34d";
+            rolePillEl.style.background = "rgba(245, 158, 11, 0.15)";
+            rolePillEl.style.borderColor = "rgba(245, 158, 11, 0.35)";
+          }
+        }
+
+        if (syncAccountStatEl) {
+          syncAccountStatEl.innerText = isSignedIn
+            ? `Signed in: ${settings.userEmail || "Synced"}`
+            : "Auth: Open ActionPulse tab & sign in";
+        }
+
+        if (syncWorkspaceTagEl) {
+          syncWorkspaceTagEl.innerText = settings.workspaceId
+            ? settings.workspaceName || settings.workspaceId.slice(0, 8)
+            : "No workspace";
+        }
+
+        if (uploadBtn && !uploadBtn.dataset.uploading) {
+          const canUpload = isSignedIn && Boolean(settings.workspaceId) && isManager;
+          uploadBtn.disabled = !canUpload;
+          uploadBtn.title = !isSignedIn
+            ? "Sign in on your ActionPulse tab first"
+            : !settings.workspaceId
+              ? "Select a workspace in ActionPulse first"
+              : !isManager
+                ? "Only Admin or Organiser can upload transcripts"
+                : "";
+        }
       }
 
       const cueCount = response.cueCount || 0;
@@ -213,6 +263,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // 1-Click Upload to Backend & AI Extraction
   uploadBtn.addEventListener("click", () => {
+    uploadBtn.dataset.uploading = "true";
     uploadBtn.disabled = true;
     uploadBtn.innerHTML = `
       <span style="display:inline-block;width:12px;height:12px;border:2px solid white;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;"></span>
@@ -223,6 +274,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     resultBanner.classList.remove("error");
 
     chrome.runtime.sendMessage({ type: "UPLOAD_TO_BACKEND" }, (response) => {
+      delete uploadBtn.dataset.uploading;
       uploadBtn.disabled = false;
       uploadBtn.innerHTML = `
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

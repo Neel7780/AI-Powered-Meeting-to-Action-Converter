@@ -61,6 +61,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
       setFeedItems(feedRes);
     } catch (err: any) {
       console.warn('Failed to load automation data:', err);
+      setErrorMsg(err?.message || 'Failed to connect to automation backend.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -97,6 +98,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
       // Step 3: Complete & Show Grounded Tasks
       setSimulationStep(4);
       setSimulationResult(res);
+      loadAutomationData(true);
       if (onMeetingCreated) onMeetingCreated();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to simulate online meeting');
@@ -186,6 +188,23 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
         </div>
       </div>
 
+      {/* Error Banner */}
+      {errorMsg && !showSimulateModal && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0 text-red-400" />
+            <span>{errorMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadAutomationData(true)}
+            className="shrink-0 font-medium text-red-200 underline underline-offset-4 hover:text-white"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* 2. Provider Integration Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {statusData?.providers.map((p) => {
@@ -202,14 +221,22 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
                   </div>
                   <div>
                     <h3 className="text-sm font-semibold text-white tracking-tight">{p.name}</h3>
-                    <p className="text-[11px] text-neutral-400 truncate max-w-[150px]">{p.account_email}</p>
+                    <p className="text-[11px] text-neutral-400 truncate max-w-[150px]">
+                      {p.account_email || 'Chrome Extension Ready'}
+                    </p>
                   </div>
                 </div>
 
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-                  <CheckCircle2 className="size-3" />
-                  Connected
-                </span>
+                {p.connected ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                    <CheckCircle2 className="size-3" />
+                    Connected
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                    Extension Ready
+                  </span>
+                )}
               </div>
 
               <div className="mt-4 pt-3 border-t border-white/5 space-y-2">
@@ -268,7 +295,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
 
                 <div className="flex items-center gap-3">
                   <span className="text-[10px] rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-400">
-                    Auto-Extracted
+                    {item.status === 'ready' ? `${item.task_count} items ready` : item.status}
                   </span>
                   <Button
                     variant="ghost"
