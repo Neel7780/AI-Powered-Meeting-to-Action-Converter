@@ -21,10 +21,14 @@ from app.core.supabase import get_supabase_client
 from app.schemas.review import (
     ApproveRequest,
     ApproveResponse,
+    RefineRequest,
+    RefineResponse,
     RejectRequest,
     RejectResponse,
 )
 from app.services.email import notify_tasks_assigned
+from app.services.llm.bedrock import llm_is_configured
+from app.services.llm.refine import run_refinement
 from app.utils.dates import to_utc
 
 logger = logging.getLogger(__name__)
@@ -331,3 +335,59 @@ def reject_items(
         ) from exc
 
     return RejectResponse(rejected=len(payload.item_ids))
+
+
+@router.post(
+    "/meetings/{meeting_id}/refine",
+    response_model=RefineResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Refine pending candidate items using manager feedback while preserving approved tasks"
+)
+def refine_items(
+    meeting_id: UUID,
+    payload: RefineRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> RefineResponse:
+    """Allowed roles: admin, organiser.
+
+    - Approved items remain locked on the taskboard and are never modified or dropped.
+    - Only pending (needs_review) items are updated or replaced based on manager feedback.
+    """
+    meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
+    if not meeting.get("ai_processing"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI processing is disabled for this meeting"
+        )
+
+    if not llm_is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="AI provider is not configured"
+        )
+
+    clean_feedback = payload.feedback.strip()
+    if len(clean_feedback) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Feedback prompt cannot be empty"
+        )
+
+    try:
+        refined_count = run_refinement(meeting_id=meeting_id, feedback=clean_feedback)
+    except ValueError as val_err:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(val_err)) from val_err
+    except Exception as exc:
+        logger.error("Refinement failed for meeting %s: %s", meeting_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Refinement processing failed: {exc}"
+        ) from exc
+
+    return RefineResponse(
+        success=True,
+        meeting_id=meeting_id,
+        refined_count=refined_count,
+        message=f"Successfully refined candidate items based on manager feedback ({refined_count} pending items ready for review)."
+    )
+
