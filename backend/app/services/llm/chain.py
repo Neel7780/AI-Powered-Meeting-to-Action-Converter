@@ -1,4 +1,4 @@
-"""LangChain Bedrock extraction with schema validation and one repair attempt (BE-3)."""
+"""LangChain Bedrock extraction and refinement with schema validation and one repair attempt (BE-3)."""
 
 import hashlib
 import time
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from app.services.llm.bedrock import create_structured_model
-from app.services.llm.prompt import PROMPT, LLMExtraction
+from app.services.llm.prompt import PROMPT, REFINE_PROMPT, LLMExtraction
 
 
 @dataclass
@@ -29,14 +29,8 @@ def _payload_hash(messages: list[BaseMessage]) -> str:
     return hashlib.sha256("\n".join(str(m.content) for m in messages).encode()).hexdigest()
 
 
-def extract(prompt_inputs: dict) -> tuple[LLMExtraction | None, list[LLMCall]]:
-    """Run the extraction. Returns (result or None, one LLMCall per request made).
-
-    Invalid JSON or a schema mismatch gets exactly one repair request. Network/API errors
-    are already retried inside the SDK, so they end the run.
-    """
+def _invoke_structured(messages: list[BaseMessage]) -> tuple[LLMExtraction | None, list[LLMCall]]:
     model = _structured_model()
-    messages = PROMPT.format_messages(**prompt_inputs)
     calls: list[LLMCall] = []
 
     for _ in range(2):  # first try + one repair
@@ -64,8 +58,22 @@ def extract(prompt_inputs: dict) -> tuple[LLMExtraction | None, list[LLMCall]]:
         messages = [
             *messages,
             AIMessage(content=str(raw.content) if raw else ""),
-            HumanMessage(content=f"Your reply did not match the required JSON schema: {error}\n"
-                                 "Reply again with only valid JSON for the schema."),
+            HumanMessage(
+                content=f"Your reply did not match the required JSON schema: {error}\n"
+                "Reply again with only valid JSON for the schema."
+            ),
         ]
 
     return None, calls
+
+
+def extract(prompt_inputs: dict) -> tuple[LLMExtraction | None, list[LLMCall]]:
+    """Run initial meeting extraction. Returns (result or None, list of LLMCall)."""
+    messages = PROMPT.format_messages(**prompt_inputs)
+    return _invoke_structured(messages)
+
+
+def refine(prompt_inputs: dict) -> tuple[LLMExtraction | None, list[LLMCall]]:
+    """Run candidate refinement using manager feedback. Returns (result or None, list of LLMCall)."""
+    messages = REFINE_PROMPT.format_messages(**prompt_inputs)
+    return _invoke_structured(messages)

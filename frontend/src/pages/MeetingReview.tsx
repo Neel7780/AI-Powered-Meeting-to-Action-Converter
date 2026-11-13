@@ -57,6 +57,8 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
 
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'warning' } | null>(null);
   const [followUpModalOpen, setFollowUpModalOpen] = useState<boolean>(false);
+  const [feedbackPrompt, setFeedbackPrompt] = useState<string>('');
+  const [isRefining, setIsRefining] = useState<boolean>(false);
 
   const showToast = (text: string, type: 'success' | 'info' | 'warning' = 'success') => {
     setToastMessage({ text, type });
@@ -214,6 +216,29 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
     } catch (err) {
       console.error('Batch approve failed:', err);
       showToast(`Failed to approve: ${(err as Error).message}`, 'warning');
+    }
+  };
+
+  const handleRefine = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const prompt = feedbackPrompt.trim();
+    if (!prompt) return;
+
+    try {
+      setIsRefining(true);
+      const res = await reviewApi.refineActionItems(meetingId, prompt);
+      showToast(res.message || 'Updated candidate items from your feedback', 'success');
+      setFeedbackPrompt('');
+      if (meeting) {
+        const memData = members.length > 0 ? members : await reviewApi.fetchWorkspaceMembers(meeting.workspace_id);
+        const freshCandidates = await reviewApi.fetchActionItemCandidates(meetingId, memData);
+        setCandidates(freshCandidates);
+      }
+    } catch (err) {
+      console.error('Refine failed:', err);
+      showToast(`Refinement failed: ${(err as Error).message}`, 'warning');
+    } finally {
+      setIsRefining(false);
     }
   };
 
@@ -475,6 +500,47 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
                   </button>
                 </div>
               )}
+
+              {/* AI Refinement Loop */}
+              <form onSubmit={handleRefine} className="rounded-lg border border-indigo-500/25 bg-indigo-500/[0.04] p-2.5">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-indigo-300">
+                    <Sparkles className="size-3.5" />
+                    <span className="text-xs font-semibold">AI Refinement Loop</span>
+                  </div>
+                  <span className="text-[10px] text-neutral-400">
+                    Approved items remain locked • AI refines pending items
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={feedbackPrompt}
+                    onChange={(e) => setFeedbackPrompt(e.target.value)}
+                    disabled={isRefining}
+                    placeholder="Tell AI what to adjust (e.g. 'Change task 1 deadline to Tuesday', 'Assign extension testing to Bharat')..."
+                    className="field h-8 flex-1 text-xs placeholder:text-neutral-500"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isRefining || !feedbackPrompt.trim()}
+                    className="h-8 shrink-0 gap-1.5 border border-indigo-500/30 bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
+                  >
+                    {isRefining ? (
+                      <>
+                        <span className="size-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        <span>Refining...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="size-3" />
+                        <span>Refine</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto p-4">

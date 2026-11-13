@@ -695,6 +695,13 @@ export const reviewApi = {
     return { ...item, status: 'rejected' };
   },
 
+  async refineActionItems(
+    meetingId: string,
+    feedback: string
+  ): Promise<{ success: boolean; meeting_id: string; refined_count: number; message: string }> {
+    return postApi(`/api/meetings/${meetingId}/refine`, { feedback });
+  },
+
   async updateTaskDependency(
     workspaceId: string,
     taskId: string,
