@@ -14,13 +14,12 @@ import {
   CheckCircle2,
   FileText,
   Search,
-  Copy,
-  Check,
   User,
   SplitSquareVertical,
   Calendar,
   ChevronDown,
   RefreshCw,
+  Bookmark,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useWorkspace } from '../context/WorkspaceContext';
@@ -32,10 +31,16 @@ import { CreateMeeting } from './CreateMeeting';
 import { OnlineMeetingAutomationHub } from '../components/meetings/OnlineMeetingAutomationHub';
 import { WhatsAppShareButton } from '../components/kanban/WhatsAppShareButton';
 import type { KanbanTaskItem, TaskStatus, TaskPriority } from '../components/kanban/KanbanCard';
-import type { TranscriptSegment } from '../types/review';
+import type { TranscriptSegment, ActionItemCandidate } from '../types/review';
 import { reviewApi, INITIAL_TRANSCRIPT_SEGMENTS } from '../services/reviewApi';
 import { DESIGN_SPRINT_TRANSCRIPT } from '../data/mockMeetingDetails';
 import { Button } from '../components/ui/button';
+import { MeetingSummaryTab } from '../components/meetings/details/MeetingSummaryTab';
+import { MeetingChaptersTab } from '../components/meetings/details/MeetingChaptersTab';
+import { MeetingTranscriptTab } from '../components/meetings/details/MeetingTranscriptTab';
+import { MeetingChaptersTranscriptSplitView } from '../components/meetings/details/MeetingChaptersTranscriptSplitView';
+import { meetingDetailsService } from '../services/meetingDetailsService';
+import type { RichMeetingDetails, MeetingChapter } from '../types/meetingDetails';
 
 interface MeetingItem {
   id: string;
@@ -295,16 +300,6 @@ const DEMO_TASKS_DS_01: KanbanTaskItem[] = [
   },
 ];
 
-const SPEAKER_PILL_STYLES: Record<string, { bg: string; text: string; border: string }> = {
-  indigo: { bg: 'bg-indigo-500/15', text: 'text-indigo-300', border: 'border-indigo-500/30' },
-  emerald: { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  purple: { bg: 'bg-purple-500/15', text: 'text-purple-300', border: 'border-purple-500/30' },
-  blue: { bg: 'bg-blue-500/15', text: 'text-blue-300', border: 'border-blue-500/30' },
-  cyan: { bg: 'bg-cyan-500/15', text: 'text-cyan-300', border: 'border-cyan-500/30' },
-  amber: { bg: 'bg-amber-500/15', text: 'text-amber-300', border: 'border-amber-500/30' },
-  rose: { bg: 'bg-rose-500/15', text: 'text-rose-300', border: 'border-rose-500/30' },
-};
-
 const PRIORITY_CONFIG: Record<TaskPriority, { label: string; badgeClass: string }> = {
   urgent: { label: 'Urgent', badgeClass: 'bg-rose-500/15 text-rose-300 border-rose-500/30' },
   high: { label: 'High', badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
@@ -345,14 +340,18 @@ export default function MeetingsPage() {
   const [meetingSearch, setMeetingSearch] = useState('');
 
   // Selected meeting view controls
-  const [activeViewMode, setActiveViewMode] = useState<'tasks' | 'transcript' | 'split' | 'chains'>('tasks');
+  const [activeViewMode, setActiveViewMode] = useState<'summary' | 'chapters' | 'transcript' | 'split' | 'tasks' | 'chains'>('summary');
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
   const [taskSearch, setTaskSearch] = useState('');
-  const [transcriptSearch, setTranscriptSearch] = useState('');
-  const [selectedSpeaker, setSelectedSpeaker] = useState('all');
-  const [copiedTranscript, setCopiedTranscript] = useState(false);
   const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
+  const [highlightedTimestamp, setHighlightedTimestamp] = useState<string | null>(null);
+  const [playbackSeconds, setPlaybackSeconds] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Studio data state (Rich summary, chapters, candidates)
+  const [studioMeeting, setStudioMeeting] = useState<RichMeetingDetails | null>(null);
+  const [studioCandidates, setStudioCandidates] = useState<ActionItemCandidate[]>([]);
+  const [studioLoading, setStudioLoading] = useState(false);
 
   // Transcript state for active meeting
   const [transcriptData, setTranscriptData] = useState<LoadedTranscriptData | null>(null);
@@ -584,6 +583,44 @@ export default function MeetingsPage() {
     };
   }, [selectedMeetingId]);
 
+  // 3. Fetch studio summary & chapters for active meeting
+  useEffect(() => {
+    if (!selectedMeetingId) {
+      setStudioMeeting(null);
+      setStudioCandidates([]);
+      return;
+    }
+
+    let isMounted = true;
+    setStudioLoading(true);
+
+    meetingDetailsService
+      .loadMeetingStudioData(selectedMeetingId)
+      .then((res) => {
+        if (!isMounted) return;
+        setStudioMeeting(res.meeting);
+        setStudioCandidates(res.candidates);
+        if (res.transcript && res.transcript.length > 0 && (!transcriptData || transcriptData.segments.length === 0)) {
+          setTranscriptData({
+            id: `tr-${selectedMeetingId}`,
+            source: 'vtt',
+            canonical_text: res.transcript.map((s) => `${s.speaker_name} (${s.timestamp}): ${s.text}`).join('\n\n'),
+            segments: res.transcript,
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('Meeting studio load notice:', err);
+      })
+      .finally(() => {
+        if (isMounted) setStudioLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedMeetingId]);
+
   // Helper to determine if a meeting is past / old
   const isPastMeeting = (m: MeetingItem) => {
     try {
@@ -657,29 +694,6 @@ export default function MeetingsPage() {
       return true;
     });
   }, [meetingTasks, taskStatusFilter, taskSearch]);
-
-  // Unique speakers in active meeting transcript
-  const transcriptSpeakers = useMemo(() => {
-    if (!transcriptData?.segments) return [];
-    return Array.from(new Set(transcriptData.segments.map((s) => s.speaker_name)));
-  }, [transcriptData]);
-
-  // Filtered transcript segments
-  const filteredSegments = useMemo(() => {
-    if (!transcriptData?.segments) return [];
-    return transcriptData.segments.filter((seg) => {
-      if (selectedSpeaker !== 'all' && seg.speaker_name !== selectedSpeaker) return false;
-      if (transcriptSearch.trim()) {
-        const q = transcriptSearch.toLowerCase();
-        return (
-          seg.text.toLowerCase().includes(q) ||
-          seg.speaker_name.toLowerCase().includes(q) ||
-          seg.timestamp.includes(q)
-        );
-      }
-      return true;
-    });
-  }, [transcriptData, selectedSpeaker, transcriptSearch]);
 
   // Candidate items extracted from the selected meeting
   const candidateWorkflowTasks = useMemo(() => {
@@ -791,24 +805,46 @@ export default function MeetingsPage() {
     }
   };
 
-  // Copy full transcript text
-  const handleCopyTranscript = () => {
-    if (!transcriptData) return;
-    let fullText = '';
-    if (transcriptData.segments.length > 0) {
-      fullText = transcriptData.segments
-        .map((s) => `${s.speaker_name} (${s.timestamp}): ${s.text}`)
-        .join('\n\n');
-    } else {
-      fullText = transcriptData.canonical_text || transcriptData.raw_text || '';
+  const handleSeek = (newSeconds: number) => {
+    setPlaybackSeconds(newSeconds);
+    if (transcriptData?.segments && transcriptData.segments.length > 0) {
+      let closest = transcriptData.segments[0];
+      let minDiff = Infinity;
+      for (const seg of transcriptData.segments) {
+        const diff = Math.abs(seg.start_seconds - newSeconds);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = seg;
+        }
+      }
+      if (closest && minDiff <= 30) {
+        setHighlightedTimestamp(closest.timestamp);
+        setHighlightedSegmentId(closest.id);
+      }
     }
+  };
 
-    if (fullText) {
-      navigator.clipboard.writeText(fullText);
-      setCopiedTranscript(true);
-      showToast('Transcript copied to clipboard!');
-      setTimeout(() => setCopiedTranscript(false), 2500);
+  const handleSelectTimestamp = (timestamp: string, segmentId?: string, seconds?: number) => {
+    if (seconds !== undefined) {
+      setPlaybackSeconds(seconds);
     }
+    setHighlightedTimestamp(timestamp);
+    if (segmentId) {
+      setHighlightedSegmentId(segmentId);
+    } else if (transcriptData?.segments) {
+      const match = transcriptData.segments.find((s) => s.timestamp === timestamp);
+      if (match) {
+        setHighlightedSegmentId(match.id);
+      }
+    }
+  };
+
+  const handleSelectChapter = (chapter: MeetingChapter) => {
+    handleSeek(chapter.start_seconds);
+  };
+
+  const handleJumpToCandidate = (_candidateId: string) => {
+    setActiveViewMode('tasks');
   };
 
   // Jump from task quote to transcript segment
@@ -827,6 +863,8 @@ export default function MeetingsPage() {
 
     if (targetSegment) {
       setHighlightedSegmentId(targetSegment.id);
+      setHighlightedTimestamp(targetSegment.timestamp);
+      setPlaybackSeconds(targetSegment.start_seconds);
       setTimeout(() => {
         const el = segmentRefs.current[targetSegment.id];
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1187,15 +1225,15 @@ export default function MeetingsPage() {
                       <span className="text-lg font-bold text-white">{meetingTasks.length}</span>
                     </div>
                     <div className="rounded-xl bg-white/[0.02] p-2.5 border border-white/5">
-                      <span className="text-[11px] text-neutral-400 block">Completed</span>
-                      <span className="text-lg font-bold text-emerald-400">
-                        {meetingTasks.filter((t) => t.status === 'done').length}
+                      <span className="text-[11px] text-neutral-400 block">Chapters</span>
+                      <span className="text-lg font-bold text-teal-400">
+                        {studioMeeting?.chapters?.length || 0}
                       </span>
                     </div>
                     <div className="rounded-xl bg-white/[0.02] p-2.5 border border-white/5">
-                      <span className="text-[11px] text-neutral-400 block">Blocked</span>
-                      <span className="text-lg font-bold text-amber-400">
-                        {meetingTasks.filter((t) => t.status === 'blocked').length}
+                      <span className="text-[11px] text-neutral-400 block">Completed</span>
+                      <span className="text-lg font-bold text-emerald-400">
+                        {meetingTasks.filter((t) => t.status === 'done').length}
                       </span>
                     </div>
                     <div className="rounded-xl bg-white/[0.02] p-2.5 border border-white/5">
@@ -1211,20 +1249,33 @@ export default function MeetingsPage() {
                   </div>
                 </div>
 
-                {/* View Switcher: Tasks | Transcript | Split View | Chains */}
+                {/* View Switcher: Summary | Chapters | Transcript | Split View | Tasks | Chains */}
                 <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
                     <button
                       type="button"
-                      onClick={() => setActiveViewMode('tasks')}
+                      onClick={() => setActiveViewMode('summary')}
                       className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                        activeViewMode === 'tasks'
-                          ? 'bg-indigo-600 text-white shadow-sm'
+                        activeViewMode === 'summary'
+                          ? 'bg-teal-600 text-white shadow-sm'
                           : 'text-neutral-400 hover:text-white hover:bg-white/5'
                       }`}
                     >
-                      <ListTodo className="size-3.5" />
-                      Tasks ({meetingTasks.length})
+                      <Sparkles className="size-3.5 text-teal-300" />
+                      Summary
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveViewMode('chapters')}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                        activeViewMode === 'chapters'
+                          ? 'bg-teal-600 text-white shadow-sm'
+                          : 'text-neutral-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <Bookmark className="size-3.5 text-teal-300" />
+                      Chapters ({studioMeeting?.chapters?.length || 0})
                     </button>
 
                     <button
@@ -1232,7 +1283,7 @@ export default function MeetingsPage() {
                       onClick={() => setActiveViewMode('transcript')}
                       className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
                         activeViewMode === 'transcript'
-                          ? 'bg-indigo-600 text-white shadow-sm'
+                          ? 'bg-teal-600 text-white shadow-sm'
                           : 'text-neutral-400 hover:text-white hover:bg-white/5'
                       }`}
                     >
@@ -1245,12 +1296,25 @@ export default function MeetingsPage() {
                       onClick={() => setActiveViewMode('split')}
                       className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
                         activeViewMode === 'split'
-                          ? 'bg-indigo-600 text-white shadow-sm'
+                          ? 'bg-teal-600 text-white shadow-sm'
                           : 'text-neutral-400 hover:text-white hover:bg-white/5'
                       }`}
                     >
                       <SplitSquareVertical className="size-3.5" />
                       Split View
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveViewMode('tasks')}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                        activeViewMode === 'tasks'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-neutral-400 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <ListTodo className="size-3.5" />
+                      Tasks ({meetingTasks.length})
                     </button>
 
                     <button
@@ -1295,6 +1359,62 @@ export default function MeetingsPage() {
                         <CheckCircle2 className="size-3.5 mr-1.5" />
                         {approving ? 'Approving…' : 'Approve All to Board'}
                       </Button>
+                    )}
+                  </div>
+                )}
+
+                {/* ========================================================= */}
+                {/* VIEW 0: SUMMARY TAB */}
+                {/* ========================================================= */}
+                {activeViewMode === 'summary' && (
+                  <div className="rounded-2xl border border-white/10 bg-[#0d0f14] overflow-hidden">
+                    {studioLoading ? (
+                      <div className="flex min-h-[300px] items-center justify-center gap-2 text-xs text-neutral-400">
+                        <LoaderCircle className="size-4 animate-spin text-teal-400" />
+                        <span>Loading meeting summary…</span>
+                      </div>
+                    ) : studioMeeting?.summary ? (
+                      <MeetingSummaryTab
+                        summary={studioMeeting.summary}
+                        candidates={studioCandidates}
+                        onSelectTimestamp={(ts, segId) => {
+                          handleSelectTimestamp(ts, segId);
+                          setActiveViewMode('transcript');
+                        }}
+                        onJumpToCandidate={handleJumpToCandidate}
+                      />
+                    ) : (
+                      <div className="p-10 text-center text-xs text-neutral-400">
+                        No summary available yet for this meeting.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ========================================================= */}
+                {/* VIEW 1: CHAPTERS TAB */}
+                {/* ========================================================= */}
+                {activeViewMode === 'chapters' && (
+                  <div className="rounded-2xl border border-white/10 bg-[#0d0f14] overflow-hidden">
+                    {studioLoading ? (
+                      <div className="flex min-h-[300px] items-center justify-center gap-2 text-xs text-neutral-400">
+                        <LoaderCircle className="size-4 animate-spin text-teal-400" />
+                        <span>Loading chapters…</span>
+                      </div>
+                    ) : studioMeeting?.chapters && studioMeeting.chapters.length > 0 ? (
+                      <MeetingChaptersTab
+                        chapters={studioMeeting.chapters}
+                        playbackSeconds={playbackSeconds}
+                        onSelectChapter={handleSelectChapter}
+                        onNavigateToTranscript={(ts, segId, sec) => {
+                          handleSelectTimestamp(ts, segId, sec);
+                          setActiveViewMode('transcript');
+                        }}
+                      />
+                    ) : (
+                      <div className="p-10 text-center text-xs text-neutral-400">
+                        No chapters generated yet for this meeting.
+                      </div>
                     )}
                   </div>
                 )}
@@ -1464,244 +1584,37 @@ export default function MeetingsPage() {
                 {/* VIEW 2: TRANSCRIPT TAB */}
                 {/* ========================================================= */}
                 {activeViewMode === 'transcript' && (
-                  <div className="space-y-4">
-                    {/* Transcript Controls Bar */}
-                    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="relative flex-1 sm:w-64">
-                          <Search className="absolute left-3 top-2.5 size-3.5 text-neutral-500" />
-                          <input
-                            type="text"
-                            placeholder="Search transcript dialogue..."
-                            value={transcriptSearch}
-                            onChange={(e) => setTranscriptSearch(e.target.value)}
-                            className="w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:border-indigo-500 focus:outline-none"
-                          />
-                        </div>
-
-                        {transcriptSpeakers.length > 0 && (
-                          <div className="relative">
-                            <select
-                              value={selectedSpeaker}
-                              onChange={(e) => setSelectedSpeaker(e.target.value)}
-                              className="rounded-xl border border-white/10 bg-neutral-900 px-3 py-1.5 text-xs text-white appearance-none pr-7 cursor-pointer focus:border-indigo-500 focus:outline-none"
-                            >
-                              <option value="all">All Speakers ({transcriptSpeakers.length})</option>
-                              {transcriptSpeakers.map((spk) => (
-                                <option key={spk} value={spk}>
-                                  {spk}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDown className="absolute right-2 top-2 size-3 pointer-events-none text-neutral-400" />
-                          </div>
-                        )}
-                      </div>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCopyTranscript}
-                        className="border-white/10 bg-white/5 hover:bg-white/10 text-white text-xs h-8 shrink-0"
-                      >
-                        {copiedTranscript ? (
-                          <>
-                            <Check className="size-3.5 mr-1 text-emerald-400" />
-                            Copied!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="size-3.5 mr-1 text-neutral-400" />
-                            Copy Full Transcript
-                          </>
-                        )}
-                      </Button>
-                    </div>
-
-                    {transcriptLoading ? (
-                      <div className="p-12 text-center text-xs text-neutral-400 flex items-center justify-center gap-2">
-                        <LoaderCircle className="size-4 animate-spin text-indigo-400" />
-                        <span>Loading transcript segments…</span>
-                      </div>
-                    ) : filteredSegments.length > 0 ? (
-                      <div className="space-y-3">
-                        {filteredSegments.map((seg) => {
-                          const pillStyle = SPEAKER_PILL_STYLES[seg.speaker_color || 'indigo'] || SPEAKER_PILL_STYLES.indigo;
-                          const isHighlighted = highlightedSegmentId === seg.id;
-
-                          // Check if any task quoted this segment
-                          const matchingTask = meetingTasks.find((t) =>
-                            t.source_excerpt && seg.text.toLowerCase().includes(t.source_excerpt.toLowerCase().slice(0, 20))
-                          );
-
-                          return (
-                            <div
-                              key={seg.id}
-                              ref={(el) => {
-                                segmentRefs.current[seg.id] = el;
-                              }}
-                              className={`rounded-xl border p-4 transition-all ${
-                                isHighlighted
-                                  ? 'border-indigo-500 bg-indigo-500/15 ring-2 ring-indigo-500/40 shadow-lg'
-                                  : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.04]'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-2 mb-2">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${pillStyle.bg} ${pillStyle.text} ${pillStyle.border}`}
-                                  >
-                                    <span className="size-1.5 rounded-full bg-current" />
-                                    {seg.speaker_name}
-                                  </span>
-
-                                  <span className="text-[11px] font-mono text-neutral-400">
-                                    {seg.timestamp}
-                                  </span>
-                                </div>
-
-                                {matchingTask && (
-                                  <span className="inline-flex items-center gap-1 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md">
-                                    <Sparkles className="size-3 text-amber-400" />
-                                    Grounded Task: {matchingTask.title.slice(0, 28)}…
-                                  </span>
-                                )}
-                              </div>
-
-                              <p className="text-xs text-neutral-200 leading-relaxed font-sans">
-                                {transcriptSearch ? (
-                                  seg.text.split(new RegExp(`(${transcriptSearch})`, 'gi')).map((part, i) =>
-                                    part.toLowerCase() === transcriptSearch.toLowerCase() ? (
-                                      <mark key={i} className="bg-amber-500/30 text-amber-200 rounded px-0.5">
-                                        {part}
-                                      </mark>
-                                    ) : (
-                                      part
-                                    )
-                                  )
-                                ) : (
-                                  seg.text
-                                )}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : transcriptData?.canonical_text || transcriptData?.raw_text ? (
-                      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
-                        <pre className="text-xs text-neutral-300 font-mono whitespace-pre-wrap leading-relaxed">
-                          {transcriptData.canonical_text || transcriptData.raw_text}
-                        </pre>
-                      </div>
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-10 text-center space-y-3">
-                        <FileText className="mx-auto size-8 text-neutral-600" />
-                        <h4 className="text-sm font-semibold text-white">No transcript attached to this meeting</h4>
-                        <p className="text-xs text-neutral-400 max-w-md mx-auto">
-                          Upload or paste a meeting transcript in the Review Gate to automatically extract grounded action items.
-                        </p>
-                        <Button
-                          size="sm"
-                          onClick={() => navigate(`/meetings/${activeMeeting.id}/review`)}
-                          className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs"
-                        >
-                          Upload Transcript in Review Gate
-                        </Button>
-                      </div>
-                    )}
+                  <div className="rounded-2xl border border-white/10 bg-[#0d0f14] overflow-hidden">
+                    <MeetingTranscriptTab
+                      segments={transcriptData?.segments || []}
+                      playbackSeconds={playbackSeconds}
+                      highlightedTimestamp={highlightedTimestamp}
+                      highlightedSegmentId={highlightedSegmentId}
+                      chapters={studioMeeting?.chapters || []}
+                      onSeek={handleSeek}
+                      onSelectTimestamp={handleSelectTimestamp}
+                      candidates={studioCandidates}
+                      onOpenActionItem={handleJumpToCandidate}
+                    />
                   </div>
                 )}
 
                 {/* ========================================================= */}
-                {/* VIEW 3: SPLIT VIEW (Side-by-Side: Transcript & Tasks) */}
+                {/* VIEW 3: SPLIT VIEW (Chapters + Transcript) */}
                 {/* ========================================================= */}
                 {activeViewMode === 'split' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Left Pane: Transcript */}
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3 max-h-[75vh] overflow-y-auto">
-                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                        <h3 className="text-xs font-semibold text-white flex items-center gap-1.5">
-                          <FileText className="size-3.5 text-indigo-400" />
-                          Meeting Transcript
-                        </h3>
-                        <span className="text-[11px] text-neutral-400">
-                          {filteredSegments.length} segments
-                        </span>
-                      </div>
-
-                      {filteredSegments.map((seg) => {
-                        const pillStyle = SPEAKER_PILL_STYLES[seg.speaker_color || 'indigo'] || SPEAKER_PILL_STYLES.indigo;
-                        const isHighlighted = highlightedSegmentId === seg.id;
-
-                        return (
-                          <div
-                            key={seg.id}
-                            ref={(el) => {
-                              segmentRefs.current[seg.id] = el;
-                            }}
-                            className={`rounded-xl border p-3 text-xs transition-all ${
-                              isHighlighted
-                                ? 'border-indigo-500 bg-indigo-500/20 ring-1 ring-indigo-500'
-                                : 'border-white/5 bg-white/[0.01]'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-1 mb-1">
-                              <span className={`text-[11px] font-semibold ${pillStyle.text}`}>
-                                {seg.speaker_name}
-                              </span>
-                              <span className="text-[10px] font-mono text-neutral-500">{seg.timestamp}</span>
-                            </div>
-                            <p className="text-neutral-300 text-[11px] leading-relaxed">{seg.text}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Right Pane: Tasks */}
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 space-y-3 max-h-[75vh] overflow-y-auto">
-                      <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                        <h3 className="text-xs font-semibold text-white flex items-center gap-1.5">
-                          <ListTodo className="size-3.5 text-indigo-400" />
-                          Extracted Action Items
-                        </h3>
-                        <span className="text-[11px] text-neutral-400">
-                          {meetingTasks.length} tasks
-                        </span>
-                      </div>
-
-                      {meetingTasks.map((t) => {
-                        const priority = PRIORITY_CONFIG[t.priority] || PRIORITY_CONFIG.normal;
-                        const status = STATUS_CONFIG[t.status] || STATUS_CONFIG.todo;
-
-                        return (
-                          <div
-                            key={t.id}
-                            className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5 space-y-2 text-xs"
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${status.badgeClass}`}>
-                                {status.label}
-                              </span>
-                              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${priority.badgeClass}`}>
-                                {priority.label}
-                              </span>
-                            </div>
-
-                            <h4 className="font-semibold text-white text-xs">{t.title}</h4>
-
-                            {t.source_excerpt && (
-                              <button
-                                type="button"
-                                onClick={() => handleJumpToTranscript(t.source_excerpt)}
-                                className="w-full text-left p-2 rounded bg-indigo-500/10 border border-indigo-500/20 text-[11px] text-indigo-300 italic hover:bg-indigo-500/20 transition-colors"
-                              >
-                                “{t.source_excerpt.slice(0, 90)}…”
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <div className="rounded-2xl border border-white/10 bg-[#0d0f14] overflow-hidden min-h-[600px]">
+                    <MeetingChaptersTranscriptSplitView
+                      chapters={studioMeeting?.chapters || []}
+                      segments={transcriptData?.segments || []}
+                      playbackSeconds={playbackSeconds}
+                      highlightedTimestamp={highlightedTimestamp}
+                      highlightedSegmentId={highlightedSegmentId}
+                      onSeek={handleSeek}
+                      onSelectTimestamp={handleSelectTimestamp}
+                      candidates={studioCandidates}
+                      onOpenActionItem={handleJumpToCandidate}
+                    />
                   </div>
                 )}
 

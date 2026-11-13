@@ -348,3 +348,31 @@ class TestDispatcherAndCanonicalText:
             "Aman: Third statement."
         )
         assert canonical == expected
+
+
+class TestSpeakerAndTimestampVariations:
+    def test_timestamp_after_speaker_and_unbracketed(self):
+        raw = (
+            "Krishna [00:15]: Welcome everyone to the sprint review.\n"
+            "Neel (01:20): The backend endpoints are ready.\n"
+            "02:00 - Bhagy: Routing the research tasks.\n"
+            "Manali: [02:45] Verifying email notifications dispatch."
+        )
+        segments = parse_text(raw)
+        assert len(segments) == 4
+
+        assert segments[0].speaker_name == "Krishna"
+        assert segments[0].start_ms == 15000
+        assert segments[0].text == "Welcome everyone to the sprint review."
+
+        assert segments[1].speaker_name == "Neel"
+        assert segments[1].start_ms == 80000
+        assert segments[1].text == "The backend endpoints are ready."
+
+        assert segments[2].speaker_name == "Bhagy"
+        assert segments[2].start_ms == 120000
+        assert segments[2].text == "Routing the research tasks."
+
+        assert segments[3].speaker_name == "Manali"
+        assert segments[3].start_ms == 165000
+        assert segments[3].text == "Verifying email notifications dispatch."

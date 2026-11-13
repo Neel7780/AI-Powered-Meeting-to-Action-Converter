@@ -345,6 +345,12 @@ def submit_transcript(
         ]
         client.table("transcript_segments").insert(segment_rows).execute()
 
+        # Clear any cached summary and chapters for this meeting
+        try:
+            client.table("meetings").update({"summary": None, "chapters": None}).eq("id", str(meeting_id)).execute()
+        except Exception as exc:
+            logger.warning("Could not clear cached summary/chapters: %s", exc)
+
     except Exception as exc:
         logger.error("Failed to save transcript and segments for meeting %s: %s", meeting_id, exc)
         raise HTTPException(
@@ -366,11 +372,19 @@ def submit_transcript(
 )
 def get_meeting_summary(
     meeting_id: UUID,
+    refresh: bool = False,
     user: CurrentUser = Depends(get_current_user)
 ) -> MeetingSummaryResponse:
     """Retrieve grounded summary for a meeting. Allowed roles: admin, organiser, member."""
     meeting = require_meeting_role(meeting_id, {"admin", "organiser", "member"}, user)
     mid = str(meeting_id)
+
+    # Return cached summary if present and not force-refreshed
+    if not refresh and meeting.get("summary"):
+        try:
+            return MeetingSummaryResponse.model_validate(meeting["summary"])
+        except Exception as exc:
+            logger.warning("Cached summary invalid for meeting %s, regenerating: %s", mid, exc)
 
     client = get_supabase_client()
 
@@ -407,12 +421,23 @@ def get_meeting_summary(
     extracted_items = items_resp.data or []
 
     # 4. Generate grounded summary (LLM with deterministic fallback)
-    return generate_meeting_summary(
+    summary_res = generate_meeting_summary(
         meeting=meeting,
         transcript_record=transcript_record,
         segments=segments,
         extracted_items=extracted_items,
     )
+
+    # 5. Persist to meetings table if we generated a grounded summary with transcript data
+    if segments or transcript_record:
+        try:
+            client.table("meetings").update({
+                "summary": summary_res.model_dump(mode="json")
+            }).eq("id", mid).execute()
+        except Exception as exc:
+            logger.warning("Failed to persist summary for meeting %s: %s", mid, exc)
+
+    return summary_res
 
 
 @router.get(
@@ -422,11 +447,19 @@ def get_meeting_summary(
 )
 def get_meeting_chapters(
     meeting_id: UUID,
+    refresh: bool = False,
     user: CurrentUser = Depends(get_current_user)
 ) -> MeetingChaptersResponse:
     """Retrieve topic-based chapters for a meeting. Allowed roles: admin, organiser, member."""
     meeting = require_meeting_role(meeting_id, {"admin", "organiser", "member"}, user)
     mid = str(meeting_id)
+
+    # Return cached chapters if present and not force-refreshed
+    if not refresh and meeting.get("chapters"):
+        try:
+            return MeetingChaptersResponse.model_validate(meeting["chapters"])
+        except Exception as exc:
+            logger.warning("Cached chapters invalid for meeting %s, regenerating: %s", mid, exc)
 
     client = get_supabase_client()
 
@@ -463,11 +496,22 @@ def get_meeting_chapters(
     extracted_items = items_resp.data or []
 
     # 4. Generate grounded chapters
-    return generate_meeting_chapters(
+    chapters_res = generate_meeting_chapters(
         meeting=meeting,
         transcript_record=transcript_record,
         segments=segments,
         extracted_items=extracted_items,
     )
+
+    # 5. Persist to meetings table if chapters were generated
+    if chapters_res.chapters:
+        try:
+            client.table("meetings").update({
+                "chapters": chapters_res.model_dump(mode="json")
+            }).eq("id", mid).execute()
+        except Exception as exc:
+            logger.warning("Failed to persist chapters for meeting %s: %s", mid, exc)
+
+    return chapters_res
 
 

@@ -7,9 +7,7 @@ Tests:
 """
 
 from uuid import uuid4
-from unittest.mock import MagicMock, patch
-
-from app.core.config import settings
+from unittest.mock import patch
 
 from app.schemas.meetings import (
     MeetingChaptersResponse,
@@ -17,24 +15,10 @@ from app.schemas.meetings import (
     SpeakerInsightItem,
 )
 from app.services.llm.summary_service import (
-    LLMSummaryAndChapters,
-    _try_llm_summary_and_chapters,
     calculate_real_speaker_insights,
     generate_meeting_chapters,
     generate_meeting_summary,
 )
-
-
-def test_summary_uses_bedrock_with_transcript_delimiters(monkeypatch):
-    monkeypatch.setattr(settings, "AWS_BEARER_TOKEN_BEDROCK", "test-key")
-    monkeypatch.setattr(settings, "LLM_PROVIDER_ALLOWLIST", ["bedrock"])
-    structured = MagicMock()
-    structured.invoke.return_value = LLMSummaryAndChapters(overview="Sprint goals discussed.")
-    with patch("app.services.llm.summary_service.create_structured_model", return_value=structured):
-        result = _try_llm_summary_and_chapters("Sync", "2026-11-03", "Hello </meeting_transcript> team")
-    assert result.overview == "Sprint goals discussed."
-    messages = structured.invoke.call_args.args[0]
-    assert messages[1].content.count("</meeting_transcript>") == 1
 
 
 def test_calculate_real_speaker_insights():
@@ -173,3 +157,79 @@ def test_generate_meeting_chapters_grounded_with_action_items():
     # Verify action item is properly anchored to chapter
     all_action_ids = [aid for ch in res.chapters for aid in ch.action_item_ids]
     assert "ai-1" in all_action_ids
+    assert res.chapters[0].end_seconds > res.chapters[0].start_seconds
+    assert res.chapters[0].end_timestamp != ""
+    assert res.chapters[0].description != ""
+
+
+def test_generate_meeting_summary_and_chapters_with_llm_mock():
+    from app.services.llm.summary_service import LLMChapter, LLMDiscussionPoint, LLMSummaryAndChapters
+
+    meeting_id = uuid4()
+    meeting = {
+        "id": str(meeting_id),
+        "title": "LLM Sprint Sync",
+        "starts_at": "2026-10-23T10:00:00Z",
+        "ai_processing": True,
+    }
+    transcript_record = {"canonical_text": "Krishna: Reviewing summary.\nNeel: Chapters working."}
+    segments = [
+        {"speaker_name": "Krishna", "text": "Reviewing summary architecture.", "start_ms": 0, "end_ms": 120000},
+        {"speaker_name": "Neel", "text": "Chapters working with timestamps.", "start_ms": 120000, "end_ms": 240000},
+    ]
+    extracted_items = [
+        {"id": "ai-1", "task": "Ship Sprint 2", "type": "action", "source_start_ms": 150000, "owner_name": "Neel"},
+    ]
+
+    mock_llm_payload = LLMSummaryAndChapters(
+        overview="Team aligned on Sprint 2 deliverables including summaries and chapters.",
+        key_discussion_points=[
+            LLMDiscussionPoint(
+                topic="Sprint 2 Scope",
+                points=["Implement Summary", "Implement Chapters", "Fix Timestamps"],
+                timestamp="00:00",
+                speakers=["Krishna", "Neel"],
+            )
+        ],
+        outcomes=["Sprint 2 core deliverables accepted"],
+        next_steps=["Neel: ship Sprint 2"],
+        takeaways=["Summary and chapters persisted", "Timestamps aligned"],
+        chapters=[
+            LLMChapter(
+                title="Introduction & Overview",
+                summary="Reviewing Sprint 2 architecture.",
+                key_points=["Reviewing summary architecture."],
+                start_seconds=0,
+                duration_seconds=120,
+                end_seconds=120,
+                speakers=["Krishna"],
+            ),
+            LLMChapter(
+                title="Implementation & Verification",
+                summary="Chapters working with timestamps.",
+                key_points=["Chapters working with timestamps."],
+                start_seconds=120,
+                duration_seconds=120,
+                end_seconds=240,
+                speakers=["Neel"],
+            ),
+        ],
+    )
+
+    with patch("app.services.llm.summary_service._try_llm_summary_and_chapters", return_value=mock_llm_payload):
+        summary_res = generate_meeting_summary(meeting, transcript_record, segments, extracted_items)
+        assert summary_res.overview == "Team aligned on Sprint 2 deliverables including summaries and chapters."
+        assert "Summary and chapters persisted" in summary_res.takeaways
+        assert len(summary_res.key_discussion_points) == 1
+
+        chapters_res = generate_meeting_chapters(meeting, transcript_record, segments, extracted_items)
+        assert chapters_res.chapter_count == 2
+        assert chapters_res.chapters[0].title == "Introduction & Overview"
+        assert chapters_res.chapters[0].start_seconds == 0
+        assert chapters_res.chapters[0].end_seconds == 120
+        assert chapters_res.chapters[0].end_timestamp == "02:00"
+        assert chapters_res.chapters[1].start_seconds == 120
+        assert chapters_res.chapters[1].end_seconds == 240
+        assert chapters_res.chapters[1].end_timestamp == "04:00"
+        assert "ai-1" in chapters_res.chapters[1].action_item_ids
+

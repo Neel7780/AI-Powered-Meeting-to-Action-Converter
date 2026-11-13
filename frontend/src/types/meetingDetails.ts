@@ -3,9 +3,12 @@ export interface MeetingChapter {
   title: string;
   timestamp: string; // e.g. "20:47"
   start_seconds: number;
+  end_seconds?: number;
+  end_timestamp?: string;
   duration_seconds: number;
   duration_str: string;
   summary: string;
+  description?: string;
   speakers: string[];
   key_points: string[];
   action_item_count?: number;
@@ -35,6 +38,7 @@ export interface MeetingSummaryData {
   decisions: SummaryDecision[];
   outcomes: string[];
   next_steps: string[];
+  takeaways?: string[];
   speaker_insights: Array<{
     speaker: string;
     talk_percentage: number;

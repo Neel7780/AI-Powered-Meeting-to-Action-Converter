@@ -51,9 +51,12 @@ class MeetingChapterItem(BaseModel):
     title: str
     timestamp: str
     start_seconds: int
+    end_seconds: int = 0
+    end_timestamp: str = ""
     duration_seconds: int = 0
     duration_str: str
     summary: str
+    description: str = ""
     speakers: list[str] = Field(default_factory=list)
     key_points: list[str] = Field(default_factory=list)
     action_item_count: int = 0
@@ -96,6 +99,7 @@ class MeetingSummaryResponse(BaseModel):
     decisions: list[SummaryDecisionItem]
     outcomes: list[str]
     next_steps: list[str]
+    takeaways: list[str] = Field(default_factory=list)
     speaker_insights: list[SpeakerInsightItem] = Field(default_factory=list)
     generated_at: str
-    model_used: str = "none"
+    model_used: str = "gemini-3.1-flash-lite"

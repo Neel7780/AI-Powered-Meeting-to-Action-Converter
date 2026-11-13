@@ -453,9 +453,12 @@ export const DESIGN_SPRINT_MEETING_DETAILS: RichMeetingDetails = {
       title: 'Kickoff & Sprint Review Goals',
       timestamp: '00:00',
       start_seconds: 0,
-      duration_seconds: 285,
-      duration_str: '04:45',
+      end_seconds: 312,
+      end_timestamp: '05:12',
+      duration_seconds: 312,
+      duration_str: '05:12',
       summary: 'Karthik introduces the meeting objectives to review latest prototype progress and set up Sprint 2 milestones.',
+      description: 'Karthik introduces the meeting objectives to review latest prototype progress and set up Sprint 2 milestones.',
       speakers: ['Karthik', 'Asha'],
       key_points: ['Review latest prototype', 'Check previous sprint goals', 'Set agenda for review'],
       action_item_ids: [],
@@ -466,9 +469,12 @@ export const DESIGN_SPRINT_MEETING_DETAILS: RichMeetingDetails = {
       title: 'Navigation & Sidebar Refinement',
       timestamp: '05:12',
       start_seconds: 312,
+      end_seconds: 760,
+      end_timestamp: '12:40',
       duration_seconds: 448,
       duration_str: '07:28',
       summary: 'Detailed look at sidebar grouping (General, AI Insights, Workspaces) and switching accent palette to teal.',
+      description: 'Detailed look at sidebar grouping (General, AI Insights, Workspaces) and switching accent palette to teal.',
       speakers: ['Karthik', 'Asha'],
       key_points: ['Grouped sidebar', 'Breadcrumbs for meeting notes', 'Teal accent color decision'],
       action_item_ids: ['ai-ds-01'],
@@ -479,9 +485,12 @@ export const DESIGN_SPRINT_MEETING_DETAILS: RichMeetingDetails = {
       title: 'Real-time Latency & API Optimizations',
       timestamp: '12:40',
       start_seconds: 760,
+      end_seconds: 1247,
+      end_timestamp: '20:47',
       duration_seconds: 487,
       duration_str: '08:07',
       summary: 'Vikram presents latency benchmarks showing sub-second live transcription and 3.2s Gemini Flash-Lite summary generation.',
+      description: 'Vikram presents latency benchmarks showing sub-second live transcription and 3.2s Gemini Flash-Lite summary generation.',
       speakers: ['Vikram', 'Asha'],
       key_points: ['Under 1-second ASR latency', 'Gemini Flash-Lite pipeline', 'Cost remains ₹0 on free tier'],
       action_item_ids: [],
@@ -492,9 +501,12 @@ export const DESIGN_SPRINT_MEETING_DETAILS: RichMeetingDetails = {
       title: 'Action Items Dedicated Tab & UI',
       timestamp: '20:47',
       start_seconds: 1247,
+      end_seconds: 2050,
+      end_timestamp: '34:10',
       duration_seconds: 803,
       duration_str: '13:23',
       summary: 'Deep dive into separating Action Items from AI Insights into a dedicated staging gate with multi-track speaker scrubbers.',
+      description: 'Deep dive into separating Action Items from AI Insights into a dedicated staging gate with multi-track speaker scrubbers.',
       speakers: ['Asha', 'Karthik', 'Vikram'],
       key_points: ['Separate staging tab', 'Auto-link members to tasks', 'Multi-track speaker talk-time scrub bar'],
       action_item_ids: ['ai-ds-02', 'ai-ds-03'],
@@ -505,9 +517,12 @@ export const DESIGN_SPRINT_MEETING_DETAILS: RichMeetingDetails = {
       title: 'Post-Meeting Review & Export Flow',
       timestamp: '34:10',
       start_seconds: 2050,
+      end_seconds: 2747,
+      end_timestamp: '45:47',
       duration_seconds: 697,
       duration_str: '11:37',
       summary: 'Final alignment on Friday PR deadline, one-tap WhatsApp share links, and publishing approved tasks to Kanban.',
+      description: 'Final alignment on Friday PR deadline, one-tap WhatsApp share links, and publishing approved tasks to Kanban.',
       speakers: ['Vikram', 'Karthik'],
       key_points: ['PR release target: Friday', 'Export & WhatsApp wa.me link integration', 'Kanban synchronization'],
       action_item_ids: ['ai-ds-04'],
@@ -630,6 +645,328 @@ export const DESIGN_SPRINT_MEETING_DETAILS: RichMeetingDetails = {
       { speaker: 'Karthik', percentage: 38, minutes: 28 },
       { speaker: 'Asha', percentage: 35, minutes: 25 },
       { speaker: 'Vikram', percentage: 30, minutes: 15 }
+    ]
+  }
+};
+
+export const SPRINT_102_MEETING_DETAILS: RichMeetingDetails = {
+  id: 'mtg-sprint-102',
+  title: 'Sprint 2 Architecture & AI Staging Review',
+  workspace_name: 'Team 10 Workspace',
+  workspace_id: 'ws-team-10',
+  breadcrumb: ['Meetings', 'October', 'Sprint 2', 'Architecture Review'],
+  date_formatted: 'Oct 11, 2026',
+  tags: ['Architecture', 'Sprint 2', 'Supabase RLS', 'Gemini'],
+  total_duration_seconds: 1350,
+  total_duration_formatted: '22:30',
+  participants: [
+    {
+      name: 'Neel Khatri',
+      initials: 'NK',
+      role: 'Team Lead & Admin',
+      avatar: '',
+      online: true
+    },
+    {
+      name: 'Arnav Pandita',
+      initials: 'AP',
+      role: 'Database Engineer',
+      avatar: '',
+      online: true
+    },
+    {
+      name: 'Bharat Odedara',
+      initials: 'BO',
+      role: 'Frontend Engineer',
+      avatar: '',
+      online: true
+    },
+    {
+      name: 'Madhav Chauhan',
+      initials: 'MC',
+      role: 'Security Engineer',
+      avatar: '',
+      online: true
+    },
+    {
+      name: 'Yuvraj Katara',
+      initials: 'YK',
+      role: 'Compliance Lead',
+      avatar: '',
+      online: false
+    }
+  ],
+  summary: {
+    overview:
+      'The engineering team reviewed Sprint 2 architectural milestones, focusing on Supabase RLS security policies, drag-and-drop transcript file uploaders, and CR-01 AI Attestation disclaimer banners.',
+    key_discussion_points: [
+      {
+        topic: 'Supabase RLS Security & Migration Scripts',
+        points: [
+          'Enforce strict Row-Level Security on workspace and task tables per CR-01.',
+          'Admin vs team_member permission tests pass without leaking workspace boundary.',
+          'No client-side direct mutations on tasks table permitted.'
+        ],
+        timestamp: '00:00',
+        speakers: ['Neel Khatri', 'Arnav Pandita']
+      },
+      {
+        topic: 'File Upload Pipelines & Storage Path Conventions',
+        points: [
+          'Support .vtt, .srt, .txt, and .docx formats.',
+          'Enforce path pattern: meeting-transcripts/{workspace_id}/{meeting_id}/{filename}.',
+          'Add drag-and-drop error boundaries for unsupported MIME types.'
+        ],
+        timestamp: '04:30',
+        speakers: ['Bharat Odedara', 'Neel Khatri']
+      },
+      {
+        topic: 'Security Defenses & Input Sanitization',
+        points: [
+          'Sanitize user inputs in multi-line paste widget to strip dangerous HTML and scripts.',
+          'Transcripts wrapped in explicit XML delimiters to prevent prompt injection.',
+          'Gemini 3.1 Flash-Lite constrained to verbatim source excerpts.'
+        ],
+        timestamp: '09:15',
+        speakers: ['Madhav Chauhan', 'Krishna Parmar']
+      },
+      {
+        topic: 'CR-01 Attestation Banner & Action Item Staging Gate',
+        points: [
+          'Display disclaimer banner: "AI-generated suggestions. Verify before publishing."',
+          'Candidate action items require explicit organizer approval before appearing on Kanban board.',
+          'Automated user tagging links transcript mentions to workspace members.'
+        ],
+        timestamp: '14:00',
+        speakers: ['Yuvraj Katara', 'Neel Khatri']
+      }
+    ],
+    decisions: [
+      {
+        id: 'dec-sprint-1',
+        text: 'Enforce Supabase RLS security policies for workspace tables per CR-01.',
+        timestamp: '02:15',
+        speaker: 'Arnav Pandita',
+        excerpt: 'Can you own the implementation of Supabase RLS security policies for workspace tables by October 14th?'
+      },
+      {
+        id: 'dec-sprint-2',
+        text: 'Adopt strict meeting-transcripts/{workspace_id}/{meeting_id}/{filename} storage path.',
+        timestamp: '06:40',
+        speaker: 'Bharat Odedara',
+        excerpt: 'Make sure the drag-and-drop file uploader has instant upload feedback and error boundaries for unsupported mime types by October 15th.'
+      },
+      {
+        id: 'dec-sprint-3',
+        text: 'Display CR-01 AI Attestation disclaimer banner across all review screens.',
+        timestamp: '15:20',
+        speaker: 'Yuvraj Katara',
+        excerpt: "per CR-01 compliance, we must add the AI Attestation disclaimer banner stating: 'AI-generated suggestions. Verify before publishing.'"
+      }
+    ],
+    outcomes: [
+      'Sprint 2 architecture approved for development.',
+      'Backend-first mutation architecture enforced across tasks and extracted_items.',
+      'Zero-budget stack verified on Gemini 3.1 Flash-Lite and free Supabase tier.'
+    ],
+    next_steps: [
+      'Arnav to deliver RLS migration scripts by Oct 14.',
+      'Bharat to finalize drag-and-drop uploader with MIME validation by Oct 15.',
+      'Madhav to sanitize multi-line paste inputs by Oct 15.',
+      'Yuvraj to verify AI Attestation disclaimer banner by Oct 16.'
+    ],
+    speaker_insights: [
+      {
+        speaker: 'Neel Khatri',
+        talk_percentage: 28,
+        duration_min: 6,
+        key_contribution: 'Facilitated architecture review and confirmed milestone deadlines.'
+      },
+      {
+        speaker: 'Arnav Pandita',
+        talk_percentage: 24,
+        duration_min: 5,
+        key_contribution: 'Committed to Supabase RLS policies and migration scripts.'
+      },
+      {
+        speaker: 'Bharat Odedara',
+        talk_percentage: 18,
+        duration_min: 4,
+        key_contribution: 'Outlined drag-and-drop transcript uploader implementation.'
+      },
+      {
+        speaker: 'Madhav Chauhan',
+        talk_percentage: 16,
+        duration_min: 3,
+        key_contribution: 'Presented input sanitization and prompt injection defenses.'
+      },
+      {
+        speaker: 'Yuvraj Katara',
+        talk_percentage: 14,
+        duration_min: 3,
+        key_contribution: 'Defined CR-01 compliance requirements and disclaimer banner.'
+      }
+    ],
+    generated_at: '2026-10-11T10:45:00Z',
+    model_used: 'Gemini 3.1 Flash-Lite'
+  },
+  chapters: [
+    {
+      id: 'chap-sprint-1',
+      title: 'Sprint 2 Kickoff & RLS Security Policies',
+      timestamp: '00:00',
+      start_seconds: 0,
+      end_seconds: 270,
+      end_timestamp: '04:30',
+      duration_seconds: 270,
+      duration_str: '04:30',
+      summary: 'Neel introduces Sprint 2 goals; Arnav commits to RLS security policies.',
+      description: 'Neel introduces Sprint 2 goals; Arnav commits to RLS security policies.',
+      speakers: ['Neel Khatri', 'Arnav Pandita'],
+      key_points: ['Sprint 2 architecture review', 'Supabase RLS policies', 'Zero-budget stack validation'],
+      action_item_ids: ['cand-001', 'cand-002'],
+      decision_count: 1
+    },
+    {
+      id: 'chap-sprint-2',
+      title: 'Transcript File Upload & Storage Conventions',
+      timestamp: '04:30',
+      start_seconds: 270,
+      end_seconds: 555,
+      end_timestamp: '09:15',
+      duration_seconds: 285,
+      duration_str: '04:45',
+      summary: 'Bharat presents drag-and-drop uploader with MIME validation and Supabase storage path convention.',
+      description: 'Bharat presents drag-and-drop uploader with MIME validation and Supabase storage path convention.',
+      speakers: ['Bharat Odedara', 'Neel Khatri'],
+      key_points: ['Multi-format upload (.vtt, .srt, .txt, .docx)', 'Strict storage path rule', 'Error boundary handling'],
+      action_item_ids: ['cand-003'],
+      decision_count: 1
+    },
+    {
+      id: 'chap-sprint-3',
+      title: 'Security Defenses & Input Sanitization',
+      timestamp: '09:15',
+      start_seconds: 555,
+      end_seconds: 840,
+      end_timestamp: '14:00',
+      duration_seconds: 285,
+      duration_str: '04:45',
+      summary: 'Madhav reviews input sanitization on paste widgets and XML prompt injection guards.',
+      description: 'Madhav reviews input sanitization on paste widgets and XML prompt injection guards.',
+      speakers: ['Madhav Chauhan', 'Krishna Parmar'],
+      key_points: ['HTML/script stripping', 'Prompt injection delimiters', 'Verbatim excerpt grounding'],
+      action_item_ids: ['cand-004'],
+      decision_count: 0
+    },
+    {
+      id: 'chap-sprint-4',
+      title: 'CR-01 Attestation Banner & Action Item Staging',
+      timestamp: '14:00',
+      start_seconds: 840,
+      end_seconds: 1125,
+      end_timestamp: '18:45',
+      duration_seconds: 285,
+      duration_str: '04:45',
+      summary: 'Yuvraj presents the AI Attestation disclaimer banner; team aligns on staging review gate workflow.',
+      description: 'Yuvraj presents the AI Attestation disclaimer banner; team aligns on staging review gate workflow.',
+      speakers: ['Yuvraj Katara', 'Neel Khatri'],
+      key_points: ['CR-01 disclaimer banner', 'Staging gate approval flow', 'User-tagging auto-resolution'],
+      action_item_ids: ['cand-005'],
+      decision_count: 1
+    },
+    {
+      id: 'chap-sprint-5',
+      title: 'Sprint 2 Milestone Signoff & Next Steps',
+      timestamp: '18:45',
+      start_seconds: 1125,
+      end_seconds: 1350,
+      end_timestamp: '22:30',
+      duration_seconds: 225,
+      duration_str: '03:45',
+      summary: 'Neel confirms all task owners, deadlines, and sequential dependencies for Sprint 2.',
+      description: 'Neel confirms all task owners, deadlines, and sequential dependencies for Sprint 2.',
+      speakers: ['Neel Khatri', 'Manali Malani'],
+      key_points: ['Milestone deadlines confirmed', 'Sequential dependencies linked', 'Review gate signoff'],
+      action_item_ids: [],
+      decision_count: 0
+    }
+  ],
+  speaker_tracks: [
+    {
+      speaker: 'Neel Khatri',
+      role: 'Team Lead',
+      percentage: 28,
+      duration_min: 6,
+      color: 'cyan',
+      segments: [
+        { start_pct: 0, width_pct: 15, start_seconds: 0, end_seconds: 200, speaker: 'Neel Khatri' },
+        { start_pct: 45, width_pct: 12, start_seconds: 600, end_seconds: 760, speaker: 'Neel Khatri' },
+        { start_pct: 82, width_pct: 18, start_seconds: 1100, end_seconds: 1350, speaker: 'Neel Khatri' }
+      ]
+    },
+    {
+      speaker: 'Arnav Pandita',
+      role: 'Database Engineer',
+      percentage: 24,
+      duration_min: 5,
+      color: 'emerald',
+      segments: [
+        { start_pct: 15, width_pct: 20, start_seconds: 200, end_seconds: 470, speaker: 'Arnav Pandita' }
+      ]
+    },
+    {
+      speaker: 'Bharat Odedara',
+      role: 'Frontend Engineer',
+      percentage: 18,
+      duration_min: 4,
+      color: 'purple',
+      segments: [
+        { start_pct: 35, width_pct: 18, start_seconds: 470, end_seconds: 710, speaker: 'Bharat Odedara' }
+      ]
+    },
+    {
+      speaker: 'Madhav Chauhan',
+      role: 'Security Engineer',
+      percentage: 16,
+      duration_min: 3,
+      color: 'amber',
+      segments: [
+        { start_pct: 53, width_pct: 15, start_seconds: 710, end_seconds: 915, speaker: 'Madhav Chauhan' }
+      ]
+    },
+    {
+      speaker: 'Yuvraj Katara',
+      role: 'Compliance Lead',
+      percentage: 14,
+      duration_min: 3,
+      color: 'blue',
+      segments: [
+        { start_pct: 68, width_pct: 14, start_seconds: 915, end_seconds: 1100, speaker: 'Yuvraj Katara' }
+      ]
+    }
+  ],
+  comments: [],
+  clips: [],
+  trackers: [
+    { keyword: 'RLS', category: 'architecture', occurrences: 12, timestamps: ['00:00', '02:15', '04:30'] },
+    { keyword: 'Upload', category: 'feature', occurrences: 8, timestamps: ['04:30', '06:40', '09:15'] },
+    { keyword: 'Attestation', category: 'decision', occurrences: 6, timestamps: ['14:00', '15:20', '18:45'] }
+  ],
+  metrics: {
+    total_duration_str: '22:30',
+    total_duration_seconds: 1350,
+    pacing_wpm: 135,
+    sentiment_score: '98% Productive & Compliant',
+    action_items_count: 5,
+    decisions_count: 3,
+    questions_count: 8,
+    speaker_talk_ratios: [
+      { speaker: 'Neel Khatri', percentage: 28, minutes: 6 },
+      { speaker: 'Arnav Pandita', percentage: 24, minutes: 5 },
+      { speaker: 'Bharat Odedara', percentage: 18, minutes: 4 },
+      { speaker: 'Madhav Chauhan', percentage: 16, minutes: 3 },
+      { speaker: 'Yuvraj Katara', percentage: 14, minutes: 3 }
     ]
   }
 };
