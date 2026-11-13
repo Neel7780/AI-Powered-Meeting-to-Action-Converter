@@ -1,6 +1,7 @@
 """Pydantic schemas for Meetings API (BE-4)."""
 
 from datetime import datetime
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -99,3 +100,43 @@ class MeetingSummaryResponse(BaseModel):
     speaker_insights: list[SpeakerInsightItem] = Field(default_factory=list)
     generated_at: str
     model_used: str = "none"
+
+
+class ParticipantOut(BaseModel):
+    user_id: Optional[UUID] = None
+    email: Optional[str] = None
+    display_name: Optional[str] = None
+    external_name: Optional[str] = None
+
+
+class MeetingListItem(BaseModel):
+    id: UUID
+    title: str
+    starts_at: datetime
+    timezone: str
+    status: str
+    visibility: str = "workspace"
+    created_at: datetime
+    organiser_id: UUID
+    conference_url: Optional[str] = None
+
+
+class MeetingDetail(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    title: str
+    starts_at: datetime
+    timezone: str
+    status: str
+    visibility: str
+    created_at: datetime
+    organiser_id: UUID
+    conference_url: Optional[str] = None
+    participants: List[ParticipantOut] = Field(default_factory=list)
+    transcript_id: Optional[UUID] = None
+
+
+class WorkspaceStatsResponse(BaseModel):
+    meeting_count: int
+    open_task_count: int
+    member_count: int
