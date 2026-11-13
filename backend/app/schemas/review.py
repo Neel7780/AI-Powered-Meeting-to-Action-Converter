@@ -42,3 +42,14 @@ class RejectRequest(BaseModel):
 
 class RejectResponse(BaseModel):
     rejected: int
+
+
+class RefineRequest(BaseModel):
+    feedback: str = Field(..., min_length=2, max_length=1500, description="Manager feedback prompt for refining candidate items")
+
+
+class RefineResponse(BaseModel):
+    success: bool
+    meeting_id: UUID
+    refined_count: int
+    message: str
