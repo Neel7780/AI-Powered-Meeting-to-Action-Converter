@@ -1,10 +1,8 @@
 -- ==============================================================================
--- 0008_workspace_owner_role.sql
+-- 20261114000001_workspace_owner_role.sql
 -- Introduce Workspace Owner Role and enforce strict Admin delegation hierarchy
+-- (Note: Enum 'owner' is added in preceding migration 20261114000000)
 -- ==============================================================================
-
--- 1. Extend app_role enum to include 'owner'
-alter type public.app_role add value if not exists 'owner';
 
 -- 2. Update user_is_workspace_admin to treat 'owner' as having full administrative rights
 create or replace function private.user_is_workspace_admin(p_workspace_id uuid)
