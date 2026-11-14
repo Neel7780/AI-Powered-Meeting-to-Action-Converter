@@ -68,11 +68,37 @@ export function WorkspaceProvider({
       return;
     }
 
-    // Dev test user gets demo workspace directly
+    // Dev test user gets demo workspace directly (with local dev persistence)
     if (user.id === "00000000-0000-0000-0000-000000000001") {
-      setWorkspaces([DEFAULT_DEMO_WORKSPACE]);
-      setCurrentWorkspace(DEFAULT_DEMO_WORKSPACE);
+      const storedDev = localStorage.getItem("actionpulse_dev_workspaces");
+      let devWorkspaces: Workspace[] = [DEFAULT_DEMO_WORKSPACE];
+      if (storedDev) {
+        try {
+          devWorkspaces = JSON.parse(storedDev);
+        } catch {
+          // ignore corrupted data
+        }
+      }
+      setWorkspaces(devWorkspaces);
+
+      const savedWorkspaceId = localStorage.getItem("currentWorkspaceId");
+      const selected =
+        devWorkspaces.find((w) => w.id === savedWorkspaceId) || devWorkspaces[0];
+
+      setCurrentWorkspace(selected);
       setCurrentRole("admin");
+      localStorage.setItem("currentWorkspaceId", selected.id);
+      localStorage.setItem("currentWorkspaceName", selected.name || "");
+      localStorage.setItem("currentWorkspaceRole", "admin");
+      window.dispatchEvent(
+        new CustomEvent("actionpulse:workspace-changed", {
+          detail: {
+            workspaceId: selected.id,
+            workspaceName: selected.name || "",
+            role: "admin",
+          },
+        })
+      );
       setLoading(false);
       return;
     }
@@ -204,6 +230,41 @@ export function WorkspaceProvider({
       throw new Error("You must be logged in to create a workspace.");
     }
 
+    // Dev test user: local workspace creation simulation
+    if (user.id === "00000000-0000-0000-0000-000000000001") {
+      const newWs: Workspace = {
+        id: `dev-ws-${Date.now()}`,
+        name: trimmedName,
+      };
+      const storedDev = localStorage.getItem("actionpulse_dev_workspaces");
+      let devList: Workspace[] = [DEFAULT_DEMO_WORKSPACE];
+      if (storedDev) {
+        try {
+          devList = JSON.parse(storedDev);
+        } catch {
+          // ignore parsing error
+        }
+      }
+      devList.push(newWs);
+      localStorage.setItem("actionpulse_dev_workspaces", JSON.stringify(devList));
+      localStorage.setItem("currentWorkspaceId", newWs.id);
+      localStorage.setItem("currentWorkspaceName", newWs.name);
+      localStorage.setItem("currentWorkspaceRole", "admin");
+      setWorkspaces(devList);
+      setCurrentWorkspace(newWs);
+      setCurrentRole("admin");
+      window.dispatchEvent(
+        new CustomEvent("actionpulse:workspace-changed", {
+          detail: {
+            workspaceId: newWs.id,
+            workspaceName: newWs.name,
+            role: "admin",
+          },
+        })
+      );
+      return;
+    }
+
     const { data: workspaceId, error } = await supabase.rpc(
       "create_workspace",
       {
@@ -219,6 +280,11 @@ export function WorkspaceProvider({
     if (!workspaceId) {
       throw new Error("Workspace was not created.");
     }
+
+    // Explicitly select the new workspace so refreshWorkspaces activates it
+    localStorage.setItem("currentWorkspaceId", workspaceId);
+    localStorage.setItem("currentWorkspaceName", trimmedName);
+    localStorage.setItem("currentWorkspaceRole", "admin");
 
     await refreshWorkspaces();
   };
@@ -248,6 +314,21 @@ export function WorkspaceProvider({
       "currentWorkspaceName",
       workspace.name || ""
     );
+
+    if (user?.id === "00000000-0000-0000-0000-000000000001") {
+      setCurrentRole("admin");
+      localStorage.setItem("currentWorkspaceRole", "admin");
+      window.dispatchEvent(
+        new CustomEvent("actionpulse:workspace-changed", {
+          detail: {
+            workspaceId: workspace.id,
+            workspaceName: workspace.name || "",
+            role: "admin",
+          },
+        })
+      );
+      return;
+    }
 
     const loadRole = async () => {
       if (!user) {
