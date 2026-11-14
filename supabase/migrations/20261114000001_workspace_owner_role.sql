@@ -4,7 +4,7 @@
 -- (Note: Enum 'owner' is added in preceding migration 20261114000000)
 -- ==============================================================================
 
--- 2. Update user_is_workspace_admin to treat 'owner' as having full administrative rights
+-- 1. Update user_is_workspace_admin to treat 'owner' as having full administrative rights
 create or replace function private.user_is_workspace_admin(p_workspace_id uuid)
 returns boolean
 language sql stable security definer set search_path = ''
@@ -14,7 +14,7 @@ as $$
   );
 $$;
 
--- 3. Add user_is_workspace_owner helper
+-- 2. Add user_is_workspace_owner helper
 create or replace function private.user_is_workspace_owner(p_workspace_id uuid)
 returns boolean
 language sql stable security definer set search_path = ''
@@ -27,7 +27,7 @@ $$;
 revoke execute on function private.user_is_workspace_owner(uuid) from public, anon;
 grant execute on function private.user_is_workspace_owner(uuid) to authenticated;
 
--- 4. Update user_is_organiser_or_admin to include owner
+-- 3. Update user_is_organiser_or_admin to include owner
 create or replace function private.user_is_organiser_or_admin(p_workspace_id uuid)
 returns boolean
 language sql stable security definer set search_path = ''
@@ -38,60 +38,55 @@ as $$
   );
 $$;
 
--- 5. Update create_workspace RPC to assign 'owner' to the creator
-create or replace function public.create_workspace(p_name text)
-returns uuid
+-- 4. Update prevent_last_admin_removal to protect owner or admin BEFORE backfill
+create or replace function private.prevent_last_admin_removal()
+returns trigger
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  v_workspace_id uuid;
-  v_user_id uuid := auth.uid();
+  v_admin_count integer;
 begin
-  if v_user_id is null then
-    raise exception 'Authentication required';
+  if tg_op = 'DELETE' then
+    if old.role in ('owner', 'admin') then
+      select count(*) into v_admin_count
+      from public.workspace_members
+      where workspace_id = old.workspace_id
+        and role in ('owner', 'admin')
+        and user_id <> old.user_id;
+      if v_admin_count = 0 then
+        raise exception 'A workspace must always have at least one owner or admin';
+      end if;
+    end if;
+    return old;
   end if;
-  if p_name is null or char_length(btrim(p_name)) not between 1 and 120 then
-    raise exception 'Workspace name must be between 1 and 120 characters';
+
+  if old.role in ('owner', 'admin') and new.role not in ('owner', 'admin') then
+    select count(*) into v_admin_count
+    from public.workspace_members
+    where workspace_id = old.workspace_id
+      and role in ('owner', 'admin')
+      and user_id <> old.user_id;
+    if v_admin_count = 0 then
+      raise exception 'A workspace must always have at least one owner or admin';
+    end if;
   end if;
-
-  insert into public.workspaces(name, created_by)
-  values (btrim(p_name), v_user_id)
-  returning id into v_workspace_id;
-
-  insert into public.workspace_members(workspace_id, user_id, role)
-  values (v_workspace_id, v_user_id, 'owner');
-
-  return v_workspace_id;
+  return new;
 end;
 $$;
 
-revoke execute on function public.create_workspace(text) from public, anon;
-grant execute on function public.create_workspace(text) to authenticated;
+revoke execute on function private.prevent_last_admin_removal() from public, anon, authenticated;
 
--- 6. Backfill existing workspace creators to 'owner'
-update public.workspace_members wm
-set role = 'owner'
-from public.workspaces w
-where wm.workspace_id = w.id
-  and wm.user_id = w.created_by
-  and wm.role = 'admin';
+drop trigger if exists prevent_last_admin_delete on public.workspace_members;
+create trigger prevent_last_admin_delete before delete on public.workspace_members
+for each row execute function private.prevent_last_admin_removal();
 
--- If any workspace has no owner, assign the earliest admin as owner
-update public.workspace_members wm
-set role = 'owner'
-where (wm.workspace_id, wm.user_id) in (
-  select distinct on (workspace_id) workspace_id, user_id
-  from public.workspace_members
-  where role = 'admin'
-    and workspace_id not in (
-      select workspace_id from public.workspace_members where role = 'owner'
-    )
-  order by workspace_id, created_at asc
-);
+drop trigger if exists prevent_last_admin_demotion on public.workspace_members;
+create trigger prevent_last_admin_demotion before update of role on public.workspace_members
+for each row execute function private.prevent_last_admin_removal();
 
--- 7. Hierarchy Trigger: Admins CANNOT promote members to Admin or modify Owner
+-- 5. Hierarchy Trigger: Admins CANNOT promote members to Admin or modify Owner
 create or replace function private.enforce_workspace_role_hierarchy()
 returns trigger
 language plpgsql
@@ -137,7 +132,7 @@ create trigger check_workspace_role_hierarchy
 before update of role on public.workspace_members
 for each row execute function private.enforce_workspace_role_hierarchy();
 
--- 8. Prevent non-owners from removing the owner
+-- 6. Prevent non-owners from removing the owner
 create or replace function private.prevent_owner_removal()
 returns trigger
 language plpgsql
@@ -164,45 +159,64 @@ create trigger prevent_owner_deletion
 before delete on public.workspace_members
 for each row execute function private.prevent_owner_removal();
 
--- 9. Update prevent_last_admin_removal to protect owner or admin
-create or replace function private.prevent_last_admin_removal()
-returns trigger
+-- 7. Update create_workspace RPC to assign 'owner' to the creator
+create or replace function public.create_workspace(p_name text)
+returns uuid
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  v_admin_count integer;
+  v_workspace_id uuid;
+  v_user_id uuid := auth.uid();
 begin
-  if tg_op = 'DELETE' then
-    if old.role in ('owner', 'admin') then
-      select count(*) into v_admin_count
-      from public.workspace_members
-      where workspace_id = old.workspace_id
-        and role in ('owner', 'admin')
-        and user_id <> old.user_id;
-      if v_admin_count = 0 then
-        raise exception 'A workspace must always have at least one owner or admin';
-      end if;
-    end if;
-    return old;
+  if v_user_id is null then
+    raise exception 'Authentication required';
+  end if;
+  if p_name is null or char_length(btrim(p_name)) not between 1 and 120 then
+    raise exception 'Workspace name must be between 1 and 120 characters';
   end if;
 
-  if old.role in ('owner', 'admin') and new.role not in ('owner', 'admin') then
-    select count(*) into v_admin_count
-    from public.workspace_members
-    where workspace_id = old.workspace_id
-      and role in ('owner', 'admin')
-      and user_id <> old.user_id;
-    if v_admin_count = 0 then
-      raise exception 'A workspace must always have at least one owner or admin';
-    end if;
-  end if;
-  return new;
+  insert into public.workspaces(name, created_by)
+  values (btrim(p_name), v_user_id)
+  returning id into v_workspace_id;
+
+  insert into public.workspace_members(workspace_id, user_id, role)
+  values (v_workspace_id, v_user_id, 'owner');
+
+  return v_workspace_id;
 end;
 $$;
 
--- 10. RPC for updating a workspace member's role cleanly
+revoke execute on function public.create_workspace(text) from public, anon;
+grant execute on function public.create_workspace(text) to authenticated;
+
+-- 8. Backfill existing workspace creators to 'owner'
+alter table public.workspace_members disable trigger prevent_last_admin_demotion;
+
+update public.workspace_members wm
+set role = 'owner'
+from public.workspaces w
+where wm.workspace_id = w.id
+  and wm.user_id = w.created_by
+  and wm.role = 'admin';
+
+-- If any workspace has no owner, assign the earliest admin as owner
+update public.workspace_members wm
+set role = 'owner'
+where (wm.workspace_id, wm.user_id) in (
+  select distinct on (workspace_id) workspace_id, user_id
+  from public.workspace_members
+  where role = 'admin'
+    and workspace_id not in (
+      select workspace_id from public.workspace_members where role = 'owner'
+    )
+  order by workspace_id, created_at asc
+);
+
+alter table public.workspace_members enable trigger prevent_last_admin_demotion;
+
+-- 9. RPC for updating a workspace member's role cleanly
 create or replace function public.update_workspace_member_role(
   p_workspace_id uuid,
   p_target_user_id uuid,
@@ -251,4 +265,3 @@ $$;
 
 revoke execute on function public.update_workspace_member_role(uuid, uuid, public.app_role) from public, anon;
 grant execute on function public.update_workspace_member_role(uuid, uuid, public.app_role) to authenticated;
-
