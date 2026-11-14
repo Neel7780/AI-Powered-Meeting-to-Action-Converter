@@ -51,7 +51,7 @@ export default function Dashboard() {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [latestMeeting, setLatestMeeting] = useState<{ id: string; title: string } | null>(null);
 
-  const isAdmin = currentRole === "admin";
+  const isAdmin = currentRole === "admin" || currentRole === "owner";
   const workspaceId = currentWorkspace?.id;
   const { user } = useAuth();
   const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name || "there";
@@ -165,7 +165,7 @@ export default function Dashboard() {
               workspaces={workspaces}
               displayName={displayName}
               isAdmin={isAdmin}
-              canCreate={currentRole === "admin" || currentRole === "organiser"}
+              canCreate={currentRole === "owner" || currentRole === "admin" || currentRole === "organiser"}
               latestMeetingTitle={latestMeeting?.title}
               onAddMember={() => setShowAddMember(true)}
               onFollowUp={() => (latestMeeting ? setShowFollowUp(true) : navigate("/meetings"))}
