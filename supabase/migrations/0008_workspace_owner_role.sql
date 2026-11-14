@@ -253,3 +253,4 @@ $$;
 
 revoke execute on function public.update_workspace_member_role(uuid, uuid, public.app_role) from public, anon;
 grant execute on function public.update_workspace_member_role(uuid, uuid, public.app_role) to authenticated;
+
