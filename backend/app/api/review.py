@@ -76,7 +76,9 @@ def approve_items(
     )
     items_by_id = {item["id"]: item for item in (items_resp.data or [])}
 
-    # Verify all requested items exist, belong to this meeting, and are in needs_review status
+    # Verify all requested items exist, belong to this meeting, and partition pending vs already approved
+    items_to_process: list = []
+    already_approved_ids: list[str] = []
     for item_update in payload.items:
         str_id = str(item_update.id)
         if str_id not in items_by_id:
@@ -85,15 +87,34 @@ def approve_items(
                 detail=f"Candidate item {str_id} does not exist or does not belong to meeting {meeting_id}"
             )
         db_item = items_by_id[str_id]
-        if db_item.get("review_status") != "needs_review":
+        cur_status = db_item.get("review_status")
+        if cur_status == "needs_review":
+            items_to_process.append(item_update)
+        elif cur_status == "approved":
+            already_approved_ids.append(str_id)
+        else:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Candidate item {str_id} has status '{db_item.get('review_status')}', expected 'needs_review'"
+                detail=f"Candidate item {str_id} has status '{cur_status}', expected 'needs_review'"
             )
+
+    # If all requested items were already approved (e.g. duplicate click or retry), return existing tasks gracefully
+    if not items_to_process and already_approved_ids:
+        existing_tasks = (
+            client.table("tasks")
+            .select("id")
+            .in_("extracted_item_id", already_approved_ids)
+            .execute()
+        )
+        task_uuids = [UUID(str(t["id"])) for t in (existing_tasks.data or [])]
+        return ApproveResponse(
+            approved=len(already_approved_ids),
+            task_ids=task_uuids
+        )
 
     # 3. Validate that any assigned owner_user_id is an active workspace member
     candidate_owner_ids: set[str] = set()
-    for item_update in payload.items:
+    for item_update in items_to_process:
         dumped = item_update.model_dump(exclude_unset=True)
         db_item = items_by_id[str(item_update.id)]
         effective_owner = dumped.get("owner_user_id", db_item.get("owner_user_id"))
@@ -122,7 +143,7 @@ def approve_items(
     pending_dependencies: dict[UUID, str] = {}
 
     # 4. Process each item in order
-    for item_update in payload.items:
+    for item_update in items_to_process:
         str_id = str(item_update.id)
         db_item = items_by_id[str_id]
         dumped = item_update.model_dump(exclude_unset=True)
@@ -177,11 +198,13 @@ def approve_items(
             if not raw_blocked and (db_item.get("rejection_reason") or "").startswith("depends_on:"):
                 raw_blocked = db_item.get("rejection_reason").split(":", 1)[1]
 
+            final_description = dumped.get("description") or db_item.get("source_excerpt") or ""
             task_insert = {
                 "workspace_id": str(workspace_id),
                 "meeting_id": str(meeting_id),
                 "extracted_item_id": str_id,
                 "title": (final_task or db_item.get("task") or "Untitled Action")[:500],
+                "description": final_description,
                 "deadline_utc": deadline_val,
                 "priority": final_priority,
                 "status": "todo",

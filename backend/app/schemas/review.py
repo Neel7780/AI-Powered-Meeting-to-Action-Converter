@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 
 class ApproveItemUpdate(BaseModel):
     id: UUID = Field(..., description="ID of the extracted_items candidate to approve")
-    task: str | None = Field(default=None, description="Edited task description. If omitted, retains extracted value")
+    task: str | None = Field(default=None, description="Edited task title. If omitted, retains extracted value")
+    description: str | None = Field(default=None, description="Detailed task description or source excerpt")
     owner_user_id: UUID | None = Field(
         default=None, description="Assigned workspace member UUID. Null clears the owner"
     )
