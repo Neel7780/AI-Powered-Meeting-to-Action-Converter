@@ -17,7 +17,10 @@ from app.core.supabase import get_supabase_client
 
 security = HTTPBearer(auto_error=True)
 
-ORGANISER_ROLES: set[str] = {"admin", "organiser"}
+OWNER_ROLES: set[str] = {"owner"}
+ADMIN_ROLES: set[str] = {"owner", "admin"}
+ORGANISER_ROLES: set[str] = {"owner", "admin", "organiser"}
+WORKSPACE_ROLES: set[str] = {"owner", "admin", "organiser", "member"}
 DEV_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
@@ -85,7 +88,7 @@ def require_role(
     """
     # In development mode, bypass role check for dev testing user
     if settings.ENVIRONMENT == "development" and user.id == DEV_USER_ID:
-        return "admin"
+        return "owner"
 
     client = get_supabase_client()
     resp = (

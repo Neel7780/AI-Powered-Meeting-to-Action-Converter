@@ -10,7 +10,7 @@ import {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 
-export type AppRole = "admin" | "organiser" | "member";
+export type AppRole = "owner" | "admin" | "organiser" | "member";
 
 export interface Workspace {
   id: string;
@@ -86,16 +86,16 @@ export function WorkspaceProvider({
         devWorkspaces.find((w) => w.id === savedWorkspaceId) || devWorkspaces[0];
 
       setCurrentWorkspace(selected);
-      setCurrentRole("admin");
+      setCurrentRole("owner");
       localStorage.setItem("currentWorkspaceId", selected.id);
       localStorage.setItem("currentWorkspaceName", selected.name || "");
-      localStorage.setItem("currentWorkspaceRole", "admin");
+      localStorage.setItem("currentWorkspaceRole", "owner");
       window.dispatchEvent(
         new CustomEvent("actionpulse:workspace-changed", {
           detail: {
             workspaceId: selected.id,
             workspaceName: selected.name || "",
-            role: "admin",
+            role: "owner",
           },
         })
       );
@@ -249,16 +249,16 @@ export function WorkspaceProvider({
       localStorage.setItem("actionpulse_dev_workspaces", JSON.stringify(devList));
       localStorage.setItem("currentWorkspaceId", newWs.id);
       localStorage.setItem("currentWorkspaceName", newWs.name);
-      localStorage.setItem("currentWorkspaceRole", "admin");
+      localStorage.setItem("currentWorkspaceRole", "owner");
       setWorkspaces(devList);
       setCurrentWorkspace(newWs);
-      setCurrentRole("admin");
+      setCurrentRole("owner");
       window.dispatchEvent(
         new CustomEvent("actionpulse:workspace-changed", {
           detail: {
             workspaceId: newWs.id,
             workspaceName: newWs.name,
-            role: "admin",
+            role: "owner",
           },
         })
       );
@@ -284,7 +284,7 @@ export function WorkspaceProvider({
     // Explicitly select the new workspace so refreshWorkspaces activates it
     localStorage.setItem("currentWorkspaceId", workspaceId);
     localStorage.setItem("currentWorkspaceName", trimmedName);
-    localStorage.setItem("currentWorkspaceRole", "admin");
+    localStorage.setItem("currentWorkspaceRole", "owner");
 
     await refreshWorkspaces();
   };
@@ -316,14 +316,14 @@ export function WorkspaceProvider({
     );
 
     if (user?.id === "00000000-0000-0000-0000-000000000001") {
-      setCurrentRole("admin");
-      localStorage.setItem("currentWorkspaceRole", "admin");
+      setCurrentRole("owner");
+      localStorage.setItem("currentWorkspaceRole", "owner");
       window.dispatchEvent(
         new CustomEvent("actionpulse:workspace-changed", {
           detail: {
             workspaceId: workspace.id,
             workspaceName: workspace.name || "",
-            role: "admin",
+            role: "owner",
           },
         })
       );

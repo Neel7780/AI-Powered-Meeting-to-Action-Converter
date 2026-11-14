@@ -25,7 +25,7 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { currentWorkspace, currentRole } = useWorkspace();
-  const canCreate = currentRole === "admin" || currentRole === "organiser";
+  const canCreate = currentRole === "owner" || currentRole === "admin" || currentRole === "organiser";
   const wsName = currentWorkspace?.name ?? "Workspace";
 
   return (

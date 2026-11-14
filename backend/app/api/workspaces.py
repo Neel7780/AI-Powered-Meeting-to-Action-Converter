@@ -7,8 +7,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.supabase import get_supabase_client
-from app.core.deps import CurrentUser, get_current_user, require_role
-from app.schemas.workspaces import InviteCreateRequest, InviteCreateResponse
+from app.core.deps import ADMIN_ROLES, OWNER_ROLES, CurrentUser, get_current_user, require_role
+from app.schemas.workspaces import (
+    InviteCreateRequest,
+    InviteCreateResponse,
+    MemberRoleUpdateRequest,
+    MemberRoleUpdateResponse,
+)
 from app.services.email import send_invite_email
 from app.core.config import settings
 
@@ -21,8 +26,8 @@ def create_invite(
     invite_req: InviteCreateRequest,
     user: CurrentUser = Depends(get_current_user)
 ):
-    # 1. Require Admin Role
-    require_role(workspace_id, {"admin"}, user)
+    # 1. Require Admin or Owner Role
+    require_role(workspace_id, ADMIN_ROLES, user)
     
     clean_email = str(invite_req.email).strip().lower()
     
@@ -134,3 +139,59 @@ def create_invite(
         role=new_invite["role"],
         expires_at=expires_at
     )
+
+
+@router.patch("/{workspace_id}/members/{member_id}/role", response_model=MemberRoleUpdateResponse)
+def update_member_role(
+    workspace_id: UUID,
+    member_id: UUID,
+    payload: MemberRoleUpdateRequest,
+    user: CurrentUser = Depends(get_current_user)
+):
+    caller_role = require_role(workspace_id, ADMIN_ROLES, user)
+
+    db = get_supabase_client()
+
+    # Check target member exists
+    target_res = (
+        db.table("workspace_members")
+        .select("role")
+        .eq("workspace_id", str(workspace_id))
+        .eq("user_id", str(member_id))
+        .execute()
+    )
+    if not target_res.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found in workspace"
+        )
+    target_current_role = target_res.data[0]["role"]
+
+    # Owner restriction: Only the workspace owner can make a member admin or modify an admin/owner
+    if payload.role == "admin" or target_current_role in ("admin", "owner"):
+        if caller_role != "owner":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the workspace owner can make a member admin or modify an admin role."
+            )
+
+    # Update role
+    update_res = (
+        db.table("workspace_members")
+        .update({"role": payload.role})
+        .eq("workspace_id", str(workspace_id))
+        .eq("user_id", str(member_id))
+        .execute()
+    )
+    if not update_res.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update member role"
+        )
+
+    return MemberRoleUpdateResponse(
+        workspace_id=str(workspace_id),
+        user_id=str(member_id),
+        role=payload.role
+    )
+
