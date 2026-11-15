@@ -198,7 +198,8 @@ def test_chat_message_pending_tasks_grounded():
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
         with patch("app.core.deps.get_supabase_client", return_value=db), \
-             patch("app.services.llm.chat_assistant.get_supabase_client", return_value=db):
+             patch("app.services.llm.chat_assistant.get_supabase_client", return_value=db), \
+             patch("app.services.llm.chat_assistant.llm_is_configured", return_value=False):
             res = client.post("/api/chat/message", json={
                 "workspace_id": str(workspace_id),
                 "query": "Which tasks are still pending?"
@@ -258,5 +259,87 @@ def test_list_chat_meetings():
             items = res.json()
             assert len(items) == 1
             assert items[0]["title"] == "Sprint 1 Retrospective"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_chat_owner_role_allowed():
+    """Workspace owner role is permitted to query chat and list meetings."""
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="owner@example.com")
+
+    db = MagicMock()
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "owner"}])
+
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.neq.return_value = meetings_mock
+    meetings_mock.order.return_value = meetings_mock
+    meetings_mock.limit.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[])
+
+    def table_router(table_name: str):
+        if table_name == "workspace_members":
+            return wm_mock
+        if table_name == "meetings":
+            return meetings_mock
+        return MagicMock()
+
+    db.table.side_effect = table_router
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.chat.get_supabase_client", return_value=db):
+            res = client.get(f"/api/chat/workspaces/{workspace_id}/meetings")
+            assert res.status_code == 200
+            assert res.json() == []  # Empty workspace correctly returns []
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_chat_invalid_meeting_id_returns_404():
+    """Non-existent meeting_id returns 404 rather than silently proceeding."""
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    missing_meeting_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="user@example.com")
+
+    db = MagicMock()
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+
+    meetings_mock = MagicMock()
+    meetings_mock.select.return_value = meetings_mock
+    meetings_mock.eq.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[])  # Meeting not found
+
+    def table_router(table_name: str):
+        if table_name == "workspace_members":
+            return wm_mock
+        if table_name == "meetings":
+            return meetings_mock
+        return MagicMock()
+
+    db.table.side_effect = table_router
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.chat.get_supabase_client", return_value=db):
+            res = client.post("/api/chat/message", json={
+                "workspace_id": str(workspace_id),
+                "meeting_id": str(missing_meeting_id),
+                "query": "What did we decide?"
+            })
+            assert res.status_code == 404
+            assert "Meeting not found" in res.json()["detail"]
     finally:
         app.dependency_overrides.clear()
