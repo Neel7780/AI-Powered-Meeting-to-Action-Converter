@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { requestApi } from "../lib/api";
 import AuthShell from "../components/auth/AuthShell";
 import { Button } from "../components/ui/button";
 import { Notice } from "../components/ui/notice";
@@ -125,26 +126,47 @@ export default function Login() {
 
     try {
       const redirectUrl = `${window.location.origin}/reset-password`;
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(targetEmail, {
-        redirectTo: redirectUrl,
-      });
 
-      if (resetErr) {
-        // If Supabase rate-limits or fails during local dev test mode, don't hard block testing
-        if (import.meta.env.DEV || targetEmail.includes("dev@") || targetEmail.includes("test@")) {
-          console.warn("Dev mode password reset warning:", resetErr.message);
-          setResetEmail(targetEmail);
-          setResendCooldown(30);
-          setView("verify_email");
-          setSuccessMessage("Verification code sent! (Dev test mode: code 123456)");
-          return;
+      // 1. Primary path: Call backend to dispatch ActionPulse email containing the OTP code + 1-click link
+      let backendDispatched = false;
+      try {
+        const res = await requestApi<{ success: boolean; message: string; code_length?: number }>(
+          "/api/auth/forgot-password",
+          {
+            method: "POST",
+            body: JSON.stringify({ email: targetEmail, redirect_to: redirectUrl }),
+          }
+        );
+        if (res && res.success) {
+          backendDispatched = true;
         }
-        throw resetErr;
+      } catch (backendErr: any) {
+        console.warn("Backend auth forgot-password email note:", backendErr?.message);
+      }
+
+      // 2. Fallback: If backend is unreachable (e.g. standalone local frontend dev), invoke Supabase client
+      if (!backendDispatched) {
+        const { error: resetErr } = await supabase.auth.resetPasswordForEmail(targetEmail, {
+          redirectTo: redirectUrl,
+        });
+
+        if (resetErr) {
+          // If Supabase rate-limits or fails during local dev test mode, don't hard block testing
+          if (import.meta.env.DEV || targetEmail.includes("dev@") || targetEmail.includes("test@")) {
+            console.warn("Dev mode password reset warning:", resetErr.message);
+            setResetEmail(targetEmail);
+            setResendCooldown(30);
+            setView("verify_email");
+            setSuccessMessage("Verification code dispatched! (Dev test mode: code 123456)");
+            return;
+          }
+          throw resetErr;
+        }
       }
 
       setResetEmail(targetEmail);
       setResendCooldown(30);
-      setSuccessMessage(`A 6-digit verification code has been sent to ${targetEmail}.`);
+      setSuccessMessage(`A verification code has been dispatched to ${targetEmail}. Check your inbox!`);
       setView("verify_email");
     } catch (err: any) {
       const msg = err?.message || "Failed to send reset code. Please check your email.";
@@ -506,7 +528,7 @@ export default function Login() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label htmlFor="verification-code" className="field-label mb-0">
-                  6-Digit Verification Code
+                  Verification Code
                 </label>
                 <button
                   type="button"
@@ -523,10 +545,14 @@ export default function Login() {
                 maxLength={8}
                 value={verificationCode}
                 onChange={(e) => setVerificationCode(e.target.value.replace(/\s+/g, ""))}
-                placeholder="Enter 6-digit code"
+                placeholder="Enter verification code"
                 className="field tracking-widest text-center text-lg font-mono placeholder:tracking-normal placeholder:font-sans"
                 autoFocus
               />
+            </div>
+
+            <div className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5 text-[11px] text-neutral-400 leading-relaxed">
+              💡 <strong>Tip:</strong> Enter the verification code from your email above, or click the direct 1-click reset link in the email to set your password immediately.
             </div>
 
             <div className="flex items-center justify-between text-xs">
