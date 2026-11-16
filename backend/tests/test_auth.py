@@ -23,6 +23,8 @@ class TestForgotPasswordEndpoint:
         mock_client.auth.admin.generate_link.return_value = mock_link_res
         mock_get_supabase.return_value = mock_client
 
+        expected_link = "http://localhost:5173/reset-password?token=482910&email=user@example.com&flow=reset"
+
         response = client.post(
             "/api/auth/forgot-password",
             json={"email": "user@example.com", "redirect_to": "http://localhost:5173/reset-password"},
@@ -31,16 +33,14 @@ class TestForgotPasswordEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["code_length"] == 6
         assert "user@example.com" in data["message"]
 
-        # Verify send_email was called with the OTP code
+        # Verify send_email was called with the direct reset link
         mock_send_email.assert_called_once()
         call_kwargs = mock_send_email.call_args.kwargs
         assert call_kwargs["to"] == "user@example.com"
-        assert "482910" in call_kwargs["html"]
-        assert "482910" in call_kwargs["text"]
-        assert "http://localhost:5173/reset-password#access_token=test" in call_kwargs["html"]
+        assert expected_link in call_kwargs["html"]
+        assert expected_link in call_kwargs["text"]
 
     @patch("app.api.auth.send_email")
     @patch("app.api.auth.get_supabase_client")
@@ -57,7 +57,6 @@ class TestForgotPasswordEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        # Should not crash and not reveal whether user exists
         mock_send_email.assert_not_called()
 
     def test_forgot_password_invalid_email(self):

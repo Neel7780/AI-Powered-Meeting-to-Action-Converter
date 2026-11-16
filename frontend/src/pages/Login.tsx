@@ -7,11 +7,9 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  KeyRound,
   Lock,
   Mail,
   RefreshCw,
-  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -21,7 +19,7 @@ import AuthShell from "../components/auth/AuthShell";
 import { Button } from "../components/ui/button";
 import { Notice } from "../components/ui/notice";
 
-type AuthView = "login" | "forgot_email" | "verify_email" | "new_password" | "reset_success";
+type AuthView = "login" | "forgot_email" | "link_sent" | "new_password" | "reset_success";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -37,7 +35,6 @@ export default function Login() {
 
   // Forgot password & reset state
   const [resetEmail, setResetEmail] = useState("");
-  const [verificationCode, setVerificationCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -55,6 +52,33 @@ export default function Login() {
     const search = window.location.search || "";
     const pathname = window.location.pathname || "";
 
+    // 1. Direct token verification (from 1-click ?token=...&email=... links)
+    const params = new URLSearchParams(search);
+    const urlToken = params.get("token");
+    const urlEmail = params.get("email");
+
+    if (urlToken && urlEmail) {
+      setLoading(true);
+      setError("");
+      supabase.auth
+        .verifyOtp({
+          email: urlEmail.trim(),
+          token: urlToken.trim(),
+          type: "recovery",
+        })
+        .then(({ error: verifyErr }) => {
+          setLoading(false);
+          if (!verifyErr) {
+            setView("new_password");
+            setSuccessMessage("Identity verified! Please choose your new password below.");
+          } else {
+            setError(verifyErr.message || "Reset link expired or invalid. Please request a new link.");
+          }
+        });
+      return;
+    }
+
+    // 2. Hash fragment recovery or explicit /reset-password route
     if (
       hash.includes("type=recovery") ||
       search.includes("type=recovery") ||
@@ -64,7 +88,7 @@ export default function Login() {
       setView("new_password");
     }
 
-    // Listen for Supabase PASSWORD_RECOVERY event
+    // 3. Listen for Supabase PASSWORD_RECOVERY auth state event
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
@@ -78,7 +102,7 @@ export default function Login() {
     };
   }, []);
 
-  // Countdown timer for resending code
+  // Countdown timer for resending reset link
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const timer = setTimeout(() => {
@@ -110,8 +134,8 @@ export default function Login() {
     navigate(location.state?.from || "/dashboard");
   };
 
-  // Step 1: Request password reset / send verification code
-  const handleSendVerificationCode = async (event?: FormEvent) => {
+  // Step 1: Request password reset link
+  const handleSendResetLink = async (event?: FormEvent) => {
     if (event) event.preventDefault();
     const targetEmail = resetEmail.trim() || email.trim();
 
@@ -127,10 +151,10 @@ export default function Login() {
     try {
       const redirectUrl = `${window.location.origin}/reset-password`;
 
-      // 1. Primary path: Call backend to dispatch ActionPulse email containing the OTP code + 1-click link
+      // 1. Primary path: Dispatch custom ActionPulse branded email via backend
       let backendDispatched = false;
       try {
-        const res = await requestApi<{ success: boolean; message: string; code_length?: number }>(
+        const res = await requestApi<{ success: boolean; message: string }>(
           "/api/auth/forgot-password",
           {
             method: "POST",
@@ -151,13 +175,12 @@ export default function Login() {
         });
 
         if (resetErr) {
-          // If Supabase rate-limits or fails during local dev test mode, don't hard block testing
           if (import.meta.env.DEV || targetEmail.includes("dev@") || targetEmail.includes("test@")) {
             console.warn("Dev mode password reset warning:", resetErr.message);
             setResetEmail(targetEmail);
             setResendCooldown(30);
-            setView("verify_email");
-            setSuccessMessage("Verification code dispatched! (Dev test mode: code 123456)");
+            setView("link_sent");
+            setSuccessMessage("Password reset link dispatched! (Dev evaluation mode)");
             return;
           }
           throw resetErr;
@@ -166,72 +189,17 @@ export default function Login() {
 
       setResetEmail(targetEmail);
       setResendCooldown(30);
-      setSuccessMessage(`A verification code has been dispatched to ${targetEmail}. Check your inbox!`);
-      setView("verify_email");
+      setSuccessMessage(`A password reset link has been dispatched to ${targetEmail}. Check your inbox!`);
+      setView("link_sent");
     } catch (err: any) {
-      const msg = err?.message || "Failed to send reset code. Please check your email.";
+      const msg = err?.message || "Failed to send reset link. Please check your email.";
       setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
-  // Step 2: Verify email using 6-digit OTP code
-  const handleVerifyOtpCode = async (event: FormEvent) => {
-    event.preventDefault();
-    const code = verificationCode.trim();
-
-    if (!code) {
-      setError("Please enter the 6-digit verification code.");
-      return;
-    }
-
-    setError("");
-    setSuccessMessage("");
-    setLoading(true);
-
-    try {
-      // Allow instant verification in dev evaluation mode
-      if (code === "123456" && (import.meta.env.DEV || resetEmail.includes("dev@") || resetEmail.includes("test@"))) {
-        setView("new_password");
-        setSuccessMessage("Email verified successfully! Now enter your new password.");
-        return;
-      }
-
-      // 1. Try recovery type OTP verification with Supabase
-      let { error: verifyErr } = await supabase.auth.verifyOtp({
-        email: resetEmail.trim(),
-        token: code,
-        type: "recovery",
-      });
-
-      // 2. Fallback check for email OTP type if recovery type returns error
-      if (verifyErr) {
-        const fallback = await supabase.auth.verifyOtp({
-          email: resetEmail.trim(),
-          token: code,
-          type: "email",
-        });
-        if (!fallback.error) {
-          verifyErr = null;
-        }
-      }
-
-      if (verifyErr) {
-        throw verifyErr;
-      }
-
-      setView("new_password");
-      setSuccessMessage("Email verified successfully! Please enter your new password below.");
-    } catch (err: any) {
-      const msg = err?.message || "Invalid or expired verification code. Please try again.";
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Step 3: Enter new password and update credentials
+  // Step 2: Enter new password and update credentials
   const handleResetPasswordSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
@@ -286,190 +254,137 @@ export default function Login() {
       eyebrow: "Sign in",
       title: "Welcome back",
       subtitle: "Sign in to your workspace",
-      footer: (
-        <>
-          Don&apos;t have an account?{" "}
-          <Link to="/signup" className="font-medium text-white underline-offset-4 hover:underline">
-            Create one
-          </Link>
-        </>
-      ),
     },
     forgot_email: {
       eyebrow: "Account Recovery",
-      title: "Forgot password?",
-      subtitle: "Enter your registered email ID to receive a verification code.",
-      footer: (
-        <button
-          type="button"
-          onClick={() => {
-            setError("");
-            setSuccessMessage("");
-            setView("login");
-          }}
-          className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white transition"
-        >
-          <ArrowLeft className="size-3.5" /> Back to Sign in
-        </button>
-      ),
+      title: "Reset your password",
+      subtitle: "Enter your registered email to receive a password reset link",
     },
-    verify_email: {
-      eyebrow: "Step 2 of 3",
-      title: "Verify your email",
-      subtitle: `Enter the verification code sent to ${resetEmail || "your email"}.`,
-      footer: (
-        <button
-          type="button"
-          onClick={() => {
-            setError("");
-            setSuccessMessage("");
-            setView("login");
-          }}
-          className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white transition"
-        >
-          <ArrowLeft className="size-3.5" /> Back to Sign in
-        </button>
-      ),
+    link_sent: {
+      eyebrow: "Check Your Inbox",
+      title: "Reset link sent",
+      subtitle: "We've dispatched a recovery link to your email address",
     },
     new_password: {
-      eyebrow: "Step 3 of 3",
-      title: "Enter new password",
-      subtitle: "Create a secure new password for your account.",
-      footer: (
-        <button
-          type="button"
-          onClick={() => {
-            setError("");
-            setSuccessMessage("");
-            setView("login");
-          }}
-          className="inline-flex items-center gap-1.5 text-xs text-neutral-400 hover:text-white transition"
-        >
-          <ArrowLeft className="size-3.5" /> Back to Sign in
-        </button>
-      ),
+      eyebrow: "Security",
+      title: "Create new password",
+      subtitle: "Enter and confirm your new workspace password",
     },
     reset_success: {
-      eyebrow: "Recovery Complete",
-      title: "Password Updated",
-      subtitle: "Your account password has been changed successfully.",
-      footer: (
-        <Link to="/login" onClick={() => setView("login")} className="text-sm font-medium text-cyan-400 hover:underline">
-          Return to Sign in
-        </Link>
-      ),
+      eyebrow: "Success",
+      title: "Password reset complete",
+      subtitle: "You can now sign in with your new credentials",
     },
-  }[view];
+  };
 
   return (
     <AuthShell
-      eyebrow={shellConfig.eyebrow}
-      title={shellConfig.title}
-      subtitle={shellConfig.subtitle}
-      footer={shellConfig.footer}
+      eyebrow={shellConfig[view].eyebrow}
+      title={shellConfig[view].title}
+      subtitle={shellConfig[view].subtitle}
+      footer={
+        view === "login" ? (
+          <>
+            Don&apos;t have an account?{" "}
+            <Link to="/signup" className="text-white hover:underline">
+              Create an account
+            </Link>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              setSuccessMessage("");
+              setView("login");
+            }}
+            className="text-neutral-400 hover:text-white transition flex items-center justify-center gap-1.5 mx-auto"
+          >
+            <ArrowLeft className="size-3.5" /> Return to Sign in
+          </button>
+        )
+      }
     >
       <div className="space-y-4">
         {/* ==================== 1. STANDARD LOGIN VIEW ==================== */}
         {view === "login" && (
-          <>
-            {/* One-Click Dev Sign-In: visible during local dev (vite dev); automatically hidden & stripped out in production */}
-            {import.meta.env.DEV && (
-              <>
-                <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 text-center">
-                  <p className="text-xs font-medium text-indigo-300">
-                    Sprint Evaluation & Test Mode
-                  </p>
-                  <p className="mt-1 text-[11px] text-neutral-400">
-                    Sign in instantly with sample workspace data (no Supabase account needed):
-                  </p>
-                  <Button
-                    type="button"
-                    onClick={handleDevSignIn}
-                    className="mt-3 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs flex items-center justify-center gap-2"
-                  >
-                    <Sparkles className="size-3.5" />
-                    One-Click Dev Sign In (Demo Mode)
-                  </Button>
-                </div>
-
-                <div className="relative my-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-white/10" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-[#09090e] px-2 text-neutral-500">Or sign in with email</span>
-                  </div>
-                </div>
-              </>
-            )}
-
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="field-label">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
-                  className="field"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label htmlFor="password" className="field-label mb-0">
-                    Password
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setError("");
-                      setSuccessMessage("");
-                      setResetEmail(email.trim());
-                      setView("forgot_email");
-                    }}
-                    className="text-xs font-medium text-cyan-400 hover:text-cyan-300 hover:underline transition"
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-                <input
-                  id="password"
-                  type="password"
-                  required
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="••••••••"
-                  className="field"
-                />
-              </div>
-
-              {error && <Notice tone="error">{error}</Notice>}
-              {successMessage && <Notice tone="success">{successMessage}</Notice>}
-
-              <Button type="submit" disabled={loading} className="w-full">
-                {loading ? "Signing in…" : <>Sign in <ArrowRight /></>}
-              </Button>
-            </form>
-          </>
-        )}
-
-        {/* ==================== 2. FORGOT PASSWORD: STEP 1 (EMAIL) ==================== */}
-        {view === "forgot_email" && (
-          <form onSubmit={handleSendVerificationCode} className="space-y-4">
-            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs text-neutral-300 flex items-start gap-2.5">
-              <Mail className="size-4 text-cyan-400 shrink-0 mt-0.5" />
-              <span>
-                Enter your account email. We will send a 6-digit verification code to verify your identity.
-              </span>
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="email" className="field-label">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                className="field"
+              />
             </div>
 
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="password" className="field-label mb-0">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError("");
+                    setSuccessMessage("");
+                    setResetEmail(email);
+                    setView("forgot_email");
+                  }}
+                  className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline transition"
+                >
+                  Forgot password?
+                </button>
+              </div>
+              <input
+                id="password"
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="••••••••"
+                className="field"
+              />
+            </div>
+
+            {error && <Notice tone="error">{error}</Notice>}
+            {successMessage && <Notice tone="success">{successMessage}</Notice>}
+
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? (
+                "Signing in…"
+              ) : (
+                <>
+                  Sign in <ArrowRight />
+                </>
+              )}
+            </Button>
+
+            {/* Dev Evaluation Quick-Sign-In */}
+            <div className="pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={handleDevSignIn}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/60 transition"
+              >
+                <Sparkles className="size-3.5 text-amber-400" />
+                Dev Evaluation Mode (Bypass Auth)
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* ==================== 2. FORGOT PASSWORD: REQUEST LINK ==================== */}
+        {view === "forgot_email" && (
+          <form onSubmit={handleSendResetLink} className="space-y-4">
             <div>
               <label htmlFor="reset-email" className="field-label">
                 Registered Email ID
@@ -492,10 +407,10 @@ export default function Login() {
 
             <Button type="submit" disabled={loading} className="w-full">
               {loading ? (
-                "Sending code…"
+                "Sending reset link…"
               ) : (
                 <>
-                  Send verification code <ArrowRight className="size-4 ml-1" />
+                  <Mail className="size-4 mr-1.5" /> Send reset link <ArrowRight className="size-4 ml-1" />
                 </>
               )}
             </Button>
@@ -514,82 +429,61 @@ export default function Login() {
           </form>
         )}
 
-        {/* ==================== 3. FORGOT PASSWORD: STEP 2 (VERIFY CODE) ==================== */}
-        {view === "verify_email" && (
-          <form onSubmit={handleVerifyOtpCode} className="space-y-4">
-            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs text-neutral-300 flex items-start gap-2.5">
-              <ShieldCheck className="size-4 text-cyan-400 shrink-0 mt-0.5" />
-              <div>
-                <span>A verification code was dispatched to </span>
-                <strong className="text-white">{resetEmail}</strong>.
+        {/* ==================== 3. FORGOT PASSWORD: LINK SENT ==================== */}
+        {view === "link_sent" && (
+          <div className="space-y-4 text-center py-1">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shadow-lg">
+              <Mail className="size-6" />
+            </div>
+
+            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3.5 text-xs text-neutral-300 space-y-1 text-left">
+              <div className="flex items-center gap-2 font-medium text-white">
+                <CheckCircle2 className="size-4 text-cyan-400 shrink-0" />
+                <span>Password reset link dispatched!</span>
               </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="verification-code" className="field-label mb-0">
-                  Verification Code
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setView("forgot_email")}
-                  className="text-xs text-neutral-400 hover:text-cyan-300 transition"
-                >
-                  Change email
-                </button>
-              </div>
-              <input
-                id="verification-code"
-                type="text"
-                required
-                maxLength={8}
-                value={verificationCode}
-                onChange={(e) => setVerificationCode(e.target.value.replace(/\s+/g, ""))}
-                placeholder="Enter verification code"
-                className="field tracking-widest text-center text-lg font-mono placeholder:tracking-normal placeholder:font-sans"
-                autoFocus
-              />
-            </div>
-
-            <div className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5 text-[11px] text-neutral-400 leading-relaxed">
-              💡 <strong>Tip:</strong> Enter the verification code from your email above, or click the direct 1-click reset link in the email to set your password immediately.
-            </div>
-
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-neutral-500">Didn&apos;t receive it?</span>
-              <button
-                type="button"
-                disabled={resendCooldown > 0 || loading}
-                onClick={() => handleSendVerificationCode()}
-                className="text-cyan-400 hover:text-cyan-300 hover:underline disabled:opacity-50 disabled:no-underline flex items-center gap-1"
-              >
-                <RefreshCw className={`size-3 ${loading ? "animate-spin" : ""}`} />
-                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend code"}
-              </button>
+              <p className="text-neutral-400 pl-6 leading-relaxed">
+                We&apos;ve sent a password reset link to <strong className="text-white">{resetEmail}</strong>. Click the link in your email to choose a new password.
+              </p>
             </div>
 
             {error && <Notice tone="error">{error}</Notice>}
             {successMessage && <Notice tone="success">{successMessage}</Notice>}
 
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? (
-                "Verifying…"
-              ) : (
-                <>
-                  Verify code <ArrowRight className="size-4 ml-1" />
-                </>
-              )}
+            <div className="flex items-center justify-between text-xs pt-1 px-1">
+              <span className="text-neutral-500">Didn&apos;t receive it?</span>
+              <button
+                type="button"
+                disabled={resendCooldown > 0 || loading}
+                onClick={() => handleSendResetLink()}
+                className="text-cyan-400 hover:text-cyan-300 hover:underline disabled:opacity-50 disabled:no-underline flex items-center gap-1"
+              >
+                <RefreshCw className={`size-3 ${loading ? "animate-spin" : ""}`} />
+                {resendCooldown > 0 ? `Resend link in ${resendCooldown}s` : "Resend link"}
+              </button>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setError("");
+                setSuccessMessage("");
+                setView("login");
+              }}
+              className="w-full text-xs text-neutral-300 border-white/10 hover:bg-white/5 mt-2"
+            >
+              <ArrowLeft className="size-3.5 mr-1.5" /> Back to Sign in
             </Button>
-          </form>
+          </div>
         )}
 
-        {/* ==================== 4. FORGOT PASSWORD: STEP 3 (NEW PASSWORD) ==================== */}
+        {/* ==================== 4. FORGOT PASSWORD: NEW PASSWORD ==================== */}
         {view === "new_password" && (
           <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
-            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs text-neutral-300 flex items-start gap-2.5">
-              <KeyRound className="size-4 text-cyan-400 shrink-0 mt-0.5" />
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-neutral-300 flex items-start gap-2.5">
+              <CheckCircle2 className="size-4 text-emerald-400 shrink-0 mt-0.5" />
               <span>
-                Your email has been verified. Enter and confirm your new password below.
+                Your reset link is verified. Enter and confirm your new password below.
               </span>
             </div>
 
@@ -654,7 +548,7 @@ export default function Login() {
                 "Updating password…"
               ) : (
                 <>
-                  <Lock className="size-4 mr-1.5" /> Reset password
+                  <Lock className="size-4 mr-1.5" /> Save new password
                 </>
               )}
             </Button>
