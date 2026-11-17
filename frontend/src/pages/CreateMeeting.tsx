@@ -19,4 +19,5 @@ export function CreateMeeting({ onSuccess, onCancel }: CreateMeetingProps = {}) 
     </div>
   );
 }
+
 export default CreateMeeting;
