@@ -9,7 +9,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, Response
 
 from app.core.config import settings
-from app.core.deps import ADMIN_ROLES, DEV_USER_ID, CurrentUser, get_current_user, require_role
+from app.core.deps import ADMIN_ROLES, DEV_USER_ID, WORKSPACE_ROLES, CurrentUser, get_current_user, require_role
 from app.core.supabase import get_supabase_client
 from app.schemas.github import GitHubAccessUpdate, GitHubInstallCallback, GitHubMappingUpdate, GitHubOAuthCallback
 from app.services import github
@@ -68,7 +68,7 @@ async def oauth_callback(payload: GitHubOAuthCallback, user: CurrentUser = Depen
 
 @router.get("/workspaces/{workspace_id}/github")
 def get_settings(workspace_id: UUID, user: CurrentUser = Depends(integration_user)):
-    role = require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    role = require_role(workspace_id, WORKSPACE_ROLES, user)
     db = get_supabase_client()
     links = github.database_rows(db.table("github_workspace_installations")
                                  .select("installation_id,github_installations(*)")
@@ -77,11 +77,11 @@ def get_settings(workspace_id: UUID, user: CurrentUser = Depends(integration_use
                                  .order("full_name").order("repository_id"))
     grant_query = (db.table("github_repository_permissions").select("repository_id,user_id,level,denied_actions")
                    .eq("workspace_id", str(workspace_id)).order("repository_id").order("user_id"))
-    if role != "admin":
+    if role not in ADMIN_ROLES:
         grant_query = grant_query.eq("user_id", str(user.id))
     grants = github.database_rows(grant_query)
     installations = [link["github_installations"] for link in links]
-    if role != "admin":
+    if role not in ADMIN_ROLES:
         grants = [g for g in grants if g["user_id"] == str(user.id)]
         by_installation = {i["id"]: i for i in installations}
         by_repo = {g["repository_id"]: g for g in grants}
@@ -92,7 +92,7 @@ def get_settings(workspace_id: UUID, user: CurrentUser = Depends(integration_use
                                            by_installation[r["installation_id"]]["permissions"])]
         visible_ids = {r["installation_id"] for r in repos}
         installations = [i for i in installations if i["id"] in visible_ids]
-        require_role(workspace_id, {"admin", "organiser", "member"}, user)
+        require_role(workspace_id, WORKSPACE_ROLES, user)
         return {"configured": github.configured(), "can_manage": False, "installations": installations,
                 "repositories": repos, "grants": grants, "members": [],
                 "actions": [{"id": name, **policy} for name, policy in github.ACTIONS.items()]}
@@ -161,7 +161,7 @@ async def sync(workspace_id: UUID, installation_id: GitHubID, user: CurrentUser 
 @router.get("/workspaces/{workspace_id}/github/repositories/{repository_id}/details")
 async def repository_details(workspace_id: UUID, repository_id: GitHubID,
                              user: CurrentUser = Depends(integration_user)):
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
     context = github.authorize_repository(workspace_id, user.id, repository_id)
     token = await github.installation_token(context["installation_id"], repository_id)
     fresh = github.authorize_repository(workspace_id, user.id, repository_id)
