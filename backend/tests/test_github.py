@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.api import github as api
+from app.core import deps
 from app.core.config import settings
 from app.core.deps import DEV_USER_ID, CurrentUser, get_current_user
 from app.services import github
@@ -320,3 +321,145 @@ def test_database_pagination_does_not_truncate_permission_rows():
     rows = github.database_rows(query)
     assert len(rows) == 201 and rows[-1] == {"id": 200}
     assert [call.args for call in query.range.call_args_list] == [(0, 199), (200, 399)]
+
+
+@pytest.fixture
+def role_database(environment, monkeypatch):
+    """Exercise the real membership check; only the Supabase query transport is replaced."""
+    rows = {
+        "workspace_members": [{"workspace_id": str(WORKSPACE), "user_id": str(USER), "role": "owner"}],
+        "profiles": [{"id": str(USER), "display_name": "Workspace owner", "email": "owner@example.test"}],
+        "github_workspace_installations": [{
+            "workspace_id": str(WORKSPACE), "installation_id": 101,
+            "github_installations": {"id": 101, "status": "active", "permissions": {"metadata": "read"}},
+        }],
+        "github_repositories": [{
+            "workspace_id": str(WORKSPACE), "repository_id": 501, "installation_id": 101, "connected": True,
+        }],
+        "github_repository_permissions": [],
+    }
+    db = MagicMock()
+
+    def table(name):
+        query = MagicMock()
+        filters = {}
+        query.select.return_value = query
+        query.order.return_value = query
+        query.range.return_value = query
+        query.in_.return_value = query
+
+        def eq(key, value):
+            filters[key] = value
+            return query
+
+        query.eq.side_effect = eq
+        query.execute.side_effect = lambda: SimpleNamespace(data=[
+            row for row in rows[name] if all(str(row.get(key)) == str(value) for key, value in filters.items())
+        ])
+        return query
+
+    db.table.side_effect = table
+    monkeypatch.setattr(deps, "get_supabase_client", lambda: db)
+    monkeypatch.setattr(api, "get_supabase_client", lambda: db)
+    monkeypatch.setattr(api, "require_role", deps.require_role)
+    return rows
+
+
+@pytest.mark.parametrize(("role", "can_manage"), [
+    ("owner", True), ("admin", True), ("member", False), ("organiser", False),
+])
+def test_settings_accept_workspace_roles(environment, role_database, role, can_manage):
+    role_database["workspace_members"][0]["role"] = role
+    response = environment.get(BASE)
+    assert response.status_code == 200
+    assert response.json()["can_manage"] is can_manage
+    assert len(response.json()["members"]) == (1 if can_manage else 0)
+    assert response.json()["grants"] == []
+    if not can_manage:
+        assert response.json()["repositories"] == []
+
+
+MANAGEMENT_REQUESTS = [
+    ("POST", "/connect", None, "state"),
+    ("PATCH", "/repositories/501", {"connected": True}, "github_manage_repository"),
+    ("PATCH", "/repositories/501", {"connected": False}, "github_manage_repository"),
+    ("PUT", f"/repositories/501/members/{USER}", {"level": "read", "denied_actions": []}, "github_set_access"),
+    ("POST", "/installations/101/sync", None, "github_sync_installation"),
+    ("DELETE", "/installations/101", None, "github_disconnect_installation"),
+]
+
+
+@pytest.fixture
+def management_effects(monkeypatch):
+    effects = {
+        "state": MagicMock(return_value=STATE),
+        "rpc": MagicMock(),
+        "snapshot": AsyncMock(return_value=({"id": 101, "status": "active"}, [])),
+        "token": AsyncMock(return_value="installation-token"),
+        "request": AsyncMock(return_value={"id": 501}),
+    }
+    for name, attribute in [
+        ("state", "new_state"), ("rpc", "rpc"), ("snapshot", "snapshot"),
+        ("token", "installation_token"), ("request", "request"),
+    ]:
+        monkeypatch.setattr(github, attribute, effects[name])
+    return effects
+
+
+@pytest.mark.parametrize("role", ["owner", "admin"])
+@pytest.mark.parametrize(("method", "path", "body", "operation"), MANAGEMENT_REQUESTS)
+def test_workspace_managers_can_manage_github(
+    environment, role_database, management_effects, role, method, path, body, operation,
+):
+    role_database["workspace_members"][0]["role"] = role
+    response = environment.request(method, BASE + path, **({"json": body} if body else {}))
+    assert response.status_code == 200
+    if operation == "state":
+        management_effects["state"].assert_called_once_with(WORKSPACE, USER)
+    else:
+        call = management_effects["rpc"].call_args
+        assert call.args[0] == operation
+        assert call.kwargs["p_actor_id"] == str(USER)
+        assert call.kwargs["p_workspace_id"] == str(WORKSPACE)
+
+
+@pytest.mark.parametrize("role", ["member", "organiser", "unknown", None])
+@pytest.mark.parametrize(("method", "path", "body", "operation"), MANAGEMENT_REQUESTS)
+def test_non_managers_cannot_manage_github(
+    environment, role_database, management_effects, role, method, path, body, operation,
+):
+    if role is None:
+        role_database["workspace_members"][0]["workspace_id"] = "different-workspace"
+    else:
+        role_database["workspace_members"][0]["role"] = role
+    response = environment.request(method, BASE + path, **({"json": body} if body else {}))
+    assert response.status_code == (404 if role is None else 403)
+    for effect in management_effects.values():
+        effect.assert_not_called()
+
+
+@pytest.mark.parametrize("role", ["owner", "admin"])
+def test_manager_role_does_not_bypass_repository_grants(
+    environment, role_database, management_effects, role,
+):
+    role_database["workspace_members"][0]["role"] = role
+    management_effects["rpc"].return_value = None
+    response = environment.get(f"{BASE}/repositories/501/details")
+    assert response.status_code == 404
+    management_effects["token"].assert_not_called()
+    management_effects["request"].assert_not_called()
+
+
+def test_owner_revoked_during_settings_load_cannot_receive_manager_data(environment, role_database, monkeypatch):
+    original = github.database_rows
+
+    def revoke_after_profiles(query):
+        result = original(query)
+        if result and "display_name" in result[0]:
+            role_database["workspace_members"][0]["role"] = "member"
+        return result
+
+    monkeypatch.setattr(github, "database_rows", revoke_after_profiles)
+    response = environment.get(BASE)
+    assert response.status_code == 403
+    assert "owner@example.test" not in response.text
