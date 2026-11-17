@@ -54,4 +54,22 @@ export interface MeetingDetails {
   organiser_name: string;
   status: 'draft' | 'extracting' | 'review_ready' | 'completed';
   candidate_count: number;
+  ai_processing?: boolean;
+  visibility?: 'workspace' | 'private';
 }
+
+export interface ManualTask {
+  id: string;
+  meeting_id: string;
+  workspace_id?: string;
+  title: string;
+  description?: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: 'todo' | 'in_progress' | 'blocked' | 'done';
+  deadline_utc?: string | null;
+  source_excerpt?: string;
+  assignee_user_id?: string | null;
+  assignee?: WorkspaceMember | null;
+  created_at?: string;
+}
+

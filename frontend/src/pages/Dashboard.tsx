@@ -355,7 +355,27 @@ export default function Dashboard() {
                         </p>
 
                         <p className="text-xs text-slate-500">
-                          Schedule a new meeting
+                          Schedule meeting (No-AI or AI Mode)
+                        </p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => navigate('/meeting-review')}
+                      className="flex w-full items-center rounded-xl border border-slate-200 p-4 text-left transition hover:border-emerald-200 hover:bg-emerald-50"
+                    >
+                      <span className="mr-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100">
+                        🔒
+                      </span>
+
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          Meeting Review & Task Workspace
+                        </p>
+
+                        <p className="text-xs text-slate-500">
+                          Staging gate & manual task assignment
                         </p>
                       </div>
                     </button>
