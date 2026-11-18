@@ -79,6 +79,32 @@ def chat_message(
             detail="Query cannot be empty or whitespace only"
         )
 
+    db = get_supabase_client()
+
+    # Validate session ownership and workspace scoping if session_id is provided
+    session_row = None
+    if payload.session_id:
+        s_resp = (
+            db.table("chat_sessions")
+            .select("id, workspace_id, user_id, title")
+            .eq("id", str(payload.session_id))
+            .execute()
+        )
+        if not s_resp.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chat session not found"
+            )
+        session_row = s_resp.data[0]
+        if (
+            str(session_row.get("user_id")) != str(user.id)
+            or str(session_row.get("workspace_id")) != str(payload.workspace_id)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this chat session"
+            )
+
     try:
         response = answer_workspace_chat(
             workspace_id=payload.workspace_id,
@@ -92,7 +118,6 @@ def chat_message(
         if payload.session_id:
             response.session_id = payload.session_id
             try:
-                db = get_supabase_client()
                 # Save user message
                 db.table("chat_messages").insert({
                     "session_id": str(payload.session_id),
@@ -111,13 +136,7 @@ def chat_message(
                 }).execute()
 
                 # Auto-generate title if session is brand new
-                s_resp = (
-                    db.table("chat_sessions")
-                    .select("title")
-                    .eq("id", str(payload.session_id))
-                    .execute()
-                )
-                if s_resp.data and s_resp.data[0].get("title") in ("New Conversation", "New Chat", ""):
+                if session_row and session_row.get("title") in ("New Conversation", "New Chat", ""):
                     title_candidate = query_clean[:32] + ("..." if len(query_clean) > 32 else "")
                     db.table("chat_sessions").update({
                         "title": title_candidate,
@@ -283,15 +302,21 @@ def get_chat_session(
         db = get_supabase_client()
         s_resp = (
             db.table("chat_sessions")
-            .select("id, workspace_id, title, selected_meeting_id, created_at, updated_at")
+            .select("id, workspace_id, user_id, title, selected_meeting_id, created_at, updated_at")
             .eq("id", str(session_id))
-            .eq("user_id", str(user.id))
             .execute()
         )
         if not s_resp.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found")
         
         session_data = s_resp.data[0]
+        if str(session_data.get("user_id")) != str(user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this chat session")
+
+        # Enforce current workspace membership before returning content
+        workspace_id = UUID(str(session_data["workspace_id"]))
+        require_role(workspace_id, WORKSPACE_ROLES, user)
+
         m_resp = (
             db.table("chat_messages")
             .select("id, session_id, role, content, citations, suggested_followups, created_at")
@@ -321,13 +346,21 @@ def delete_chat_session(
         db = get_supabase_client()
         s_resp = (
             db.table("chat_sessions")
-            .select("id")
+            .select("id, workspace_id, user_id")
             .eq("id", str(session_id))
-            .eq("user_id", str(user.id))
             .execute()
         )
         if not s_resp.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found")
+        
+        session_data = s_resp.data[0]
+        if str(session_data.get("user_id")) != str(user.id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this chat session")
+
+        # Enforce current workspace membership before deletion
+        workspace_id = UUID(str(session_data["workspace_id"]))
+        require_role(workspace_id, WORKSPACE_ROLES, user)
+
         db.table("chat_sessions").delete().eq("id", str(session_id)).execute()
         return None
     except HTTPException:

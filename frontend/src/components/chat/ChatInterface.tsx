@@ -28,6 +28,7 @@ import {
   getWorkspaceChatMeetings,
   sendChatMessage,
 } from '../../services/chatApi';
+import { useAuth } from '../../context/AuthContext';
 import type { ChatMessage, ChatSession, MeetingOption } from '../../types/chat';
 
 interface ChatInterfaceProps {
@@ -167,19 +168,19 @@ function renderInline(text: string): React.ReactNode {
   });
 }
 
-/** Local storage helpers for instant history and resilience */
-const getLocalSessions = (wsId: string): ChatSession[] => {
+/** Local storage helpers scoped by authenticated user and workspace */
+const getLocalSessions = (userId: string, wsId: string): ChatSession[] => {
   try {
-    const raw = localStorage.getItem(`actionpulse_chat_sessions_${wsId}`);
+    const raw = localStorage.getItem(`actionpulse_chat_sessions_${userId}_${wsId}`);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 };
 
-const saveLocalSessions = (wsId: string, list: ChatSession[]) => {
+const saveLocalSessions = (userId: string, wsId: string, list: ChatSession[]) => {
   try {
-    localStorage.setItem(`actionpulse_chat_sessions_${wsId}`, JSON.stringify(list));
+    localStorage.setItem(`actionpulse_chat_sessions_${userId}_${wsId}`, JSON.stringify(list));
   } catch {
     // ignore
   }
@@ -210,6 +211,9 @@ export default function ChatInterface({
   title = 'AI Meeting Copilot',
 }: ChatInterfaceProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const userId = user?.id || 'anon';
+
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
@@ -231,13 +235,13 @@ export default function ChatInterface({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Load available meetings and chat sessions
+  // Load available meetings and chat sessions (scoped to both workspace and user)
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
 
     // Load local sessions immediately for instant UX
-    const cached = getLocalSessions(workspaceId);
+    const cached = getLocalSessions(userId, workspaceId);
     setSessions(cached);
     setActiveSessionId(null);
     setSelectedMeetingId('');
@@ -258,7 +262,7 @@ export default function ChatInterface({
           const merged = Array.from(map.values()).sort(
             (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
           );
-          saveLocalSessions(workspaceId, merged);
+          saveLocalSessions(userId, workspaceId, merged);
           return merged;
         });
       })
@@ -276,7 +280,7 @@ export default function ChatInterface({
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, userId]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -315,7 +319,7 @@ export default function ChatInterface({
           setMessages(formatted);
           setSessions((prev) => {
             const updated = prev.map((s) => (s.id === session.id ? { ...s, messages: formatted } : s));
-            if (workspaceId) saveLocalSessions(workspaceId, updated);
+            if (workspaceId) saveLocalSessions(userId, workspaceId, updated);
             return updated;
           });
         }
@@ -334,7 +338,7 @@ export default function ChatInterface({
     }
     setSessions((prev) => {
       const updated = prev.filter((s) => s.id !== sessionId);
-      if (workspaceId) saveLocalSessions(workspaceId, updated);
+      if (workspaceId) saveLocalSessions(userId, workspaceId, updated);
       return updated;
     });
     if (activeSessionId === sessionId) {
@@ -359,24 +363,49 @@ export default function ChatInterface({
 
     let currentSessionId = activeSessionId;
     if (!currentSessionId) {
-      currentSessionId = `sess-${Date.now()}`;
-      setActiveSessionId(currentSessionId);
       const titleCandidate = text.length > 30 ? text.slice(0, 30) + '...' : text;
+      let createdSession: ChatSession;
+      try {
+        createdSession = await createChatSession(workspaceId, titleCandidate, selectedMeetingId);
+      } catch (err) {
+        console.warn('Backend session creation fallback:', err);
+        const nowIso = new Date().toISOString();
+        const fallbackUuid =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
+        createdSession = {
+          id: fallbackUuid,
+          workspace_id: workspaceId,
+          title: titleCandidate,
+          selected_meeting_id: selectedMeetingId || null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        };
+      }
+
+      currentSessionId = createdSession.id;
+      setActiveSessionId(currentSessionId);
+
       const newSession: ChatSession = {
-        id: currentSessionId,
-        workspace_id: workspaceId,
-        title: titleCandidate,
-        selected_meeting_id: selectedMeetingId || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        ...createdSession,
         messages: [userMessage],
       };
       setSessions((prev) => {
-        const next = [newSession, ...prev];
-        saveLocalSessions(workspaceId, next);
+        const next = [newSession, ...prev.filter((s) => s.id !== currentSessionId)];
+        saveLocalSessions(userId, workspaceId, next);
         return next;
       });
-      createChatSession(workspaceId, titleCandidate, selectedMeetingId).catch(() => {});
+    } else {
+      setSessions((prev) => {
+        const next = prev.map((s) =>
+          s.id === currentSessionId
+            ? { ...s, messages: [...(s.messages || []), userMessage] }
+            : s
+        );
+        saveLocalSessions(userId, workspaceId, next);
+        return next;
+      });
     }
 
     try {
@@ -419,7 +448,7 @@ export default function ChatInterface({
                   }
                 : s
             );
-            if (workspaceId) saveLocalSessions(workspaceId, sNext);
+            saveLocalSessions(userId, workspaceId, sNext);
             return sNext;
           });
         }

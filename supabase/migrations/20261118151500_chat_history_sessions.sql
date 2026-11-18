@@ -31,24 +31,27 @@ ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
 
 DO $$ 
 BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE tablename = 'chat_sessions' AND policyname = 'Users can manage their own chat sessions'
-    ) THEN
-        CREATE POLICY "Users can manage their own chat sessions"
-        ON public.chat_sessions FOR ALL
-        USING (auth.uid() = user_id);
-    END IF;
+    DROP POLICY IF EXISTS "Users can manage their own chat sessions" ON public.chat_sessions;
+    CREATE POLICY "Users can manage their own chat sessions"
+    ON public.chat_sessions FOR ALL
+    USING (
+        auth.uid() = user_id
+        AND EXISTS (
+            SELECT 1 FROM public.workspace_members wm
+            WHERE wm.workspace_id = chat_sessions.workspace_id
+              AND wm.user_id = auth.uid()
+        )
+    );
 
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_policies WHERE tablename = 'chat_messages' AND policyname = 'Users can manage messages in their sessions'
-    ) THEN
-        CREATE POLICY "Users can manage messages in their sessions"
-        ON public.chat_messages FOR ALL
-        USING (
-            EXISTS (
-                SELECT 1 FROM public.chat_sessions s
-                WHERE s.id = chat_messages.session_id AND s.user_id = auth.uid()
-            )
-        );
-    END IF;
+    DROP POLICY IF EXISTS "Users can manage messages in their sessions" ON public.chat_messages;
+    CREATE POLICY "Users can manage messages in their sessions"
+    ON public.chat_messages FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.chat_sessions s
+            JOIN public.workspace_members wm ON wm.workspace_id = s.workspace_id AND wm.user_id = auth.uid()
+            WHERE s.id = chat_messages.session_id
+              AND s.user_id = auth.uid()
+        )
+    );
 END $$;
