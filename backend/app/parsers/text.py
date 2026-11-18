@@ -90,7 +90,11 @@ def parse_text(data: bytes | str) -> list[Segment]:
             if sp_ts:
                 if start_ms is None:
                     start_ms = _parse_timestamp_ms(sp_ts)
-                candidate_speaker = re.sub(r"[\[\(]?(\d{1,2}:)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?[\]\)]?", "", candidate_speaker).strip(" []()-–:")
+                candidate_speaker = re.sub(
+                    r"[\[\(]?(\d{1,2}:)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?[\]\)]?",
+                    "",
+                    candidate_speaker,
+                ).strip(" []()-–:")
 
             # Ensure candidate speaker is <= 40 chars and does not end with digits (e.g. 'at 10' in 'Meeting at 10: 30')
             if len(candidate_speaker) <= 40 and not re.search(r"\b\d+$", candidate_speaker):
