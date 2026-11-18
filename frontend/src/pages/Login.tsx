@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowRight, Sparkles } from "lucide-react";
@@ -10,13 +10,19 @@ import { Notice } from "../components/ui/notice";
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signIn, devSignIn } = useAuth();
+  const { user, signIn, devSignIn } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      navigate(location.state?.from || "/dashboard", { replace: true });
+    }
+  }, [user, navigate, location.state]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();

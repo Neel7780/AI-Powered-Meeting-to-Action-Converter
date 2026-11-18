@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 interface AuthContextType {
   user: User | null;
@@ -28,39 +28,81 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+function getInitialSession(): { user: User | null; session: Session | null } {
+  try {
+    const devSessionRaw = localStorage.getItem("actionpulse_dev_session");
+    if (devSessionRaw) {
+      const parsed = JSON.parse(devSessionRaw);
+      if (parsed?.user) return { user: parsed.user, session: parsed };
+    }
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith("sb-") || key.includes("auth-token"))) {
+        const item = localStorage.getItem(key);
+        if (item) {
+          const parsed = JSON.parse(item);
+          const u = parsed?.user ?? parsed?.currentSession?.user ?? null;
+          const s =
+            parsed?.session ??
+            parsed?.currentSession ??
+            (parsed?.access_token ? parsed : null);
+          if (u) return { user: u, session: s };
+        }
+      }
+    }
+  } catch {
+    // ignore parsing errors
+  }
+  return { user: null, session: null };
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initial = getInitialSession();
+  const [user, setUser] = useState<User | null>(initial.user);
+  const [session, setSession] = useState<Session | null>(initial.session);
+  const [loading, setLoading] = useState<boolean>(!initial.user && isSupabaseConfigured);
 
   useEffect(() => {
     let mounted = true;
 
-    const loadSession = async () => {
-      // Check for local dev session first
-      const devSessionRaw = localStorage.getItem("actionpulse_dev_session");
-      if (devSessionRaw) {
-        try {
-          const parsed = JSON.parse(devSessionRaw);
-          if (mounted) {
-            setSession(parsed);
-            setUser(parsed.user);
-            setLoading(false);
-          }
-          return;
-        } catch {
-          // ignore parsing error
-        }
-      }
-
+    // Check for local dev session first
+    const devSessionRaw = localStorage.getItem("actionpulse_dev_session");
+    if (devSessionRaw) {
       try {
-        const { data, error } = await supabase.auth.getSession();
+        const parsed = JSON.parse(devSessionRaw);
+        if (mounted) {
+          setSession(parsed);
+          setUser(parsed.user);
+          setLoading(false);
+        }
+        return;
+      } catch {
+        // ignore parsing error
+      }
+    }
+
+    if (!isSupabaseConfigured) {
+      if (mounted) setLoading(false);
+      return;
+    }
+
+    const loadSession = async () => {
+      try {
+        // 3-second timeout safety to prevent hanging indefinitely on network/DNS lag
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<{ data: { session: null }; error: null }>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null }, error: null }), 3000)
+        );
+        const { data, error } = await Promise.race([sessionPromise, timeoutPromise]);
         if (error) {
-          console.debug("Remote session check bypassed:", error.message);
+          console.debug("Remote session check bypassed:", (error as { message?: string })?.message);
         }
         if (mounted) {
-          setSession(data?.session ?? null);
-          setUser(data?.session?.user ?? null);
+          if (data?.session) {
+            setSession(data.session);
+            setUser(data.session.user ?? null);
+          }
           setLoading(false);
         }
       } catch (err) {
@@ -75,9 +117,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (localStorage.getItem("actionpulse_dev_session")) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      if (mounted) {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
     });
 
     return () => {

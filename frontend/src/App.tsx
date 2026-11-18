@@ -1,5 +1,4 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { Loader2 } from "lucide-react";
 
 import ActionPulseLanding from "./components/landing/ActionPulseLanding";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
@@ -15,14 +14,7 @@ import { useAuth } from "./context/AuthContext";
 
 /** Redirects authenticated users straight to /dashboard; shows landing otherwise. */
 function RootRoute() {
-  const { user, loading } = useAuth();
-  if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gray-950">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
-      </div>
-    );
-  }
+  const { user } = useAuth();
   if (user) return <Navigate to="/dashboard" replace />;
   return <ActionPulseLanding />;
 }
