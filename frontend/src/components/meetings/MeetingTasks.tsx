@@ -13,10 +13,16 @@ const columns: { status: TaskStatus; title: string }[] = [
 
 export function MeetingTasks({ tasks, onRefresh }: { tasks: KanbanTaskItem[]; onRefresh: () => Promise<void> }) {
   const [view, setView] = useState<'board' | 'chains'>('board');
+  const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string>();
   const [updating, setUpdating] = useState(new Set<string>());
   const [error, setError] = useState('');
   const selected = tasks.find((task) => task.id === selectedId);
+  const search = query.trim().toLocaleLowerCase();
+  const visibleTasks = tasks.filter((task) => (
+    [task.title, task.description, task.source_excerpt]
+      .some((text) => text?.toLocaleLowerCase().includes(search))
+  ));
 
   const updateStatus = async (id: string, status: TaskStatus) => {
     const task = tasks.find((item) => item.id === id);
@@ -36,15 +42,20 @@ export function MeetingTasks({ tasks, onRefresh }: { tasks: KanbanTaskItem[]; on
   if (!tasks.length) return <p className="text-sm text-neutral-400">No confirmed tasks for this meeting yet.</p>;
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant={view === 'board' ? 'secondary' : 'ghost'} aria-pressed={view === 'board'} onClick={() => setView('board')}>Board</Button>
         <Button size="sm" variant={view === 'chains' ? 'secondary' : 'ghost'} aria-pressed={view === 'chains'} onClick={() => setView('chains')}>Dependencies</Button>
+        {view === 'board' && (
+          <input type="search" aria-label="Search meeting tasks" placeholder="Search tasks" className="field max-w-64 text-sm"
+            value={query} onChange={(event) => setQuery(event.target.value)} />
+        )}
       </div>
       {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
+      {view === 'board' && !visibleTasks.length && <p className="text-sm text-neutral-400">No matching tasks.</p>}
       {view === 'board' ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {columns.map(({ status, title }) => <KanbanColumn key={status} status={status} title={title}
-            tasks={tasks.filter((task) => task.status === status)} allTasks={tasks}
+            tasks={visibleTasks.filter((task) => task.status === status)} allTasks={tasks}
             onStatusChange={updateStatus} onDropTask={updateStatus} updatingTaskIds={updating}
             onOpenDependencyModal={(task) => setSelectedId(task.id)} />)}
         </div>

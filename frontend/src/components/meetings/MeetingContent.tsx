@@ -5,6 +5,7 @@ import type { MeetingEntry } from '../../services/meetingNavigation';
 import type { MeetingChapter, MeetingSummaryData } from '../../types/meetingDetails';
 import type { TranscriptSegment } from '../../types/review';
 import { MeetingChaptersTab } from './details/MeetingChaptersTab';
+import { MeetingChaptersTranscriptSplitView } from './details/MeetingChaptersTranscriptSplitView';
 import { MeetingSummaryTab } from './details/MeetingSummaryTab';
 import { MeetingTranscriptTab } from './details/MeetingTranscriptTab';
 import { TranscriptUploadModal } from './TranscriptUploadModal';
@@ -32,16 +33,22 @@ export function MeetingSummary({ summary, error, meeting, onTimestamp }: {
   );
 }
 
-export function MeetingChapters({ meetingId, onTimestamp }: { meetingId: string; onTimestamp: (timestamp: string) => void }) {
+function useChapters(meetingId: string, enabled: boolean) {
   const [state, setState] = useState<{ chapters?: MeetingChapter[]; error?: string }>({});
   useEffect(() => {
+    if (!enabled || state.chapters || state.error) return;
     const controller = new AbortController();
     requestApi<{ chapters: MeetingChapter[] }>(`/api/meetings/${meetingId}/chapters`, { signal: controller.signal }).then(
-      ({ chapters }) => setState({ chapters }),
+      ({ chapters }) => { if (!controller.signal.aborted) setState({ chapters }); },
       (error: Error) => { if (!controller.signal.aborted) setState({ error: error.message }); },
     );
     return () => controller.abort();
-  }, [meetingId]);
+  }, [enabled, meetingId, state.chapters, state.error]);
+  return state;
+}
+
+export function MeetingChapters({ meetingId, onTimestamp }: { meetingId: string; onTimestamp: (timestamp: string) => void }) {
+  const state = useChapters(meetingId, true);
   if (state.error) return <p role="alert" className="text-sm text-rose-300">Could not load chapters. {state.error}</p>;
   if (!state.chapters) return <p role="status" className="text-sm text-neutral-400">Loading chapters…</p>;
   if (!state.chapters.length) return <p className="text-sm text-neutral-400">No chapters are available for this meeting.</p>;
@@ -58,7 +65,9 @@ export function MeetingTranscript({ meeting, canManage, timestamp, excerpt, onBa
   const [actionError, setActionError] = useState('');
   const [extracting, setExtracting] = useState(false);
   const [seek, setSeek] = useState<number | null>(null);
+  const [showChapters, setShowChapters] = useState(false);
   const transcriptId = meeting.transcripts?.id;
+  const { chapters, error: chaptersError } = useChapters(meeting.id, showChapters);
   const canUpload = canManage && ['draft', 'failed'].includes(meeting.status) && !transcriptId;
   const canExtract = canManage && meeting.ai_processing && !!transcriptId && !meeting.needsSpeakers
     && ['draft', 'failed'].includes(meeting.status);
@@ -91,6 +100,7 @@ export function MeetingTranscript({ meeting, canManage, timestamp, excerpt, onBa
     })
   );
   const selectedSegment = seek === null ? undefined : segments?.find((segment) => segment.start_seconds === seek);
+  const highlightedSegmentId = selectedSegment?.id || (sourceSegment ? sourceSegment.id : undefined);
 
   return (
     <div className="space-y-4">
@@ -123,10 +133,24 @@ export function MeetingTranscript({ meeting, canManage, timestamp, excerpt, onBa
       </section>}
       {loadError ? <p role="alert" className="text-sm text-rose-300">{loadError}</p>
         : transcriptId && !segments ? <p role="status" className="text-sm text-neutral-400">Loading transcript…</p>
-        : segments?.length ? <div className="overflow-hidden rounded-xl border border-white/10">
-          <MeetingTranscriptTab readOnly segments={segments} playbackSeconds={seek ?? -1}
-            highlightedSegmentId={selectedSegment?.id || (sourceSegment ? sourceSegment.id : undefined)}
-            highlightedTimestamp={timestamp} onSeek={setSeek} />
+        : segments?.length ? <div className="space-y-3">
+          <Button variant="outline" size="sm" aria-pressed={showChapters} onClick={() => setShowChapters(!showChapters)}>
+            {showChapters ? 'Hide chapters' : 'Show chapters alongside transcript'}
+          </Button>
+          {showChapters && !chapters?.length && (
+            <p className="text-sm text-neutral-400" role={chaptersError ? 'alert' : 'status'}>
+              {chaptersError ? 'Could not load chapters.' : chapters ? 'No chapters are available for this meeting.' : 'Loading chapters…'}
+            </p>
+          )}
+          {showChapters && chapters?.length ? (
+            <MeetingChaptersTranscriptSplitView readOnly chapters={chapters} segments={segments} playbackSeconds={seek ?? -1}
+              highlightedSegmentId={highlightedSegmentId} highlightedTimestamp={timestamp} onSeek={setSeek} />
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-white/10">
+              <MeetingTranscriptTab readOnly segments={segments} playbackSeconds={seek ?? -1}
+                highlightedSegmentId={highlightedSegmentId} highlightedTimestamp={timestamp} onSeek={setSeek} />
+            </div>
+          )}
         </div> : !canUpload && meeting.status !== 'processing' && <p className="text-sm text-neutral-400">No transcript available.</p>}
     </div>
   );

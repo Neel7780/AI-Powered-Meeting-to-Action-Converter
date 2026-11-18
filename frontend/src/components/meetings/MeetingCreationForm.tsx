@@ -59,7 +59,7 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [eventId, setEventId] = useState<string>();
   const [conferenceUrl, setConferenceUrl] = useState('');
-  const [transcriptTab, setTranscriptTab] = useState<'upload' | 'paste'>('upload');
+  const [transcriptTab, setTranscriptTab] = useState<'upload' | 'paste' | 'later'>('upload');
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [audio, setAudio] = useState<File | null>(null);
@@ -72,6 +72,7 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
   const [uploaded, setUploaded] = useState(false);
   const [liveReady, setLiveReady] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const addTranscriptLater = source === 'transcript' && transcriptTab === 'later';
 
   const selectFile = (next?: File) => {
     if (!next) return;
@@ -110,7 +111,7 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
     setError('');
     if (!workspaceId) { setError('Select a workspace first.'); return; }
     if (!attested) { setError('Confirm that participants were informed about AI processing.'); return; }
-    if (source === 'transcript' && !uploaded && (transcriptTab === 'paste' ? !text.trim() : !file)) {
+    if (source === 'transcript' && !addTranscriptLater && !uploaded && (transcriptTab === 'paste' ? !text.trim() : !file)) {
       setError('Upload a transcript or paste your meeting notes.'); return;
     }
     if (source === 'in_person' && (!audio || memberIds.length + externals.length === 0)) {
@@ -136,6 +137,10 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
       setCreated(meeting);
       onSaved?.(meeting);
       if (source === 'live') { setLiveReady(true); return; }
+      if (addTranscriptLater) {
+        onComplete(meeting);
+        return;
+      }
       if (!uploaded) {
         const form = new FormData();
         if (source === 'in_person' && audio) form.append('file', audio);
@@ -228,11 +233,14 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
           </div>
         ) : (
           <div className="rounded-xl border border-white/10 p-4 space-y-4">
-            <div className="flex gap-2" role="group" aria-label="Transcript input">
-              <Button type="button" variant={transcriptTab === 'upload' ? 'secondary' : 'ghost'} aria-pressed={transcriptTab === 'upload'} onClick={() => setTranscriptTab('upload')}><Upload /> Upload file</Button>
-              <Button type="button" variant={transcriptTab === 'paste' ? 'secondary' : 'ghost'} aria-pressed={transcriptTab === 'paste'} onClick={() => setTranscriptTab('paste')}><FileText /> Paste text</Button>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Transcript input">
+              <Button type="button" variant={transcriptTab === 'upload' ? 'secondary' : 'ghost'} aria-pressed={transcriptTab === 'upload'} disabled={uploaded} onClick={() => setTranscriptTab('upload')}><Upload /> Upload file</Button>
+              <Button type="button" variant={transcriptTab === 'paste' ? 'secondary' : 'ghost'} aria-pressed={transcriptTab === 'paste'} disabled={uploaded} onClick={() => setTranscriptTab('paste')}><FileText /> Paste text</Button>
+              <Button type="button" variant={addTranscriptLater ? 'secondary' : 'ghost'} aria-pressed={addTranscriptLater} disabled={uploaded} onClick={() => setTranscriptTab('later')}>Add later</Button>
             </div>
-            {transcriptTab === 'paste' ? <textarea className="field min-h-36 text-sm" aria-label="Meeting transcript" placeholder="Paste your transcript or meeting notes…" value={text} disabled={uploaded} onChange={(e) => setText(e.target.value)} /> : (
+            {addTranscriptLater ? (
+              <p className="text-sm text-neutral-400">You can add the transcript from the meeting’s Transcript tab.</p>
+            ) : transcriptTab === 'paste' ? <textarea className="field min-h-36 text-sm" aria-label="Meeting transcript" placeholder="Paste your transcript or meeting notes…" value={text} disabled={uploaded} onChange={(e) => setText(e.target.value)} /> : (
               <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (!uploaded) selectFile(e.dataTransfer.files[0]); }}>
                 <button type="button" disabled={uploaded} onClick={() => fileInput.current?.click()} className="w-full rounded-lg border border-dashed border-white/20 px-4 py-7 text-center hover:bg-white/5">
                   <Upload className="mx-auto mb-2 size-5 text-indigo-300" /><span className="block text-sm text-white">{file ? file.name : 'Choose a transcript or drop it here'}</span><span className="mt-1 block text-xs text-neutral-500">TXT, VTT, SRT or DOCX · Up to 10 MB</span>
@@ -248,7 +256,7 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
       {error && <p role="alert" className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-white/10 pt-5">
         <Button type="submit" disabled={busy || recording || !workspaceId} className="bg-indigo-500 text-white hover:bg-indigo-400">
-          {busy ? <><LoaderCircle className="animate-spin" /><span role="status">{progress}</span></> : <>{created ? 'Retry' : source === 'live' ? 'Create live meeting' : source === 'in_person' ? 'Transcribe meeting' : 'Create & find action items'}<ArrowRight /></>}
+          {busy ? <><LoaderCircle className="animate-spin" /><span role="status">{progress}</span></> : <>{addTranscriptLater ? 'Create meeting' : created ? 'Retry' : source === 'live' ? 'Create live meeting' : source === 'in_person' ? 'Transcribe meeting' : 'Create & find action items'}<ArrowRight /></>}
         </Button>
       </div>
     </form>
