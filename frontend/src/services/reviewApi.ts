@@ -119,7 +119,6 @@ export const INITIAL_MEETING: MeetingDetails = {
   timezone: 'Asia/Kolkata (IST)',
   duration: '42 mins',
   organiser_name: 'Madhav Chauhan',
-  status: 'review_ready',
   candidate_count: 7
 };
 
@@ -454,7 +453,6 @@ export const reviewApi = {
           timezone: data.timezone || 'Asia/Kolkata',
           duration: '45 mins',
           organiser_name: 'Organiser',
-          status: data.status === 'ready' ? 'review_ready' : data.status,
           candidate_count: 0
         };
     }

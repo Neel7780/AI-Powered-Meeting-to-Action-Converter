@@ -56,7 +56,6 @@ export interface AutomatedMeetingFeedItem {
   provider: string;
   starts_at: string;
   timezone: string;
-  status: string;
   conference_url?: string | null;
   has_transcript: boolean;
   task_count: number;

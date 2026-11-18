@@ -55,7 +55,6 @@ export interface MeetingDetails {
   timezone: string;
   duration: string;
   organiser_name: string;
-  status: 'draft' | 'extracting' | 'review_ready' | 'completed';
   candidate_count: number;
 }
 

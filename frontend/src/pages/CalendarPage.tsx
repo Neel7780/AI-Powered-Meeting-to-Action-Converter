@@ -40,7 +40,6 @@ export interface CalendarMeeting {
   starts_at: string;
   ends_at?: string | null;
   timezone: string;
-  status: 'scheduled' | 'ready' | 'completed' | 'processing' | string;
   organiser_id?: string;
   conference_url?: string | null;
   workspace_id: string;
@@ -172,7 +171,6 @@ function generateDemoMeetings(workspaces: Workspace[]): CalendarMeeting[] {
       starts_at: makeDate(-2, 10, 0),
       ends_at: makeDate(-2, 11, 0),
       timezone: 'Asia/Kolkata',
-      status: 'completed',
       conference_url: 'https://meet.google.com/abc-defg-hij',
       workspace_id: ws1,
       workspace_name: ws1Name,
@@ -188,7 +186,6 @@ function generateDemoMeetings(workspaces: Workspace[]): CalendarMeeting[] {
       starts_at: makeDate(-1, 14, 30),
       ends_at: makeDate(-1, 15, 30),
       timezone: 'Asia/Kolkata',
-      status: 'completed',
       conference_url: 'https://meet.google.com/xyz-uvwx-rst',
       workspace_id: ws2,
       workspace_name: ws2Name,
@@ -204,7 +201,6 @@ function generateDemoMeetings(workspaces: Workspace[]): CalendarMeeting[] {
       starts_at: makeDate(0, 16, 0),
       ends_at: makeDate(0, 17, 0),
       timezone: 'Asia/Kolkata',
-      status: 'scheduled',
       conference_url: 'https://meet.google.com/act-puls-s3k',
       workspace_id: ws1,
       workspace_name: ws1Name,
@@ -219,7 +215,6 @@ function generateDemoMeetings(workspaces: Workspace[]): CalendarMeeting[] {
       starts_at: makeDate(2, 11, 0),
       ends_at: makeDate(2, 12, 0),
       timezone: 'Asia/Kolkata',
-      status: 'scheduled',
       conference_url: 'https://meet.google.com/sec-audit-team',
       workspace_id: ws1,
       workspace_name: ws1Name,
@@ -348,7 +343,7 @@ export default function CalendarPage() {
         // 1. Fetch real meetings from Supabase for all user's workspaces
         const { data: dbMeetings, error: mtgErr } = await supabase
           .from('meetings')
-          .select('id, title, starts_at, timezone, status, organiser_id, conference_url, workspace_id, calendar_event_id, calendar_provider, created_at')
+          .select('id, title, starts_at, timezone, organiser_id, conference_url, workspace_id, calendar_event_id, calendar_provider, created_at')
           .in('workspace_id', workspaceIds)
           .order('starts_at', { ascending: false });
 
@@ -377,7 +372,6 @@ export default function CalendarPage() {
               starts_at: m.starts_at,
               ends_at: endD.toISOString(),
               timezone: m.timezone || 'Asia/Kolkata',
-              status: m.status || 'scheduled',
               organiser_id: m.organiser_id,
               conference_url: m.conference_url,
               workspace_id: m.workspace_id,

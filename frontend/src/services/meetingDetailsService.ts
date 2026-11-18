@@ -141,7 +141,6 @@ export const meetingDetailsService = {
       let meetingTitle = 'Live Meeting';
       let clientName = 'Team Workspace';
       let startsAtFormatted = 'Today';
-      let statusStr = 'Ready';
 
       if (isSupabaseConfigured) {
         const { data: mtgRow } = await supabase
@@ -152,7 +151,6 @@ export const meetingDetailsService = {
             title,
             starts_at,
             timezone,
-            status,
             created_at,
             workspaces (
               id,
@@ -164,7 +162,6 @@ export const meetingDetailsService = {
 
         if (mtgRow) {
           meetingTitle = mtgRow.title || meetingTitle;
-          statusStr = mtgRow.status || statusStr;
           if (mtgRow.workspaces && (mtgRow.workspaces as any).name) {
             clientName = (mtgRow.workspaces as any).name;
           }
@@ -370,12 +367,6 @@ export const meetingDetailsService = {
           timestamp: '00:00',
           speaker: liveParticipants[0]?.name || 'Host',
         },
-        {
-          id: `dec-${meetingId}-2`,
-          text: `Meeting status: ${statusStr}.`,
-          timestamp: '00:00',
-          speaker: liveParticipants[0]?.name || 'Host',
-        },
       ];
 
       const fallbackSpeakerInsights = liveParticipants.map((p) => ({
@@ -494,7 +485,7 @@ export const meetingDetailsService = {
         participants: liveParticipants,
         summary: summaryData,
         chapters: chaptersData,
-        tags: ['Live', 'Sprint 2', statusStr]
+        tags: ['Live', 'Sprint 2']
       };
 
       return {

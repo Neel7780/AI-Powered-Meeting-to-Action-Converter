@@ -32,7 +32,6 @@ class MeetingResponse(BaseModel):
     timezone: str
     organiser_id: UUID
     ai_processing: bool
-    status: str
     visibility: str = "workspace"
     lifecycle: str = "active"
     calendar_event_id: str | None = None
@@ -118,7 +117,6 @@ class MeetingListItem(BaseModel):
     title: str
     starts_at: datetime
     timezone: str
-    status: str
     visibility: str = "workspace"
     created_at: datetime
     organiser_id: UUID
@@ -131,7 +129,6 @@ class MeetingDetail(BaseModel):
     title: str
     starts_at: datetime
     timezone: str
-    status: str
     visibility: str
     created_at: datetime
     organiser_id: UUID
