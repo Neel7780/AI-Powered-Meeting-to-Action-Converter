@@ -11,6 +11,7 @@ interface NavbarProps {
 
 const titles: Record<string, string> = {
   "/dashboard": "Overview",
+  "/workspace-chat": "Workspace Chat",
   "/meetings": "Meetings",
   "/tasks": "Tasks",
   "/kanban": "Tasks",
@@ -50,7 +51,9 @@ export default function Navbar({ onMenuClick }: NavbarProps) {
             <span className="truncate text-neutral-400">{wsName}</span>
             <ChevronRight className="size-3.5 shrink-0 text-neutral-600" />
             <span key={pathname} className="rise-in truncate font-medium text-white">
-              {titles[pathname] ?? "Overview"}
+              {pathname.startsWith("/workspace-chat")
+                ? "Workspace Chat"
+                : (titles[pathname] ?? "Overview")}
             </span>
           </nav>
         </div>

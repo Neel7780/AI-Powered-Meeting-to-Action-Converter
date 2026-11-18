@@ -47,8 +47,8 @@ api_router.include_router(github.router, tags=["GitHub Integration"])
 # AI extraction (BE-3)
 api_router.include_router(extraction.router, tags=["Extraction"])
 
-# Meeting Chatbot API
-api_router.include_router(chat.router, prefix="/chat", tags=["Meeting Chatbot"])
+# Meeting Chatbot & Workspace Chat API
+api_router.include_router(chat.router, prefix="/chat", tags=["Chat & Meeting Chatbot"])
 
 # Online Meeting Automation (Sprint 2 - Task 1: Madhav Chauhan)
 api_router.include_router(meeting_automation.router, tags=["Online Meeting Automation"])
