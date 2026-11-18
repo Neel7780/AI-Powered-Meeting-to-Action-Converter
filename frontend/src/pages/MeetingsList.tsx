@@ -2,27 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { useMeetings } from '../hooks/useMeetings';
 
-const STATUS_STYLES: Record<string, string> = {
-  draft: 'bg-slate-100 text-slate-600',
-  processing: 'bg-blue-100 text-blue-700',
-  ready: 'bg-emerald-100 text-emerald-700',
-  failed: 'bg-red-100 text-red-700',
-  archived: 'bg-slate-100 text-slate-500',
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const cls = STATUS_STYLES[status] ?? 'bg-slate-100 text-slate-600';
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${cls}`}>
-      {status}
-    </span>
-  );
-}
-
 function SkeletonRow() {
   return (
     <tr>
-      {[1, 2, 3, 4].map((i) => (
+      {[1, 2, 3].map((i) => (
         <td key={i} className="px-6 py-4">
           <div className="h-4 w-full animate-pulse rounded bg-slate-200" />
         </td>
@@ -91,7 +74,7 @@ export default function MeetingsList() {
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              {['Title', 'Date & Time', 'Timezone', 'Status'].map((h) => (
+              {['Title', 'Date & Time', 'Timezone'].map((h) => (
                 <th
                   key={h}
                   scope="col"
@@ -107,7 +90,7 @@ export default function MeetingsList() {
               Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
             ) : meetings.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-6 py-16 text-center">
+                <td colSpan={3} className="px-6 py-16 text-center">
                   <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50">
                     <span className="text-2xl">📅</span>
                   </div>
@@ -139,9 +122,6 @@ export default function MeetingsList() {
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-500">
                     {meeting.timezone || '—'}
-                  </td>
-                  <td className="px-6 py-4">
-                    <StatusBadge status={meeting.status} />
                   </td>
                 </tr>
               ))

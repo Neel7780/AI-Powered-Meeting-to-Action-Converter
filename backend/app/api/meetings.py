@@ -202,14 +202,10 @@ def submit_transcript(
     workspace_id = meeting["workspace_id"]
 
     # 2. Check meeting state
-    current_status = meeting.get("status")
-    if current_status not in ("draft", "failed"):
+    if meeting.get("status") not in ("draft", "failed"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Transcripts can only be submitted for meetings in 'draft' or 'failed' status "
-                f"(current: '{current_status}')"
-            )
+            detail="A transcript can be added before processing starts or after a failed attempt.",
         )
 
     # 3. Validate input presence
@@ -541,7 +537,7 @@ def list_meetings(
     db = get_supabase_client()
     res = (
         db.table("meetings")
-        .select("id, title, starts_at, timezone, status, visibility, created_at, organiser_id, conference_url")
+        .select("id, title, starts_at, timezone, visibility, created_at, organiser_id, conference_url")
         .eq("workspace_id", str(workspace_id))
         .eq("lifecycle", "active")
         .order("starts_at", desc=True)
@@ -554,7 +550,6 @@ def list_meetings(
             title=r["title"],
             starts_at=datetime.fromisoformat(r["starts_at"]),
             timezone=r["timezone"],
-            status=r["status"],
             visibility=r.get("visibility", "workspace"),
             created_at=datetime.fromisoformat(r["created_at"]),
             organiser_id=UUID(r["organiser_id"]),
@@ -624,7 +619,6 @@ def get_meeting(
         title=meeting["title"],
         starts_at=datetime.fromisoformat(meeting["starts_at"]),
         timezone=meeting["timezone"],
-        status=meeting["status"],
         visibility=meeting.get("visibility", "workspace"),
         created_at=datetime.fromisoformat(meeting["created_at"]),
         organiser_id=UUID(meeting["organiser_id"]),

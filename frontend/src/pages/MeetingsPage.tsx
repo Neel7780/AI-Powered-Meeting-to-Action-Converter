@@ -627,7 +627,7 @@ export default function MeetingsPage() {
   const isPastMeeting = (m: MeetingItem) => {
     try {
       const mtgTime = new Date(m.starts_at).getTime();
-      return mtgTime <= Date.now() || m.status === 'completed' || m.status === 'archived';
+      return mtgTime <= Date.now();
     } catch {
       return false;
     }
@@ -644,7 +644,6 @@ export default function MeetingsPage() {
         const q = meetingSearch.toLowerCase();
         return (
           m.title.toLowerCase().includes(q) ||
-          m.status.toLowerCase().includes(q) ||
           (m.starts_at && new Date(m.starts_at).toLocaleDateString().toLowerCase().includes(q))
         );
       }
@@ -1133,17 +1132,6 @@ export default function MeetingsPage() {
                               Old
                             </span>
                           )}
-                          <span
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${
-                              m.status === 'ready'
-                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                : m.status === 'failed'
-                                ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                                : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                            }`}
-                          >
-                            {m.status}
-                          </span>
                         </div>
                       </div>
 

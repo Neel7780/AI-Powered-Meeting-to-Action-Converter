@@ -617,7 +617,7 @@ def get_automation_feed(
     try:
         res = (
             client.table("meetings")
-            .select("id, title, starts_at, timezone, status, conference_url, calendar_provider, created_at")
+            .select("id, title, starts_at, timezone, conference_url, calendar_provider, created_at")
             .eq("workspace_id", str(workspace_id))
             .not_.is_("conference_url", "null")
             .order("starts_at", desc=True)
@@ -662,7 +662,6 @@ def get_automation_feed(
                     provider=provider,
                     starts_at=row["starts_at"],
                     timezone=row.get("timezone", "Asia/Kolkata"),
-                    status=row.get("status", "draft"),
                     conference_url=row.get("conference_url"),
                     has_transcript=mid in transcript_meeting_ids,
                     task_count=task_counts.get(mid, 0),

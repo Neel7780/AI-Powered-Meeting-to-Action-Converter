@@ -294,9 +294,9 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="text-[10px] rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-400">
-                    {item.status === 'ready' ? `${item.task_count} items ready` : item.status}
-                  </span>
+                  {item.task_count > 0 && (
+                    <span className="text-[10px] text-neutral-400">{item.task_count} {item.task_count === 1 ? 'suggestion' : 'suggestions'}</span>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"

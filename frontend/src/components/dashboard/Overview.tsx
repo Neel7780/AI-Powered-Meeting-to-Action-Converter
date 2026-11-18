@@ -20,7 +20,7 @@ import { supabase } from "../../lib/supabase";
 import type { Workspace } from "../../context/WorkspaceContext";
 
 type Stats = { workspaceId: string; meetings: number; openTasks: number; members: number };
-type MeetingRow = { id: string; title: string; starts_at: string; status: string };
+type MeetingRow = { id: string; title: string; starts_at: string };
 type TaskRow = { id: string; title: string; status: string; priority: string; deadline_utc: string | null };
 
 const tints = {
@@ -29,14 +29,6 @@ const tints = {
   emerald: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
   sky: "border-sky-500/25 bg-sky-500/10 text-sky-300",
   violet: "border-violet-500/25 bg-violet-500/10 text-violet-300",
-};
-
-const meetingStatus: Record<string, { label: string; dot: string; text: string; pulse?: boolean }> = {
-  ready: { label: "Ready", dot: "bg-emerald-400", text: "text-emerald-300" },
-  processing: { label: "Processing", dot: "bg-indigo-400", text: "text-indigo-300", pulse: true },
-  draft: { label: "Draft", dot: "bg-neutral-500", text: "text-neutral-400" },
-  failed: { label: "Failed", dot: "bg-red-400", text: "text-red-300" },
-  archived: { label: "Archived", dot: "bg-neutral-600", text: "text-neutral-500" },
 };
 
 const taskStatus: Record<string, { label: string; cls: string }> = {
@@ -202,7 +194,7 @@ export default function Overview({
 
     supabase
       .from("meetings")
-      .select("id, title, starts_at, status")
+      .select("id, title, starts_at")
       .eq("workspace_id", workspaceId)
       .order("starts_at", { ascending: false })
       .limit(5)
@@ -323,27 +315,20 @@ export default function Overview({
               />
             ) : (
               <ul className="px-2 pb-2">
-                {meetingRows.map((m, i) => {
-                  const s = meetingStatus[m.status] ?? meetingStatus.draft;
-                  return (
-                    <li key={m.id} className="rise-in" style={stagger(i + 5)}>
-                      <button type="button" className="list-row group" onClick={() => openMeeting(m)}>
-                        <span className="grid size-8 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.03] text-neutral-400 transition-colors group-hover:text-white">
-                          <CalendarClock className="size-4" />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm text-white">{m.title}</span>
-                          <span className="block text-xs text-neutral-500">{relativeDate(m.starts_at)}</span>
-                        </span>
-                        <span className={`inline-flex items-center gap-1.5 text-xs ${s.text}`}>
-                          <span className={`size-1.5 rounded-full ${s.dot} ${s.pulse ? "dot-pulse" : ""}`} />
-                          {s.label}
-                        </span>
-                        <ArrowRight className="size-4 shrink-0 -translate-x-1 text-neutral-600 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
-                      </button>
-                    </li>
-                  );
-                })}
+                {meetingRows.map((m, i) => (
+                  <li key={m.id} className="rise-in" style={stagger(i + 5)}>
+                    <button type="button" className="list-row group" onClick={() => openMeeting(m)}>
+                      <span className="grid size-8 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.03] text-neutral-400 transition-colors group-hover:text-white">
+                        <CalendarClock className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-white">{m.title}</span>
+                        <span className="block text-xs text-neutral-500">{relativeDate(m.starts_at)}</span>
+                      </span>
+                      <ArrowRight className="size-4 shrink-0 -translate-x-1 text-neutral-600 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
+                    </button>
+                  </li>
+                ))}
               </ul>
             )}
           </section>

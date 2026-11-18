@@ -6,7 +6,6 @@ export interface Meeting {
   title: string;
   starts_at: string;
   timezone: string;
-  status: string;
   visibility: string;
   created_at: string;
   organiser_id: string;
@@ -35,7 +34,7 @@ export function useMeetings(workspaceId: string | undefined): UseMeetingsResult 
 
     const { data, error: queryError } = await supabase
       .from('meetings')
-      .select('id, title, starts_at, timezone, status, visibility, created_at, organiser_id')
+      .select('id, title, starts_at, timezone, visibility, created_at, organiser_id')
       .eq('workspace_id', workspaceId)
       .eq('lifecycle', 'active')
       .order('starts_at', { ascending: false });
