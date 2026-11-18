@@ -15,6 +15,30 @@ def mock_user():
     return CurrentUser(id=uuid4(), email="tester@actionpulse.io")
 
 
+def test_resolving_prerequisites_requires_matching_workspace_and_task():
+    workspace_id, task_id, inquiry_id = (str(uuid4()) for _ in range(3))
+    db = MagicMock()
+    table = db.table.return_value
+    query = table.select.return_value
+    query.eq.return_value = query
+    query.execute.return_value.data = []
+
+    app.dependency_overrides[get_current_user] = mock_user
+    try:
+        with patch("app.api.tasks.require_role", return_value="owner"), \
+             patch("app.api.tasks.get_supabase_client", return_value=db):
+            response = client.patch(
+                f"/api/workspaces/{workspace_id}/tasks/{task_id}/prerequisite-inquiries/{inquiry_id}/resolve"
+            )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 404
+    query.eq.assert_any_call("workspace_id", workspace_id)
+    query.eq.assert_any_call("task_id", task_id)
+    table.update.assert_not_called()
+
+
 def test_update_task_dependency_success():
     app.dependency_overrides[get_current_user] = mock_user
     ws_id = str(uuid4())

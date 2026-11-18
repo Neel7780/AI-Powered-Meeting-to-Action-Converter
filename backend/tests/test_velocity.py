@@ -125,6 +125,9 @@ def test_rollover_task_success():
     target_meeting_id = str(uuid4())
 
     mock_db = MagicMock()
+    mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"id": target_meeting_id}]
+    )
     mock_db.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(
         data=[{"id": task_id, "meeting_id": target_meeting_id}]
     )

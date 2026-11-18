@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.core.deps import ORGANISER_ROLES, CurrentUser, get_current_user, require_role
+from app.core.deps import ORGANISER_ROLES, WORKSPACE_ROLES, CurrentUser, get_current_user, require_role
 from app.core.supabase import get_supabase_client
 from app.schemas.analytics import (
     BottleneckTask,
@@ -62,7 +62,7 @@ def get_workspace_analytics(
       employee performance evaluation (tasks assigned, on-time completion, overdue).
     """
     # 1. Enforce Workspace Membership & Retrieve User Role
-    user_role = require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    user_role = require_role(workspace_id, WORKSPACE_ROLES, user)
     can_view_employee_scorecards = user_role in ORGANISER_ROLES
 
     client = get_supabase_client()

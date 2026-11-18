@@ -24,7 +24,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 
 from app.core.config import settings
-from app.core.deps import CurrentUser, get_current_user, require_role, ORGANISER_ROLES
+from app.core.deps import ORGANISER_ROLES, WORKSPACE_ROLES, CurrentUser, get_current_user, require_role
 from app.core.supabase import get_supabase_client
 from app.parsers import TranscriptParseError, parse_transcript, to_canonical_text
 from app.schemas.meeting_automation import (
@@ -46,8 +46,6 @@ from app.services.llm.runner import run_extraction
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-WORKSPACE_ROLES = {"admin", "organiser", "member"}
 
 
 def _format_ms_to_vtt(ms: int) -> str:

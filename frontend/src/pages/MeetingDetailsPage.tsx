@@ -4,7 +4,8 @@ import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext';
 import { useMeetingResource } from '../hooks/useMeetingResource';
 import { supabase } from '../lib/supabase';
-import { canOrganise, loadMeeting, meetingDate } from '../services/meetingNavigation';
+import { canOrganise } from '../lib/workspaceRoles';
+import { loadMeeting, meetingDate } from '../services/meetingNavigation';
 import type { MeetingSummaryData } from '../types/meetingDetails';
 import { MeetingOverview } from '../components/meetings/MeetingOverview';
 import { MeetingChapters, MeetingPreparation, MeetingSummary, MeetingTranscript } from '../components/meetings/MeetingContent';

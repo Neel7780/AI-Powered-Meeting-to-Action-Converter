@@ -113,7 +113,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const role = String(settings.managerRole || "").toLowerCase();
         const isSignedIn = Boolean(settings.hasAccessToken);
-        const isManager = role === "admin" || role === "organiser";
+        const isManager = ["owner", "admin", "organiser"].includes(role);
 
         if (rolePillEl) {
           if (!isSignedIn) {
@@ -154,7 +154,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             : !settings.workspaceId
               ? "Select a workspace in ActionPulse first"
               : !isManager
-                ? "Only Admin or Organiser can upload transcripts"
+                ? "Only workspace owners, admins, or organisers can upload transcripts"
                 : "";
         }
       }

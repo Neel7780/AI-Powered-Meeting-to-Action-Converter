@@ -9,6 +9,7 @@ import type {
 } from '../types/review';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getApiUrl } from '../lib/api';
+import { canAdministerWorkspace } from '../lib/workspaceRoles';
 
 const STORAGE_KEY_ITEMS = 'staging_gate_candidate_items';
 
@@ -533,7 +534,7 @@ export const reviewApi = {
             user_id: m.user_id,
             full_name: name,
             email: profile?.email || '',
-            role: m.role === 'admin' ? 'admin' : m.role === 'organiser' ? 'meeting_organiser' : 'team_member',
+            role: canAdministerWorkspace(m.role) ? 'admin' : m.role === 'organiser' ? 'meeting_organiser' : 'team_member',
             initials
           };
         });

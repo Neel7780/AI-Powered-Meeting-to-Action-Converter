@@ -44,8 +44,6 @@ export interface MeetingEntry extends MeetingRecord {
   needsSpeakers: boolean;
 }
 
-export const canOrganise = (role: AppRole | null) => role === 'owner' || role === 'admin' || role === 'organiser';
-
 const meetingFields = `
   *,
   transcripts(id, source), meeting_participants(id, user_id, external_name),

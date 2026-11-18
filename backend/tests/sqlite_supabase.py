@@ -41,7 +41,7 @@ CREATE TABLE workspaces (
 CREATE TABLE workspace_members (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'organiser', 'member')),
+  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'admin', 'organiser', 'member')),
   created_at {TS}, updated_at {TS},
   PRIMARY KEY (workspace_id, user_id)
 );
@@ -273,6 +273,9 @@ class _Query:
 
     def eq(self, col, val):
         return self._filter(f"{col} = ?", val)
+
+    def neq(self, col, val):
+        return self._filter(f"{col} <> ?", val)
 
     def gte(self, col, val):
         return self._filter(f"{col} >= ?", val)

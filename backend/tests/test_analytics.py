@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
@@ -25,8 +26,9 @@ def mock_user_member():
     return CurrentUser(id=uuid4(), email="member@actionpulse.io")
 
 
-def test_get_analytics_as_organiser_includes_member_evaluations():
-    """Organisers and admins should receive workspace KPIs AND employee scorecards."""
+@pytest.mark.parametrize("role", ["organiser", "admin", "owner"])
+def test_get_analytics_as_manager_includes_member_evaluations(role):
+    """Workspace managers receive aggregate metrics and individual scorecards."""
     app.dependency_overrides[get_current_user] = mock_user_admin
     ws_id = str(uuid4())
     user_id_1 = str(uuid4())
@@ -102,9 +104,11 @@ def test_get_analytics_as_organiser_includes_member_evaluations():
         {"id": meeting_id, "title": "Sprint 2 Kickoff", "starts_at": (now - timedelta(days=6)).isoformat()}
     ]
 
-    with patch("app.api.analytics.require_role", return_value="organiser"), \
+    with patch("app.core.deps.get_supabase_client") as mock_role_db, \
          patch("app.api.analytics.get_supabase_client") as mock_db_getter:
 
+        query = mock_role_db.return_value.table.return_value.select.return_value
+        query.eq.return_value.eq.return_value.execute.return_value.data = [{"role": role}]
         mock_db = MagicMock()
         mock_db_getter.return_value = mock_db
 
@@ -138,7 +142,7 @@ def test_get_analytics_as_organiser_includes_member_evaluations():
         data = resp.json()
 
         # Check KPIs
-        assert data["user_role"] == "organiser"
+        assert data["user_role"] == role
         assert data["kpis"]["total_tasks"] == 3
         assert data["kpis"]["completed_tasks"] == 1
         assert data["kpis"]["currently_overdue"] == 1  # task-2 is past deadline
@@ -150,7 +154,7 @@ def test_get_analytics_as_organiser_includes_member_evaluations():
         blocked_item = next(b for b in data["bottlenecks"] if b["title"] == "Write Unit Tests")
         assert blocked_item["blocked_by_title"] == "Database Optimization"
 
-        # Check Member Evaluations (MUST BE PRESENT FOR ORGANISER)
+        # Check manager-only member evaluations
         assert data["member_evaluations"] is not None
         assert len(data["member_evaluations"]) == 2
 

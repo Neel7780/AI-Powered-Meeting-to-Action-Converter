@@ -4,6 +4,7 @@ import { useWorkspace } from "../../context/WorkspaceContext";
 import { Button } from "../ui/button";
 import Brand from "./Brand";
 import { workspaceGradient } from "../../lib/workspaceGradient";
+import { canOrganise } from "../../lib/workspaceRoles";
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -28,7 +29,7 @@ export default function Navbar({ onMenuClick, dashboardTheme }: NavbarProps) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { currentWorkspace, currentRole } = useWorkspace();
-  const canCreate = currentRole === "owner" || currentRole === "admin" || currentRole === "organiser";
+  const canCreate = canOrganise(currentRole);
   const wsName = currentWorkspace?.name ?? "Workspace";
 
   return (

@@ -687,7 +687,7 @@ def get_workspace_stats(
     user: CurrentUser = Depends(get_current_user),
 ) -> WorkspaceStatsResponse:
     """Return meeting count, open task count, and member count for the dashboard."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
 
     db = get_supabase_client()
     ws_id = str(workspace_id)

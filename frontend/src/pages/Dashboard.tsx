@@ -17,6 +17,7 @@ import "../dashboard-layout.css";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { supabase } from "../lib/supabase";
+import { canAdministerWorkspace, canOrganise } from "../lib/workspaceRoles";
 import ChatPage from "../pages/ChatPage";
 import TeamPage from "../pages/TeamPage";
 import AnalyticsPage from "../pages/AnalyticsPage";
@@ -87,7 +88,7 @@ export default function Dashboard() {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [latestMeeting, setLatestMeeting] = useState<{ id: string; title: string } | null>(null);
 
-  const isAdmin = currentRole === "admin" || currentRole === "owner";
+  const isAdmin = canAdministerWorkspace(currentRole);
   const workspaceId = currentWorkspace?.id;
   const { user } = useAuth();
   const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name || "there";
@@ -167,7 +168,7 @@ export default function Dashboard() {
           ) : isTeamPage ? (
             <TeamPage />
           ) : isAnalyticsPage ? (
-            <AnalyticsPage />
+            <AnalyticsPage key={workspaceId} />
           ) : isVelocityPage ? (
             <SprintVelocityPage />
           ) : loading ? (
@@ -199,7 +200,7 @@ export default function Dashboard() {
               workspaces={workspaces}
               displayName={displayName}
               isAdmin={isAdmin}
-              canCreate={currentRole === "owner" || currentRole === "admin" || currentRole === "organiser"}
+              canCreate={canOrganise(currentRole)}
               latestMeetingTitle={latestMeeting?.title}
               onAddMember={() => setShowAddMember(true)}
               onFollowUp={() => (latestMeeting ? setShowFollowUp(true) : navigate("/meetings"))}
