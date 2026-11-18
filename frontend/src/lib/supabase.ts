@@ -21,4 +21,11 @@ if (!isSupabaseConfigured) {
 const effectiveUrl = isSupabaseConfigured && rawUrl ? rawUrl : 'https://placeholder.supabase.co';
 const effectiveKey = isSupabaseConfigured && rawAnonKey ? rawAnonKey : 'placeholder-anon-key';
 
-export const supabase = createClient(effectiveUrl, effectiveKey);
+export const supabase = createClient(effectiveUrl, effectiveKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  },
+});

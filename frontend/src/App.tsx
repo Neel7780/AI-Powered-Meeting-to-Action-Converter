@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 
 import ActionPulseLanding from "./components/landing/ActionPulseLanding";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
@@ -10,12 +11,27 @@ import AcceptInvite from "./pages/AcceptInvite";
 import CalendarCallback from "./pages/CalendarCallback";
 import GitHubCallback from "./pages/GitHubCallback";
 import SpeakerMapping from "./pages/SpeakerMapping";
+import { useAuth } from "./context/AuthContext";
+
+/** Redirects authenticated users straight to /dashboard; shows landing otherwise. */
+function RootRoute() {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-950">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+      </div>
+    );
+  }
+  if (user) return <Navigate to="/dashboard" replace />;
+  return <ActionPulseLanding />;
+}
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<ActionPulseLanding />} />
+        <Route path="/" element={<RootRoute />} />
 
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
