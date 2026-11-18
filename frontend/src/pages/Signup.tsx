@@ -98,11 +98,11 @@ export default function Signup() {
     <div style={{ marginTop: "0.85rem", fontSize: "0.75rem", color: "#666", lineHeight: 1.5, textAlign: "center" }}>
       By proceeding, you agree to create an Action Pulse account<br />
       subject to our{" "}
-      <a href="#" style={{ color: "#888", textDecoration: "underline" }}>
+      <a href="#" className="hover-whitish" style={{ textDecoration: "underline" }}>
         Terms of Service
       </a>{" "}
       and{" "}
-      <a href="#" style={{ color: "#888", textDecoration: "underline" }}>
+      <a href="#" className="hover-whitish" style={{ textDecoration: "underline" }}>
         Privacy Policy
       </a>
       .
@@ -258,7 +258,7 @@ export default function Signup() {
 
           <div style={{ marginTop: "1.25rem", fontSize: "0.875rem", color: "#888" }}>
             Already have an account?{" "}
-            <Link to="/login" style={{ color: "#fff", fontWeight: 500, textDecoration: "none", marginLeft: "0.25rem" }}>
+            <Link to="/login" className="hover-whitish-link" style={{ fontWeight: 500, textDecoration: "none", marginLeft: "0.25rem" }}>
               Sign In
             </Link>
           </div>
