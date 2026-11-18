@@ -1,23 +1,18 @@
 import { useState, useEffect } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, CSSProperties } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
   Eye,
   EyeOff,
-  Lock,
-  Mail,
-  RefreshCw,
-  Sparkles,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import { requestApi } from "../lib/api";
-import AuthShell from "../components/auth/AuthShell";
-import { Button } from "../components/ui/button";
 import { Notice } from "../components/ui/notice";
+import { DotMatrixBackground } from "../components/ui/dot-matrix-background";
+import { ShimmerButton } from "../components/ui/shimmer-button";
+import logoImg from "../assets/logo.png";
 
 type AuthView = "login" | "forgot_email" | "link_sent" | "new_password" | "reset_success";
 
@@ -67,7 +62,6 @@ export default function Login() {
     const search = window.location.search || "";
     const pathname = window.location.pathname || "";
 
-    // 1. Direct token verification (from 1-click ?token=...&email=... links)
     const params = new URLSearchParams(search);
     const urlToken = params.get("token");
     const urlEmail = params.get("email");
@@ -93,7 +87,6 @@ export default function Login() {
       return;
     }
 
-    // 2. Hash fragment recovery or explicit /reset-password route
     if (
       hash.includes("type=recovery") ||
       search.includes("type=recovery") ||
@@ -103,7 +96,6 @@ export default function Login() {
       setView("new_password");
     }
 
-    // 3. Listen for Supabase PASSWORD_RECOVERY auth state event
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
@@ -165,9 +157,8 @@ export default function Login() {
 
     try {
       const redirectUrl = `${window.location.origin}/reset-password`;
-
-      // 1. Primary path: Dispatch custom ActionPulse branded email via backend
       let backendDispatched = false;
+
       try {
         const res = await requestApi<{ success: boolean; message: string }>(
           "/api/auth/forgot-password",
@@ -183,7 +174,6 @@ export default function Login() {
         console.warn("Backend auth forgot-password email note:", backendErr?.message);
       }
 
-      // 2. Fallback: If backend is unreachable (e.g. standalone local frontend dev), invoke Supabase client
       if (!backendDispatched) {
         const { error: resetErr } = await supabase.auth.resetPasswordForEmail(targetEmail, {
           redirectTo: redirectUrl,
@@ -191,7 +181,6 @@ export default function Login() {
 
         if (resetErr) {
           if (import.meta.env.DEV || targetEmail.includes("dev@") || targetEmail.includes("test@")) {
-            console.warn("Dev mode password reset warning:", resetErr.message);
             setResetEmail(targetEmail);
             setResendCooldown(30);
             setView("link_sent");
@@ -238,7 +227,6 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // Dev mode fallback
       if (import.meta.env.DEV && localStorage.getItem("actionpulse_dev_session")) {
         setView("reset_success");
         setSuccessMessage("Your password has been reset successfully!");
@@ -263,342 +251,553 @@ export default function Login() {
     }
   };
 
-  // Dynamic AuthShell parameters based on active view
-  const shellConfig = {
-    login: {
-      eyebrow: "Sign in",
-      title: "Welcome back",
-      subtitle: "Sign in to your workspace",
-    },
-    forgot_email: {
-      eyebrow: "Account Recovery",
-      title: "Reset your password",
-      subtitle: "Enter your registered email to receive a password reset link",
-    },
-    link_sent: {
-      eyebrow: "Check Your Inbox",
-      title: "Reset link sent",
-      subtitle: "We've dispatched a recovery link to your email address",
-    },
-    new_password: {
-      eyebrow: "Security",
-      title: "Create new password",
-      subtitle: "Enter and confirm your new workspace password",
-    },
-    reset_success: {
-      eyebrow: "Success",
-      title: "Password reset complete",
-      subtitle: "You can now sign in with your new credentials",
-    },
+  /* ─── shared input styles matching 21st.dev component exactly ─── */
+  const inputStyle: CSSProperties = {
+    width: "100%",
+    padding: "0.65rem 0.85rem",
+    borderRadius: 6,
+    border: "1px solid #333",
+    background: "#000",
+    color: "#fff",
+    fontSize: "0.875rem",
+    outline: "none",
+    boxSizing: "border-box",
   };
 
-  return (
-    <AuthShell
-      eyebrow={shellConfig[view].eyebrow}
-      title={shellConfig[view].title}
-      subtitle={shellConfig[view].subtitle}
-      footer={
-        view === "login" ? (
-          <>
-            Don&apos;t have an account?{" "}
-            <Link to="/signup" className="text-white hover:underline">
-              Create an account
-            </Link>
-          </>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setError("");
-              setSuccessMessage("");
-              setView("login");
-            }}
-            className="text-neutral-400 hover:text-white transition flex items-center justify-center gap-1.5 mx-auto"
-          >
-            <ArrowLeft className="size-3.5" /> Return to Sign in
-          </button>
-        )
-      }
+  const labelStyle: CSSProperties = {
+    display: "block",
+    fontSize: "0.75rem",
+    color: "#888",
+    marginBottom: "0.35rem",
+    textAlign: "left",
+  };
+
+  const primaryBtn: CSSProperties = {
+    width: "100%",
+    padding: "0.65rem",
+    borderRadius: 6,
+    border: "none",
+    background: "#ededed",
+    color: "#000",
+    fontWeight: 500,
+    fontSize: "0.875rem",
+    cursor: "pointer",
+    boxSizing: "border-box",
+  };
+
+  const SparkleIcon = (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      style={{ width: 16, height: 16, color: "#fcd34d", flexShrink: 0 }}
+      aria-hidden="true"
     >
-      <div className="space-y-4">
-        {/* ==================== 1. STANDARD LOGIN VIEW ==================== */}
-        {view === "login" && (
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="field-label">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
-                className="field"
-              />
-            </div>
+      <path d="M12 2C12 7.523 7.523 12 2 12C7.523 12 12 16.477 12 22C12 16.477 16.477 12 22 12C16.477 12 12 7.523 12 2Z" />
+      <path d="M19 2C19 3.657 17.657 5 16 5C17.657 5 19 6.343 19 8C19 6.343 20.343 5 22 5C20.343 5 19 3.657 19 2Z" />
+      <circle cx="5" cy="19" r="2" />
+    </svg>
+  );
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="password" className="field-label mb-0">
-                  Password
-                </label>
+  const Logo = (
+    <div
+      style={{
+        background: "#111",
+        width: 44,
+        height: 44,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        marginBottom: "0.75rem",
+        border: "1px solid #333",
+        overflow: "hidden",
+      }}
+    >
+      <img src={logoImg} alt="Action Pulse Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+    </div>
+  );
+
+  const Footer = (
+    <div style={{ marginTop: "0.85rem", fontSize: "0.75rem", color: "#666", lineHeight: 1.5, textAlign: "center" }}>
+      By proceeding, you agree to create an Action Pulse account<br />
+      subject to our{" "}
+      <a href="#" style={{ color: "#888", textDecoration: "underline" }}>
+        Terms of Service
+      </a>{" "}
+      and{" "}
+      <a href="#" style={{ color: "#888", textDecoration: "underline" }}>
+        Privacy Policy
+      </a>
+      .
+    </div>
+  );
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        overflow: "hidden",
+        background: "#000",
+        color: "#fff",
+        fontFamily: "'Inter', -apple-system, sans-serif",
+      }}
+    >
+      {/* WebGL Dot canvas background */}
+      <DotMatrixBackground />
+
+      {/* Modal card */}
+      <div
+        style={{
+          position: "relative",
+          zIndex: 2,
+          background: "#121212",
+          borderRadius: 12,
+          padding: "2rem",
+          width: "100%",
+          maxWidth: 400,
+          boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          border: "1px solid #222",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 360,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+          }}
+        >
+          {Logo}
+
+          {/* ==================== 1. STANDARD LOGIN VIEW ==================== */}
+          {view === "login" && (
+            <>
+              <h1 style={{ fontSize: "1.35rem", fontWeight: 600, marginBottom: "0.25rem", letterSpacing: "-0.025em", color: "#fff" }}>
+                Sign in to Action Pulse
+              </h1>
+              <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>
+                Enter your email and password to access your workspace.
+              </p>
+
+              <form onSubmit={handleLoginSubmit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+                {/* Work Email */}
+                <div style={{ textAlign: "left", width: "100%" }}>
+                  <label htmlFor="login-email" style={labelStyle}>Work Email</label>
+                  <input
+                    id="login-email"
+                    style={inputStyle}
+                    type="email"
+                    placeholder="name@work-email.com"
+                    required
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+
+                {/* Password with Forgot password link */}
+                <div style={{ textAlign: "left", width: "100%" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem" }}>
+                    <label htmlFor="login-password" style={{ fontSize: "0.75rem", color: "#888" }}>Password</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError("");
+                        setSuccessMessage("");
+                        setResetEmail(email);
+                        setView("forgot_email");
+                      }}
+                      style={{ background: "none", border: "none", padding: 0, color: "#888", fontSize: "0.75rem", cursor: "pointer" }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <div style={{ position: "relative", width: "100%" }}>
+                    <input
+                      id="login-password"
+                      style={{ ...inputStyle, paddingRight: "2.5rem" }}
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      required
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "0.75rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        color: "#888",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                      tabIndex={-1}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && <Notice tone="error">{error}</Notice>}
+                {successMessage && <Notice tone="success">{successMessage}</Notice>}
+
+                {/* Sign In Button */}
                 <button
-                  type="button"
-                  onClick={() => {
-                    setError("");
-                    setSuccessMessage("");
-                    setResetEmail(email);
-                    setView("forgot_email");
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    ...primaryBtn,
+                    cursor: loading ? "not-allowed" : "pointer",
+                    marginTop: "0.25rem",
+                    transition: "background 0.2s",
                   }}
-                  className="text-xs text-cyan-400 hover:text-cyan-300 hover:underline transition"
                 >
-                  Forgot password?
+                  {loading ? "Signing in…" : "Sign In"}
                 </button>
+
+                {/* Dev Evaluation Mode with Magic UI Shimmer Button */}
+                <div style={{ width: "100%", marginTop: "0.35rem" }}>
+                  <ShimmerButton
+                    type="button"
+                    onClick={handleDevSignIn}
+                    className="shadow-2xl"
+                    shimmerColor="#ffffff"
+                    shimmerDuration="3s"
+                    borderRadius="6px"
+                    background="#000000"
+                    style={{
+                      width: "100%",
+                      padding: "0.65rem",
+                      cursor: "pointer",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.5rem",
+                        fontSize: "0.875rem",
+                        fontWeight: 500,
+                        color: "#fff",
+                      }}
+                    >
+                      {SparkleIcon}
+                      <span>Dev Evaluation Mode</span>
+                    </span>
+                  </ShimmerButton>
+                </div>
+              </form>
+
+              {/* Don't have an account link */}
+              <div style={{ marginTop: "1.25rem", fontSize: "0.875rem", color: "#888" }}>
+                Don&apos;t have an account?{" "}
+                <Link to="/signup" style={{ color: "#fff", fontWeight: 500, textDecoration: "none", marginLeft: "0.25rem" }}>
+                  Sign Up
+                </Link>
               </div>
-              <input
-                id="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="••••••••"
-                className="field"
-              />
-            </div>
 
-            {error && <Notice tone="error">{error}</Notice>}
-            {successMessage && <Notice tone="success">{successMessage}</Notice>}
+              {Footer}
+            </>
+          )}
 
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? (
-                "Signing in…"
-              ) : (
-                <>
-                  Sign in <ArrowRight />
-                </>
-              )}
-            </Button>
-
-            {/* Dev Evaluation Quick-Sign-In */}
-            <div className="pt-2 border-t border-white/10">
-              <button
-                type="button"
-                onClick={handleDevSignIn}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/60 transition"
-              >
-                <Sparkles className="size-3.5 text-amber-400" />
-                Dev Evaluation Mode (Bypass Auth)
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* ==================== 2. FORGOT PASSWORD: REQUEST LINK ==================== */}
-        {view === "forgot_email" && (
-          <form onSubmit={handleSendResetLink} className="space-y-4">
-            <div>
-              <label htmlFor="reset-email" className="field-label">
-                Registered Email ID
-              </label>
-              <input
-                id="reset-email"
-                type="email"
-                required
-                autoComplete="email"
-                value={resetEmail}
-                onChange={(e) => setResetEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="field"
-                autoFocus
-              />
-            </div>
-
-            {error && <Notice tone="error">{error}</Notice>}
-            {successMessage && <Notice tone="success">{successMessage}</Notice>}
-
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? (
-                "Sending reset link…"
-              ) : (
-                <>
-                  <Mail className="size-4 mr-1.5" /> Send reset link <ArrowRight className="size-4 ml-1" />
-                </>
-              )}
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setError("");
-                setSuccessMessage("");
-                setView("login");
-              }}
-              className="w-full text-center text-xs text-neutral-400 hover:text-white transition py-1"
-            >
-              Cancel and return to Sign in
-            </button>
-          </form>
-        )}
-
-        {/* ==================== 3. FORGOT PASSWORD: LINK SENT ==================== */}
-        {view === "link_sent" && (
-          <div className="space-y-4 text-center py-1">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 shadow-lg">
-              <Mail className="size-6" />
-            </div>
-
-            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3.5 text-xs text-neutral-300 space-y-1 text-left">
-              <div className="flex items-center gap-2 font-medium text-white">
-                <CheckCircle2 className="size-4 text-cyan-400 shrink-0" />
-                <span>Password reset link dispatched!</span>
-              </div>
-              <p className="text-neutral-400 pl-6 leading-relaxed">
-                We&apos;ve sent a password reset link to <strong className="text-white">{resetEmail}</strong>. Click the link in your email to choose a new password.
+          {/* ==================== 2. FORGOT PASSWORD: REQUEST LINK ==================== */}
+          {view === "forgot_email" && (
+            <>
+              <h1 style={{ fontSize: "1.35rem", fontWeight: 600, marginBottom: "0.25rem", letterSpacing: "-0.025em", color: "#fff" }}>
+                Reset your password
+              </h1>
+              <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>
+                Enter your work email and we&apos;ll send you a reset link.
               </p>
-            </div>
 
-            {error && <Notice tone="error">{error}</Notice>}
-            {successMessage && <Notice tone="success">{successMessage}</Notice>}
+              <form onSubmit={handleSendResetLink} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+                <div style={{ textAlign: "left", width: "100%" }}>
+                  <label htmlFor="reset-email" style={labelStyle}>Work Email</label>
+                  <input
+                    id="reset-email"
+                    style={inputStyle}
+                    type="email"
+                    placeholder="name@work-email.com"
+                    required
+                    autoComplete="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    autoFocus
+                  />
+                </div>
 
-            <div className="flex items-center justify-between text-xs pt-1 px-1">
-              <span className="text-neutral-500">Didn&apos;t receive it?</span>
-              <button
-                type="button"
-                disabled={resendCooldown > 0 || loading}
-                onClick={() => handleSendResetLink()}
-                className="text-cyan-400 hover:text-cyan-300 hover:underline disabled:opacity-50 disabled:no-underline flex items-center gap-1"
+                {error && <Notice tone="error">{error}</Notice>}
+                {successMessage && <Notice tone="success">{successMessage}</Notice>}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    ...primaryBtn,
+                    cursor: loading ? "not-allowed" : "pointer",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  {loading ? "Sending reset link…" : "Send Reset Link"}
+                </button>
+
+                <div style={{ marginTop: "0.75rem", textAlign: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError("");
+                      setSuccessMessage("");
+                      setView("login");
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      color: "#888",
+                      fontSize: "0.875rem",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                    }}
+                  >
+                    <ArrowLeft size={14} /> Back to Sign In
+                  </button>
+                </div>
+              </form>
+
+              {Footer}
+            </>
+          )}
+
+          {/* ==================== 3. FORGOT PASSWORD: LINK SENT ==================== */}
+          {view === "link_sent" && (
+            <>
+              <h1 style={{ fontSize: "1.35rem", fontWeight: 600, marginBottom: "0.25rem", letterSpacing: "-0.025em", color: "#fff" }}>
+                Reset link sent
+              </h1>
+              <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>
+                We&apos;ve dispatched a recovery link to your email address.
+              </p>
+
+              <div
+                style={{
+                  width: "100%",
+                  padding: "0.75rem 0.85rem",
+                  borderRadius: 6,
+                  border: "1px solid #333",
+                  background: "#000",
+                  textAlign: "left",
+                  fontSize: "0.8rem",
+                  color: "#ccc",
+                  lineHeight: 1.5,
+                  boxSizing: "border-box",
+                }}
               >
-                <RefreshCw className={`size-3 ${loading ? "animate-spin" : ""}`} />
-                {resendCooldown > 0 ? `Resend link in ${resendCooldown}s` : "Resend link"}
-              </button>
-            </div>
+                We&apos;ve sent a password reset link to <strong style={{ color: "#fff" }}>{resetEmail}</strong>. Click the link to choose a new password.
+              </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setError("");
-                setSuccessMessage("");
-                setView("login");
-              }}
-              className="w-full text-xs text-neutral-300 border-white/10 hover:bg-white/5 mt-2"
-            >
-              <ArrowLeft className="size-3.5 mr-1.5" /> Back to Sign in
-            </Button>
-          </div>
-        )}
+              {error && <Notice tone="error">{error}</Notice>}
+              {successMessage && <Notice tone="success">{successMessage}</Notice>}
 
-        {/* ==================== 4. FORGOT PASSWORD: NEW PASSWORD ==================== */}
-        {view === "new_password" && (
-          <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-xs text-neutral-300 flex items-start gap-2.5">
-              <CheckCircle2 className="size-4 text-emerald-400 shrink-0 mt-0.5" />
-              <span>
-                Your reset link is verified. Enter and confirm your new password below.
-              </span>
-            </div>
-
-            <div>
-              <label htmlFor="new-password" className="field-label">
-                New Password
-              </label>
-              <div className="relative">
-                <input
-                  id="new-password"
-                  type={showPassword ? "text" : "password"}
-                  required
-                  minLength={6}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  className="field pr-10"
-                  autoFocus
-                />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", fontSize: "0.75rem", color: "#888", marginTop: "0.5rem" }}>
+                <span>Didn&apos;t receive it?</span>
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
-                  tabIndex={-1}
+                  disabled={resendCooldown > 0 || loading}
+                  onClick={() => handleSendResetLink()}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    color: "#fff",
+                    cursor: resendCooldown > 0 ? "default" : "pointer",
+                    opacity: resendCooldown > 0 ? 0.5 : 1,
+                  }}
                 >
-                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  {resendCooldown > 0 ? `Resend link in ${resendCooldown}s` : "Resend link"}
                 </button>
               </div>
-            </div>
 
-            <div>
-              <label htmlFor="confirm-password" className="field-label">
-                Confirm New Password
-              </label>
-              <div className="relative">
-                <input
-                  id="confirm-password"
-                  type={showConfirmPassword ? "text" : "password"}
-                  required
-                  minLength={6}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Re-enter new password"
-                  className="field pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
-                  tabIndex={-1}
-                >
-                  {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                </button>
-              </div>
-            </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setSuccessMessage("");
+                  setView("login");
+                }}
+                style={{
+                  ...primaryBtn,
+                  background: "#222",
+                  color: "#fff",
+                  border: "1px solid #333",
+                  marginTop: "0.75rem",
+                }}
+              >
+                Back to Sign In
+              </button>
 
-            {error && <Notice tone="error">{error}</Notice>}
-            {successMessage && <Notice tone="success">{successMessage}</Notice>}
+              {Footer}
+            </>
+          )}
 
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? (
-                "Updating password…"
-              ) : (
-                <>
-                  <Lock className="size-4 mr-1.5" /> Save new password
-                </>
-              )}
-            </Button>
-          </form>
-        )}
-
-        {/* ==================== 5. RESET SUCCESS ==================== */}
-        {view === "reset_success" && (
-          <div className="space-y-5 text-center py-2">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-lg">
-              <CheckCircle2 className="size-6" />
-            </div>
-
-            <div className="space-y-1.5">
-              <h3 className="text-base font-semibold text-white">Password Reset Successful</h3>
-              <p className="text-xs text-neutral-400">
-                You can now sign in to your workspace using your new password.
+          {/* ==================== 4. FORGOT PASSWORD: NEW PASSWORD ==================== */}
+          {view === "new_password" && (
+            <>
+              <h1 style={{ fontSize: "1.35rem", fontWeight: 600, marginBottom: "0.25rem", letterSpacing: "-0.025em", color: "#fff" }}>
+                Create new password
+              </h1>
+              <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>
+                Enter and confirm your new workspace password.
               </p>
-            </div>
 
-            <Button
-              type="button"
-              onClick={() => {
-                setError("");
-                setSuccessMessage("Password updated! Sign in with your new credentials.");
-                setPassword("");
-                setView("login");
-              }}
-              className="w-full bg-cyan-600 hover:bg-cyan-500 text-white"
-            >
-              Sign in with new password <ArrowRight className="size-4 ml-1" />
-            </Button>
-          </div>
-        )}
+              <form onSubmit={handleResetPasswordSubmit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+                <div style={{ textAlign: "left", width: "100%" }}>
+                  <label htmlFor="new-password" style={labelStyle}>New Password</label>
+                  <div style={{ position: "relative", width: "100%" }}>
+                    <input
+                      id="new-password"
+                      style={{ ...inputStyle, paddingRight: "2.5rem" }}
+                      type={showPassword ? "text" : "password"}
+                      placeholder="At least 6 characters"
+                      required
+                      minLength={6}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "0.75rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        color: "#888",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: "left", width: "100%" }}>
+                  <label htmlFor="confirm-password" style={labelStyle}>Confirm New Password</label>
+                  <div style={{ position: "relative", width: "100%" }}>
+                    <input
+                      id="confirm-password"
+                      style={{ ...inputStyle, paddingRight: "2.5rem" }}
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Re-enter new password"
+                      required
+                      minLength={6}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={{
+                        position: "absolute",
+                        right: "0.75rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        color: "#888",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                      tabIndex={-1}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && <Notice tone="error">{error}</Notice>}
+                {successMessage && <Notice tone="success">{successMessage}</Notice>}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    ...primaryBtn,
+                    cursor: loading ? "not-allowed" : "pointer",
+                    marginTop: "0.25rem",
+                  }}
+                >
+                  {loading ? "Updating password…" : "Save New Password"}
+                </button>
+              </form>
+
+              {Footer}
+            </>
+          )}
+
+          {/* ==================== 5. RESET SUCCESS ==================== */}
+          {view === "reset_success" && (
+            <>
+              <h1 style={{ fontSize: "1.35rem", fontWeight: 600, marginBottom: "0.25rem", letterSpacing: "-0.025em", color: "#fff" }}>
+                Password reset complete
+              </h1>
+              <p style={{ fontSize: "0.85rem", color: "#888", marginBottom: "0.85rem", lineHeight: 1.5 }}>
+                You can now sign in with your new workspace credentials.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  setSuccessMessage("Password updated! Sign in with your new credentials.");
+                  setPassword("");
+                  setView("login");
+                }}
+                style={{
+                  ...primaryBtn,
+                  marginTop: "0.85rem",
+                }}
+              >
+                Sign In With New Password
+              </button>
+
+              {Footer}
+            </>
+          )}
+        </div>
       </div>
-    </AuthShell>
+    </div>
   );
 }

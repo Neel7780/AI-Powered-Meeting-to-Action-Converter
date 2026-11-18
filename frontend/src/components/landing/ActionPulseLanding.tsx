@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, CircleHelp, ClipboardCheck, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, CircleHelp, ClipboardCheck, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, X } from "lucide-react";
+import logoImg from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import SelectionList from "@/components/ui/SelectionList";
 import { Cover } from "@/components/ui/cover";
@@ -20,9 +21,11 @@ const nav = [
 function Brand() {
   return (
     <a href="#top" className="inline-flex items-center gap-2.5 text-white" aria-label="ActionPulse home">
-      <span className="grid size-8 place-items-center rounded-md border border-white/20 bg-white text-black font-bold shadow-sm">
-        <Zap size={17} fill="currentColor" strokeWidth={2.5} />
-      </span>
+      <img
+        src={logoImg}
+        alt="ActionPulse logo"
+        className="size-8 rounded-full border border-white/20 object-cover shadow-sm"
+      />
       <span className="text-[17px] font-semibold text-white tracking-tight">ActionPulse</span>
     </a>
   );
