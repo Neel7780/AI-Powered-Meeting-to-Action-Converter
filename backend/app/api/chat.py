@@ -79,11 +79,10 @@ def chat_message(
             detail="Query cannot be empty or whitespace only"
         )
 
-    db = get_supabase_client()
-
     # Validate session ownership and workspace scoping if session_id is provided
     session_row = None
     if payload.session_id:
+        db = get_supabase_client()
         s_resp = (
             db.table("chat_sessions")
             .select("id, workspace_id, user_id, title")
@@ -118,6 +117,7 @@ def chat_message(
         if payload.session_id:
             response.session_id = payload.session_id
             try:
+                db = get_supabase_client()
                 # Save user message
                 db.table("chat_messages").insert({
                     "session_id": str(payload.session_id),

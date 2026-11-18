@@ -199,6 +199,7 @@ def test_chat_message_pending_tasks_grounded():
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
         with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.chat.get_supabase_client", return_value=db), \
              patch("app.services.llm.chat_assistant.get_supabase_client", return_value=db), \
              patch("app.services.llm.chat_assistant.llm_is_configured", return_value=False):
             res = client.post("/api/chat/message", json={
