@@ -6,6 +6,7 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
+  Crown,
   LogOut,
   Mail,
   RefreshCw,
@@ -89,7 +90,7 @@ function formatDate(isoString: string): string {
 const DEMO_MEMBERS: TeamMember[] = [
   {
     userId: "00000000-0000-0000-0000-000000000001",
-    role: "admin",
+    role: "owner",
     joinedAt: "2026-10-15T10:00:00.000Z",
     displayName: "Neel Khatri",
     email: "neelkhatri7780@gmail.com",
@@ -131,8 +132,9 @@ export default function TeamPage() {
   const { currentWorkspace, currentRole, refreshWorkspaces } = useWorkspace();
 
   const workspaceId = currentWorkspace?.id;
-  const isAdmin = currentRole === "admin";
-  const isOrganiserOrAdmin = currentRole === "admin" || currentRole === "organiser";
+  const isOwner = currentRole === "owner";
+  const isAdmin = currentRole === "admin" || currentRole === "owner";
+  const isOrganiserOrAdmin = currentRole === "admin" || currentRole === "organiser" || currentRole === "owner";
 
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
@@ -309,6 +311,64 @@ export default function TeamPage() {
     }
   };
 
+  const handleRoleChange = async (member: TeamMember, newRole: AppRole) => {
+    if (!workspaceId) return;
+    if (newRole === member.role) return;
+
+    if (!isOwner) {
+      setActionError("Only the workspace owner can change member roles.");
+      return;
+    }
+
+    const confirmMsg =
+      newRole === "admin"
+        ? `Grant Admin privileges to ${member.displayName}? Admins have full workspace permissions but cannot appoint other Admins.`
+        : `Change ${member.displayName}'s role from ${member.role} to ${newRole}?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setActionLoadingId(member.userId);
+    setActionError(null);
+
+    try {
+      if (user?.id === "00000000-0000-0000-0000-000000000001" || !isSupabaseConfigured) {
+        setMembers((prev) =>
+          prev.map((m) => (m.userId === member.userId ? { ...m, role: newRole } : m))
+        );
+        setActionSuccess(`Updated ${member.displayName}'s role to ${newRole}.`);
+        setTimeout(() => setActionSuccess(null), 4000);
+        return;
+      }
+
+      const { error: rpcErr } = await supabase.rpc("update_workspace_member_role", {
+        p_workspace_id: workspaceId,
+        p_target_user_id: member.userId,
+        p_new_role: newRole,
+      });
+
+      if (rpcErr) {
+        const { error: directErr } = await supabase
+          .from("workspace_members")
+          .update({ role: newRole })
+          .eq("workspace_id", workspaceId)
+          .eq("user_id", member.userId);
+
+        if (directErr) throw directErr;
+      }
+
+      setMembers((prev) =>
+        prev.map((m) => (m.userId === member.userId ? { ...m, role: newRole } : m))
+      );
+      setActionSuccess(`Updated ${member.displayName}'s role to ${newRole}.`);
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: any) {
+      console.error("Error updating member role:", err);
+      setActionError(err.message || "Failed to update member role.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const handleRemoveMember = async (member: TeamMember) => {
     if (!workspaceId) return;
 
@@ -388,14 +448,22 @@ export default function TeamPage() {
 
   const stats = useMemo(() => {
     const total = members.length;
+    const owners = members.filter((m) => m.role === "owner").length;
     const admins = members.filter((m) => m.role === "admin").length;
     const organisers = members.filter((m) => m.role === "organiser").length;
     const standardMembers = members.filter((m) => m.role === "member").length;
-    return { total, admins, organisers, standardMembers };
+    return { total, owners, admins, organisers, standardMembers };
   }, [members]);
 
   const getRoleBadge = (role: AppRole) => {
     switch (role) {
+      case "owner":
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
+            <Crown className="size-3 text-amber-400" />
+            Owner
+          </span>
+        );
       case "admin":
         return (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-medium text-purple-300">
@@ -580,6 +648,7 @@ export default function TeamPage() {
             {(
               [
                 { id: "all", label: `All (${members.length})` },
+                { id: "owner", label: `Owner (${stats.owners})` },
                 { id: "admin", label: `Admins (${stats.admins})` },
                 { id: "organiser", label: `Organisers (${stats.organisers})` },
                 { id: "member", label: `Members (${stats.standardMembers})` },
@@ -667,9 +736,25 @@ export default function TeamPage() {
                   <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
                     <div className="hidden sm:block">{getRoleBadge(member.role)}</div>
 
+                    {/* Role Management: Owner only can promote or demote */}
+                    {isOwner && !member.isCurrentUser && member.role !== "owner" && (
+                      <select
+                        aria-label={`Change role for ${member.displayName}`}
+                        value={member.role}
+                        disabled={isBusy}
+                        onChange={(e) => handleRoleChange(member, e.target.value as AppRole)}
+                        className="h-8 rounded-md border border-white/10 bg-[#141419] px-2 text-xs text-neutral-200 outline-none hover:border-white/20 focus:border-indigo-500 cursor-pointer"
+                        title="Change member role (Owner only)"
+                      >
+                        <option value="member" className="bg-[#121217] text-white">Member</option>
+                        <option value="organiser" className="bg-[#121217] text-white">Organiser</option>
+                        <option value="admin" className="bg-[#121217] text-white">Admin</option>
+                      </select>
+                    )}
+
                     {/* Member actions */}
                     <div className="flex items-center gap-2">
-                      {isAdmin && !member.isCurrentUser && (
+                      {isAdmin && !member.isCurrentUser && member.role !== "owner" && (
                         <Button
                           variant="ghost"
                           size="sm"

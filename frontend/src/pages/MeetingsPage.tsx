@@ -460,15 +460,17 @@ export default function MeetingsPage() {
       const candidateList = (candidatesRes.data || []) as ExtractedActionCandidate[];
       setCandidateItems(candidateList);
 
-      // Default select the most recent meeting if none selected
-      if (finalMeetingList.length > 0 && !selectedMeetingId) {
+      // Default select the most recent meeting if none selected or if current selection is not in list
+      if (finalMeetingList.length > 0 && (!selectedMeetingId || !finalMeetingList.some((m) => m.id === selectedMeetingId))) {
         setSelectedMeetingId(finalMeetingList[0].id);
       }
     } catch (err) {
       console.error('Failed to load meetings data from Supabase:', err);
       // Fallback to demo meetings
       setMeetings(DEMO_MEETINGS);
-      if (!selectedMeetingId) setSelectedMeetingId(DEMO_MEETINGS[0].id);
+      if (!selectedMeetingId || !DEMO_MEETINGS.some((m) => m.id === selectedMeetingId)) {
+        setSelectedMeetingId(DEMO_MEETINGS[0].id);
+      }
     } finally {
       setLoading(false);
     }
@@ -625,7 +627,7 @@ export default function MeetingsPage() {
   const isPastMeeting = (m: MeetingItem) => {
     try {
       const mtgTime = new Date(m.starts_at).getTime();
-      return mtgTime <= Date.now() || m.status === 'ready' || m.status === 'completed';
+      return mtgTime <= Date.now() || m.status === 'completed' || m.status === 'archived';
     } catch {
       return false;
     }
@@ -684,22 +686,25 @@ export default function MeetingsPage() {
         const q = taskSearch.toLowerCase();
         const matchesTitle = t.title.toLowerCase().includes(q);
         const matchesDesc = (t.description || '').toLowerCase().includes(q);
-        const matchesAssignee = (t.task_assignees || []).some(
-          (a) =>
-            a.profiles?.display_name?.toLowerCase().includes(q) ||
-            a.profiles?.email?.toLowerCase().includes(q)
-        );
+        const matchesAssignee =
+          (t.task_assignees || []).some(
+            (a) =>
+              a.profiles?.display_name?.toLowerCase().includes(q) ||
+              a.profiles?.email?.toLowerCase().includes(q)
+          ) || (t.external_owner_label?.toLowerCase().includes(q) ?? false);
         return matchesTitle || matchesDesc || matchesAssignee;
       }
       return true;
     });
   }, [meetingTasks, taskStatusFilter, taskSearch]);
 
-  // Candidate items extracted from the selected meeting
+  // Candidate items extracted from the selected meeting (pending review/approval only)
   const candidateWorkflowTasks = useMemo(() => {
     if (!selectedMeetingId) return [];
     const cands = candidateItems.filter(
-      (c) => c.meeting_id === selectedMeetingId && c.review_status !== 'rejected'
+      (c) =>
+        c.meeting_id === selectedMeetingId &&
+        (c.review_status === 'needs_review' || c.review_status === 'pending')
     );
     return cands.map((c) => {
       let blockedById: string | null = null;
@@ -745,7 +750,9 @@ export default function MeetingsPage() {
   const handleApproveAllCandidates = async () => {
     if (!selectedMeetingId) return;
     const cands = candidateItems.filter(
-      (c) => c.meeting_id === selectedMeetingId && c.review_status === 'needs_review'
+      (c) =>
+        c.meeting_id === selectedMeetingId &&
+        (c.review_status === 'needs_review' || c.review_status === 'pending')
     );
     if (cands.length === 0) return;
     setApproving(true);
@@ -769,6 +776,14 @@ export default function MeetingsPage() {
         updated_at: c.created_at,
       }));
       await reviewApi.approveActionItems(selectedMeetingId, itemsToApprove as any);
+      setCandidateItems((prev) =>
+        prev.map((c) =>
+          c.meeting_id === selectedMeetingId &&
+          (c.review_status === 'needs_review' || c.review_status === 'pending')
+            ? { ...c, review_status: 'approved' }
+            : c
+        )
+      );
       await loadWorkspaceMeetingData();
       showToast('Action items approved and synced to task board!');
     } catch (err) {
@@ -780,6 +795,7 @@ export default function MeetingsPage() {
 
   // Task status transition handler (Compliant with Backend RLS rules)
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+    const prevTasks = allTasks;
     setAllTasks((prev) =>
       prev.map((t) => {
         if (t.id === taskId) return { ...t, status: newStatus };
@@ -791,17 +807,21 @@ export default function MeetingsPage() {
     );
 
     try {
-      await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
-      if (newStatus === 'done') {
-        await supabase
-          .from('tasks')
-          .update({ status: 'todo' })
-          .eq('blocked_by', taskId)
-          .eq('status', 'blocked');
+      if (workspaceId) {
+        await reviewApi.updateTaskStatus(workspaceId, taskId, newStatus);
+      } else {
+        await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
       }
       showToast(`Task status updated to ${STATUS_CONFIG[newStatus].label}`);
-    } catch (err) {
-      console.warn('Status update notice:', err);
+    } catch (err: any) {
+      console.warn('Backend status update error, attempting direct fallback:', err);
+      try {
+        await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
+        showToast(`Task status updated to ${STATUS_CONFIG[newStatus].label}`);
+      } catch (fallbackErr: any) {
+        setAllTasks(prevTasks);
+        showToast(fallbackErr?.message || 'Failed to update task status');
+      }
     }
   };
 
@@ -850,14 +870,19 @@ export default function MeetingsPage() {
   // Jump from task quote to transcript segment
   const handleJumpToTranscript = (sourceExcerpt: string) => {
     if (!transcriptData?.segments) return;
-    setActiveViewMode('transcript');
+    if (activeViewMode !== 'split') {
+      setActiveViewMode('transcript');
+    }
+
+    const cleanExcerpt = sourceExcerpt.replace(/^["'“”\s]+/, '').slice(0, 20).toLowerCase();
 
     // Find segment that contains excerpt snippet
     const targetSegment = transcriptData.segments.find((seg) => {
-      const excerptWords = sourceExcerpt.toLowerCase().split(' ').slice(0, 4).join(' ');
+      const excerptWords = cleanExcerpt.split(' ').slice(0, 4).join(' ');
+      const segText = seg.text.toLowerCase();
       return (
-        seg.text.toLowerCase().includes(sourceExcerpt.toLowerCase()) ||
-        seg.text.toLowerCase().includes(excerptWords)
+        segText.includes(cleanExcerpt) ||
+        (excerptWords && segText.includes(excerptWords))
       );
     });
 
@@ -1144,10 +1169,24 @@ export default function MeetingsPage() {
                       </div>
 
                       <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between text-[11px] text-neutral-400">
-                        <span className="flex items-center gap-1 text-emerald-400">
-                          <FileText className="size-3" /> Transcript ready
-                        </span>
-                        <span className="text-[10px] text-neutral-500">{m.timezone}</span>
+                        {m.status === 'ready' ? (
+                          <span className="flex items-center gap-1 text-emerald-400">
+                            <FileText className="size-3" /> Transcript ready
+                          </span>
+                        ) : m.status === 'processing' ? (
+                          <span className="flex items-center gap-1 text-amber-400">
+                            <LoaderCircle className="size-3 animate-spin" /> Processing…
+                          </span>
+                        ) : m.status === 'failed' ? (
+                          <span className="flex items-center gap-1 text-rose-400">
+                            <FileText className="size-3" /> Transcript failed
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-neutral-500">
+                            <FileText className="size-3" /> No transcript
+                          </span>
+                        )}
+                        <span className="text-[10px] text-neutral-500">{m.timezone || 'UTC'}</span>
                       </div>
                     </div>
                   );

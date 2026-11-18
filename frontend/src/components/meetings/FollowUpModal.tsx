@@ -238,6 +238,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
 
   const [subject, setSubject] = useState<string>('');
   const [markdownBody, setMarkdownBody] = useState<string>('');
+  const [initialMarkdown, setInitialMarkdown] = useState<string>('');
   const [htmlBody, setHtmlBody] = useState<string>('');
   const [whatsappUrl, setWhatsappUrl] = useState<string>('');
   const [recipientEmails, setRecipientEmails] = useState<string[]>([]);
@@ -281,6 +282,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
 
       setSubject(cleanSubject || `[ActionPulse] Follow-Up: ${meetingTitle}`);
       setMarkdownBody(cleanMarkdown);
+      setInitialMarkdown(cleanMarkdown);
       setHtmlBody(draft.content_html);
       setWhatsappUrl(draft.whatsapp_share_url);
       setRecipientEmails(draft.recipient_emails || []);
@@ -339,7 +341,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
         recipient_emails: recipientEmails,
         subject,
         content_markdown: markdownBody,
-        content_html: htmlBody
+        content_html: markdownBody === initialMarkdown ? htmlBody : undefined,
       });
       showToast(res.message || `Dispatched to ${res.recipients_count} recipients`, 'success');
       setTimeout(() => {

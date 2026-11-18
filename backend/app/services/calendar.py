@@ -219,9 +219,14 @@ def _extract_conference_url(item: dict[str, Any]) -> Optional[str]:
     
     # 3. Regex search for Zoom / Teams / Meet in location or description
     text_content = f"{item.get('location', '')} {item.get('description', '')}"
-    meet_match = re.search(r"https:\/\/(meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}|[a-zA-Z0-9.\-]+\.zoom\.us\/j\/\d+|teams\.microsoft\.com\/l\/meetup-join\/[^\s]+)", text_content)
+    # Strip HTML tags so attributes/quotes don't attach to URL
+    clean_text = re.sub(r"<[^>]+>", " ", text_content)
+    meet_match = re.search(
+        r"https:\/\/(meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}|[a-zA-Z0-9.\-]+\.zoom\.us\/j\/\d+(\?[^\s\"'<>]+)?|teams\.microsoft\.com\/l\/meetup-join\/[^\s\"'<>]+)",
+        clean_text,
+    )
     if meet_match:
-        return meet_match.group(0)
+        return meet_match.group(0).rstrip(".,;\")'>")
     
     return None
 
@@ -286,6 +291,10 @@ async def fetch_calendar_events(
     normalized_events: list[CalendarEventItem] = []
     
     for item in data.get("items", []):
+        # Skip cancelled or deleted events
+        if item.get("status") == "cancelled":
+            continue
+
         event_id = item.get("id")
         title = item.get("summary", "(Untitled Event)").strip()
         description = item.get("description")
@@ -303,9 +312,10 @@ async def fetch_calendar_events(
         try:
             # Handle all-day dates or ISO strings
             if "T" not in start_str:
-                starts_at = datetime.fromisoformat(f"{start_str}T09:00:00+05:30")
+                starts_at = datetime.fromisoformat(f"{start_str}T00:00:00+00:00")
             else:
-                starts_at = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                parsed_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+                starts_at = parsed_dt if parsed_dt.tzinfo else parsed_dt.replace(tzinfo=timezone.utc)
         except Exception:
             continue
 
@@ -313,9 +323,10 @@ async def fetch_calendar_events(
         if end_str:
             try:
                 if "T" not in end_str:
-                    ends_at = datetime.fromisoformat(f"{end_str}T10:00:00+05:30")
+                    ends_at = datetime.fromisoformat(f"{end_str}T00:00:00+00:00")
                 else:
-                    ends_at = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                    parsed_end = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+                    ends_at = parsed_end if parsed_end.tzinfo else parsed_end.replace(tzinfo=timezone.utc)
             except Exception:
                 ends_at = None
 

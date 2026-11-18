@@ -69,20 +69,8 @@ export async function getWorkspaceChatMeetings(workspaceId: string): Promise<Mee
 
   const data = await res.json().catch(() => []);
   if (!res.ok) {
-    return [
-      {
-        id: "11111111-1111-1111-1111-111111111111",
-        title: "Sprint 1 Architecture & Action Item Sync",
-        starts_at: "2026-10-24T10:00:00Z",
-        status: "ready"
-      },
-      {
-        id: "22222222-2222-2222-2222-222222222222",
-        title: "Product Roadmap & AI Extraction Review",
-        starts_at: "2026-10-22T14:30:00Z",
-        status: "ready"
-      }
-    ];
+    console.error(`Failed to fetch workspace chat meetings: HTTP ${res.status}`, data);
+    return [];
   }
 
   return (Array.isArray(data) ? data : []) as MeetingOption[];

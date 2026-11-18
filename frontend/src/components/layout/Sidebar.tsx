@@ -33,6 +33,7 @@ const navGroups = [
     items: [
       { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
       { label: "Meetings", path: "/meetings", icon: CalendarPlus },
+      { label: "Meetings List", path: "/meetings-list", icon: CalendarDays },
       { label: "Calendar", path: "/calendar", icon: CalendarDays },
       { label: "Tasks", path: "/tasks", icon: SquareKanban },
     ],

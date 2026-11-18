@@ -25,11 +25,11 @@ jobs:
         run: |
           if [ -n "$SUPABASE_DB_URL" ]; then
             supabase migration repair --status applied --db-url "$SUPABASE_DB_URL" --yes 0001 0002 0003 0004 0005 || true
-            supabase db push --remote "$SUPABASE_DB_URL" --yes
+            supabase db push --remote "$SUPABASE_DB_URL" --yes --include-all
           else
             supabase link --project-ref "$PROJECT_REF"
             supabase migration repair --status applied --yes 0001 0002 0003 0004 0005 || true
-            supabase db push --yes
+            supabase db push --yes --include-all
           fi
         env:
           PROJECT_REF: jdzwrpdkqlsnrnluuwjg

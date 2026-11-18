@@ -4,6 +4,7 @@ Zero-Budget Tech Stack: Brevo free HTTPS API when BREVO_API_KEY is set (Render's
 free tier blocks outbound SMTP ports), else standard smtplib with TLS (port 587).
 No paid APIs (Resend, SendGrid, etc. are strictly forbidden).
 """
+from __future__ import annotations
 
 import html
 import hmac
@@ -13,7 +14,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
 from email.utils import parseaddr
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -168,7 +169,7 @@ def _format_deadline(deadline_utc_str: Optional[str], tz_name: str) -> str:
         return str(deadline_utc_str)
 
 
-def notify_tasks_assigned(meeting_id: UUID | str, task_ids: List[UUID | str]) -> None:
+def notify_tasks_assigned(meeting_id: Union[UUID, str], task_ids: List[Union[UUID, str]]) -> None:
     """Notify primary assignees of newly confirmed tasks after meeting review.
     
     This function is run as a FastAPI BackgroundTask.

@@ -60,6 +60,68 @@ def draft_followup(
         ) from exc
 
 
+def _markdown_to_simple_html(md_text: str) -> str:
+    """Convert basic markdown syntax to email-safe HTML for follow-up emails."""
+    import html as py_html
+    import re
+    lines = md_text.splitlines()
+    html_lines = []
+    in_list = False
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append("<br/>")
+            continue
+
+        if stripped.startswith("### "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f"<h3 style='margin:16px 0 8px 0; color:#312e81;'>{py_html.escape(stripped[4:])}</h3>")
+            continue
+        if stripped.startswith("## "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f"<h2 style='margin:18px 0 10px 0; color:#312e81;'>{py_html.escape(stripped[3:])}</h2>")
+            continue
+        if stripped.startswith("# "):
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            html_lines.append(f"<h1 style='margin:20px 0 12px 0; color:#312e81;'>{py_html.escape(stripped[2:])}</h1>")
+            continue
+
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            if not in_list:
+                html_lines.append("<ul style='margin:8px 0; padding-left:20px;'>")
+                in_list = True
+            item_text = py_html.escape(stripped[2:])
+            item_text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", item_text)
+            html_lines.append(f"<li style='margin-bottom:4px;'>{item_text}</li>")
+            continue
+
+        if in_list:
+            html_lines.append("</ul>")
+            in_list = False
+
+        item_text = py_html.escape(stripped)
+        item_text = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", item_text)
+        html_lines.append(f"<p style='margin:6px 0;'>{item_text}</p>")
+
+    if in_list:
+        html_lines.append("</ul>")
+
+    body_inner = "\n".join(html_lines)
+    return (
+        f"<div style='font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;"
+        f"font-size:14px;line-height:1.6;color:#18181b;max-width:650px;'>{body_inner}</div>"
+    )
+
+
 @router.post(
     "/{meeting_id}/send-followup",
     response_model=SendFollowUpResponse,
@@ -83,7 +145,9 @@ def send_followup(
             detail="At least one recipient email address must be provided"
         )
 
-    html_content = payload.content_html or payload.content_markdown
+    html_content = payload.content_html
+    if not html_content or (payload.content_markdown and payload.content_markdown not in html_content):
+        html_content = _markdown_to_simple_html(payload.content_markdown)
 
     sent_count, failed = send_meeting_followup(
         to_emails=payload.recipient_emails,

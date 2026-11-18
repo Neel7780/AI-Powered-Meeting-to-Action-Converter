@@ -164,7 +164,7 @@ export default function GitHubSettings() {
       {data && <section className="grid gap-5 lg:grid-cols-[minmax(200px,1fr)_2fr]" aria-labelledby="github-repositories">
         <div>
           <h2 id="github-repositories" className="text-base font-medium">Repositories</h2>
-          <p className="mt-2 text-sm text-neutral-300">{data.can_manage ? 'Only repositories verified with GitHub administrator access appear here. Connecting a repository grants no member access.' : 'Your administrator chooses which repositories you can access.'}</p>
+          <p className="mt-2 text-sm text-neutral-300">{data.can_manage ? 'Only repositories verified with GitHub administrator access appear here. Connecting a repository grants no member access.' : 'Your workspace owner chooses which repositories you can access.'}</p>
         </div>
         <div className="space-y-3">
           {!data.repositories.length && <p className="rounded-lg bg-neutral-900 p-5 text-sm text-neutral-300">{data.can_manage ? 'No verified repositories. Connect GitHub to select repositories you administer.' : 'No repositories shared with you yet.'}</p>}
@@ -191,7 +191,7 @@ export default function GitHubSettings() {
       {data?.can_manage && <section className="grid gap-5 lg:grid-cols-[minmax(200px,1fr)_2fr]" aria-labelledby="github-members">
         <div>
           <h2 id="github-members" className="text-base font-medium">Member access</h2>
-          <p className="mt-2 text-sm text-neutral-300">Everyone starts with No Access, including admins. Choose a repository, then save each member’s permissions.</p>
+          <p className="mt-2 text-sm text-neutral-300">Everyone starts with No Access, including owners. Choose a repository, then save each member’s permissions.</p>
           <p className="mt-3 text-sm text-neutral-300">Repository details are available now. Issue, branch, and pull-request actions remain unavailable; Read &amp; Write cannot enable them.</p>
         </div>
         <div className="space-y-4">
