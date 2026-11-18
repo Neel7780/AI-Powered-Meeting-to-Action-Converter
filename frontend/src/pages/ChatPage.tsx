@@ -23,7 +23,7 @@ export default function ChatPage() {
     let cancelled = false;
 
     Promise.all([
-      supabase.from('meetings').select('*', { count: 'exact', head: true }).eq('workspace_id', workspaceId),
+      supabase.from('meetings').select('*', { count: 'exact', head: true }).eq('workspace_id', workspaceId).neq('lifecycle', 'deleted'),
       supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('workspace_id', workspaceId).neq('status', 'done'),
     ]).then(([m, t]) => {
       if (!cancelled) {

@@ -50,8 +50,12 @@ export function CalendarImportPicker({
       }
     } catch (err: any) {
       console.warn('[ActionPulse] Calendar fetch note:', err.message);
-      // If endpoint is unreachable or not yet configured, fail gracefully
-      setStatus({ connected: false });
+      // If 404/not connected, show as disconnected; otherwise report error
+      if (err.message && (err.message.includes('404') || err.message.includes('No connected'))) {
+        setStatus({ connected: false });
+      } else {
+        setError(err.message || 'Failed to fetch calendar status/events');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -68,6 +72,7 @@ export function CalendarImportPicker({
     setError(null);
     try {
       const redirectUri = `${window.location.origin}/calendar/callback`;
+      sessionStorage.setItem('calendar_return_to', window.location.pathname);
       const authUrl = await getCalendarConnectUrl(workspaceId, redirectUri);
       // Redirect to Google consent screen
       window.location.href = authUrl;

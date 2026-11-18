@@ -76,7 +76,7 @@ def approve_items(
     )
     items_by_id = {item["id"]: item for item in (items_resp.data or [])}
 
-    # Verify all requested items exist, belong to this meeting, and are in needs_review status
+    # Verify all requested items exist, belong to this meeting, and are in 'needs_review' status
     for item_update in payload.items:
         str_id = str(item_update.id)
         if str_id not in items_by_id:
@@ -85,10 +85,11 @@ def approve_items(
                 detail=f"Candidate item {str_id} does not exist or does not belong to meeting {meeting_id}"
             )
         db_item = items_by_id[str_id]
-        if db_item.get("review_status") != "needs_review":
+        cur_status = db_item.get("review_status")
+        if cur_status != "needs_review":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Candidate item {str_id} has status '{db_item.get('review_status')}', expected 'needs_review'"
+                detail=f"Candidate item {str_id} has status '{cur_status}', expected 'needs_review'"
             )
 
     # 3. Validate that any assigned owner_user_id is an active workspace member
@@ -177,11 +178,13 @@ def approve_items(
             if not raw_blocked and (db_item.get("rejection_reason") or "").startswith("depends_on:"):
                 raw_blocked = db_item.get("rejection_reason").split(":", 1)[1]
 
+            final_description = dumped.get("description") or db_item.get("source_excerpt") or ""
             task_insert = {
                 "workspace_id": str(workspace_id),
                 "meeting_id": str(meeting_id),
                 "extracted_item_id": str_id,
                 "title": (final_task or db_item.get("task") or "Untitled Action")[:500],
+                "description": final_description,
                 "deadline_utc": deadline_val,
                 "priority": final_priority,
                 "status": "todo",

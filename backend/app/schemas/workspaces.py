@@ -10,3 +10,11 @@ class InviteCreateResponse(BaseModel):
     email: EmailStr
     role: str
     expires_at: str
+
+class MemberRoleUpdateRequest(BaseModel):
+    role: Literal["admin", "organiser", "member"]
+
+class MemberRoleUpdateResponse(BaseModel):
+    workspace_id: str
+    user_id: str
+    role: str

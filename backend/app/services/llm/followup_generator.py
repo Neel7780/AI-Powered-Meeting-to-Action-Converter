@@ -182,10 +182,10 @@ def _load_meeting_context(meeting_id: UUID | str) -> dict[str, Any]:
             "timezone": meeting.get("timezone") or "Asia/Kolkata",
             "organiser_name": profiles_map.get(meeting.get("organiser_id"), {}).get("display_name", "Organiser"),
             "ai_processing": meeting.get("ai_processing", True),
-            "participants": participants or _get_demo_meeting_data(meeting_id)["participants"],
-            "decisions": decisions or _get_demo_meeting_data(meeting_id)["decisions"],
-            "tasks": tasks or _get_demo_meeting_data(meeting_id)["tasks"],
-            "transcript_summary": tr_text[:1200] if tr_text else _get_demo_meeting_data(meeting_id)["transcript_summary"]
+            "participants": participants,
+            "decisions": decisions,
+            "tasks": tasks,
+            "transcript_summary": tr_text[:1200] if tr_text else (meeting.get("title") or "Meeting discussion"),
         }
     except Exception as exc:
         logger.warning("Falling back to demo fixtures for meeting context %s: %s", meeting_id, exc)

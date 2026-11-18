@@ -140,6 +140,8 @@ def update_task_dependency(
 
     if payload.execution_type == "agent":
         update_payload["external_owner_label"] = "AI Agent"
+    elif payload.execution_type == "human" and target_task.get("external_owner_label") == "AI Agent":
+        update_payload["external_owner_label"] = None
 
     try:
         updated_resp = client.table("tasks").update(update_payload).eq("id", str(task_id)).execute()

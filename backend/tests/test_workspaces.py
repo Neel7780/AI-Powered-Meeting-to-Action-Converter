@@ -73,3 +73,92 @@ def test_create_invite_success():
         mock_send_email.assert_called_once()
         
     app.dependency_overrides.clear()
+
+
+def test_update_member_role_admin_cannot_make_admin():
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+
+    with patch("app.api.workspaces.require_role") as mock_req_role, \
+         patch("app.api.workspaces.get_supabase_client") as mock_get_db:
+        # Caller is an admin (not owner)
+        mock_req_role.return_value = "admin"
+
+        mock_db = MagicMock()
+        mock_get_db.return_value = mock_db
+        # Target member currently has role 'member'
+        mock_db.table().select().eq().eq().execute.return_value = MagicMock(data=[{"role": "member"}])
+
+        ws_id = str(uuid4())
+        member_id = str(uuid4())
+
+        # Admin attempts to promote member to 'admin' -> MUST BE FORBIDDEN (403)
+        response = client.patch(
+            f"/api/workspaces/{ws_id}/members/{member_id}/role",
+            json={"role": "admin"}
+        )
+
+        assert response.status_code == 403
+        assert "owner" in response.json()["detail"].lower()
+
+    app.dependency_overrides.clear()
+
+
+def test_update_member_role_owner_can_make_admin():
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+
+    with patch("app.api.workspaces.require_role") as mock_req_role, \
+         patch("app.api.workspaces.get_supabase_client") as mock_get_db:
+        # Caller is the workspace owner
+        mock_req_role.return_value = "owner"
+
+        mock_db = MagicMock()
+        mock_get_db.return_value = mock_db
+        # Target member currently has role 'member'
+        mock_db.table().select().eq().eq().execute.return_value = MagicMock(data=[{"role": "member"}])
+        # Update succeeds
+        mock_db.table().update().eq().eq().execute.return_value = MagicMock(data=[{"role": "admin"}])
+
+        ws_id = str(uuid4())
+        member_id = str(uuid4())
+
+        # Owner promotes member to 'admin' -> 200 OK
+        response = client.patch(
+            f"/api/workspaces/{ws_id}/members/{member_id}/role",
+            json={"role": "admin"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["role"] == "admin"
+        assert response.json()["workspace_id"] == ws_id
+        assert response.json()["user_id"] == member_id
+
+    app.dependency_overrides.clear()
+
+
+def test_update_member_role_admin_cannot_demote_admin():
+    app.dependency_overrides[get_current_user] = mock_get_current_user
+
+    with patch("app.api.workspaces.require_role") as mock_req_role, \
+         patch("app.api.workspaces.get_supabase_client") as mock_get_db:
+        # Caller is an admin (not owner)
+        mock_req_role.return_value = "admin"
+
+        mock_db = MagicMock()
+        mock_get_db.return_value = mock_db
+        # Target member currently has role 'admin'
+        mock_db.table().select().eq().eq().execute.return_value = MagicMock(data=[{"role": "admin"}])
+
+        ws_id = str(uuid4())
+        member_id = str(uuid4())
+
+        # Admin attempts to demote another admin to 'member' -> MUST BE FORBIDDEN (403)
+        response = client.patch(
+            f"/api/workspaces/{ws_id}/members/{member_id}/role",
+            json={"role": "member"}
+        )
+
+        assert response.status_code == 403
+        assert "owner" in response.json()["detail"].lower()
+
+    app.dependency_overrides.clear()
+

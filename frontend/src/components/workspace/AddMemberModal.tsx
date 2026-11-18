@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "../ui/button";
 import { Notice } from "../ui/notice";
@@ -86,9 +87,9 @@ export default function AddMemberModal({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           handleClose();
@@ -99,7 +100,7 @@ export default function AddMemberModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-member-title"
-        className="panel w-full max-w-md shadow-2xl"
+        className="w-full max-w-md rounded-xl border border-white/15 bg-[#0e0e13] shadow-2xl text-white animate-in fade-in zoom-in-95 duration-150"
       >
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>
@@ -108,19 +109,16 @@ export default function AddMemberModal({
               Add member
             </h2>
             <p className="mt-1 text-sm text-neutral-400">
-              Send an email invite to join this workspace.
+              Invite a collaborator to this workspace.
             </p>
           </div>
 
-          <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Close modal">
+          <Button variant="ghost" size="icon" onClick={handleClose} disabled={loading} aria-label="Close dialog">
             <X />
           </Button>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-5 p-6"
-        >
+        <form onSubmit={handleSubmit} className="space-y-4 p-6">
           <div>
             <label htmlFor="member-email" className="field-label">
               Email address
@@ -132,9 +130,10 @@ export default function AddMemberModal({
               onChange={(event) =>
                 setEmail(event.target.value)
               }
-              placeholder="member@example.com"
-              disabled={loading}
+              placeholder="teammate@company.com"
+              required
               className="field"
+              autoFocus
             />
           </div>
 
@@ -174,6 +173,7 @@ export default function AddMemberModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { Button } from "../ui/button";
 import { Notice } from "../ui/notice";
@@ -54,13 +55,20 @@ export default function CreateWorkspaceModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !loading) {
+          onClose();
+        }
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-workspace-title"
-        className="panel w-full max-w-md p-6 shadow-2xl"
+        className="w-full max-w-md rounded-xl border border-white/15 bg-[#0e0e13] p-6 shadow-2xl text-white animate-in fade-in zoom-in-95 duration-150"
       >
         <div className="mb-5">
           <p className="eyebrow">New workspace</p>
@@ -100,6 +108,7 @@ export default function CreateWorkspaceModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,4 +1,5 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 
 import ActionPulseLanding from "./components/landing/ActionPulseLanding";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
@@ -19,13 +20,35 @@ function RootRoute() {
   return <ActionPulseLanding />;
 }
 
+/**
+ * Listens for auth recovery parameters (#access_token=...&type=recovery or ?flow=reset)
+ * across any incoming route and seamlessly directs users to /reset-password.
+ */
+function AuthRecoveryListener() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    const pathname = window.location.pathname || "";
+    if (
+      pathname !== "/reset-password" &&
+      (hash.includes("type=recovery") || search.includes("type=recovery") || search.includes("flow=reset"))
+    ) {
+      navigate(`/reset-password${search}${hash}`, { replace: true });
+    }
+  }, [navigate]);
+  return null;
+}
+
 function App() {
   return (
     <BrowserRouter>
+      <AuthRecoveryListener />
       <Routes>
         <Route path="/" element={<RootRoute />} />
 
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/create-meeting" element={<Navigate to="/meetings" replace />} />
         <Route path="/meeting-review" element={<MeetingReview />} />
