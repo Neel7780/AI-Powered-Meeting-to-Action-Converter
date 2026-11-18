@@ -11,7 +11,9 @@ import {
   ExternalLink,
   Filter,
   LoaderCircle,
+  Maximize2,
   MessageSquare,
+  Minus,
   PanelLeft,
   PanelLeftClose,
   Plus,
@@ -19,6 +21,7 @@ import {
   Sparkles,
   SquarePen,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   createChatSession,
@@ -34,7 +37,9 @@ import type { ChatMessage, ChatSession, MeetingOption } from '../../types/chat';
 interface ChatInterfaceProps {
   workspaceId?: string;
   isCompact?: boolean;
+  isOpen?: boolean;
   onClose?: () => void;
+  onMinimize?: () => void;
   title?: string;
 }
 
@@ -206,8 +211,10 @@ function groupSessions(list: ChatSession[]) {
 
 export default function ChatInterface({
   workspaceId,
-  isCompact: _isCompact = false,
+  isCompact = false,
+  isOpen = true,
   onClose,
+  onMinimize,
   title = 'AI Meeting Copilot',
 }: ChatInterfaceProps) {
   const navigate = useNavigate();
@@ -216,7 +223,7 @@ export default function ChatInterface({
 
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(!isCompact);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -228,6 +235,16 @@ export default function ChatInterface({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // When reopened after being minimized, auto-focus input and scroll to bottom
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        inputRef.current?.focus();
+      }, 50);
+    }
+  }, [isOpen]);
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -293,6 +310,11 @@ export default function ChatInterface({
     setExpandedCitations({});
     setInput('');
     setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const handleCloseAndReset = () => {
+    handleNewChat();
+    onClose?.();
   };
 
   const handleSelectSession = async (session: ChatSession) => {
@@ -658,9 +680,9 @@ export default function ChatInterface({
       {/* 2. Main Chat Canvas */}
       <div className="flex-1 flex flex-col min-w-0 h-full">
         {/* Top Header / Scoping Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0c0c12]/90 backdrop-blur-md px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0c0c12]/90 backdrop-blur-md px-4 sm:px-5 py-3">
           <div className="flex items-center gap-2.5">
-            <div className="grid size-8 place-items-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
+            <div className="grid size-8 place-items-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 shrink-0">
               <Sparkles className="size-4" />
             </div>
             <div>
@@ -670,30 +692,34 @@ export default function ChatInterface({
                   AI Copilot
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-400">
-                Grounded in transcripts & Kanban tasks
-              </p>
+              {!isCompact && (
+                <p className="text-[11px] text-neutral-400">
+                  Grounded in transcripts & Kanban tasks
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {/* Meeting Scoping Selector Pill */}
             <div className="relative flex items-center">
-              <Filter className="pointer-events-none absolute left-3 size-3.5 text-neutral-400" />
+              <Filter className="pointer-events-none absolute left-2.5 size-3 text-neutral-400" />
               <select
                 value={selectedMeetingId}
                 onChange={(e) => setSelectedMeetingId(e.target.value)}
                 title="Select meeting scope"
-                className="h-8 max-w-[190px] sm:max-w-[240px] appearance-none truncate rounded-full border border-white/10 bg-[#14141c] pl-8 pr-7 text-xs text-neutral-200 transition-colors hover:border-white/25 focus:border-indigo-500 focus:outline-none"
+                className={`h-8 appearance-none truncate rounded-full border border-white/10 bg-[#14141c] pl-7 pr-6 text-xs text-neutral-200 transition-colors hover:border-white/25 focus:border-indigo-500 focus:outline-none ${
+                  isCompact ? 'max-w-[125px] sm:max-w-[155px]' : 'max-w-[190px] sm:max-w-[240px]'
+                }`}
               >
-                <option value="">🌐 All Meetings ({meetings.length})</option>
+                <option value="">🌐 All ({meetings.length})</option>
                 {meetings.map((m) => (
                   <option key={m.id} value={m.id}>
                     📅 {m.title}
                   </option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 size-3 text-neutral-500" />
+              <ChevronDown className="pointer-events-none absolute right-2 size-2.5 text-neutral-500" />
             </div>
 
             {/* + New Chat Button in header */}
@@ -701,21 +727,51 @@ export default function ChatInterface({
               type="button"
               onClick={handleNewChat}
               title="Start a fresh new chat session"
-              className="flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition-all hover:border-indigo-400 hover:bg-indigo-500/20 active:scale-95"
+              className="flex items-center gap-1.5 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-all hover:border-indigo-400 hover:bg-indigo-500/20 active:scale-95"
             >
               <Plus className="size-3.5 text-indigo-400" />
-              <span>New Chat</span>
+              <span className={isCompact ? 'hidden sm:inline' : ''}>New Chat</span>
             </button>
 
-            {/* Close button for compact modal/drawer */}
+            {/* Minimize button: hides window while preserving conversation state */}
+            {(onMinimize || onClose) && (
+              <button
+                type="button"
+                onClick={onMinimize || onClose}
+                className="grid size-8 place-items-center rounded-full border border-white/10 text-neutral-400 transition-colors hover:border-white/25 hover:bg-white/5 hover:text-white"
+                title="Minimize (keeps active conversation)"
+                aria-label="Minimize Copilot"
+              >
+                <Minus className="size-3.5" />
+              </button>
+            )}
+
+            {/* Expand to full page button (compact mode) */}
+            {isCompact && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (onClose) onClose();
+                  navigate('/chat');
+                }}
+                className="grid size-8 place-items-center rounded-full border border-white/10 text-neutral-400 transition-colors hover:border-white/25 hover:bg-white/5 hover:text-white"
+                title="Open full page"
+                aria-label="Open full page"
+              >
+                <Maximize2 className="size-3.5" />
+              </button>
+            )}
+
+            {/* Close button: closes modal and resets to fresh conversation */}
             {onClose && (
               <button
                 type="button"
-                onClick={onClose}
-                className="grid size-8 place-items-center rounded-full border border-white/10 text-neutral-400 transition-colors hover:border-white/25 hover:bg-white/5 hover:text-white"
-                aria-label="Close chat"
+                onClick={handleCloseAndReset}
+                className="grid size-8 place-items-center rounded-full border border-white/10 text-neutral-400 transition-colors hover:border-rose-500/40 hover:bg-rose-500/15 hover:text-rose-300"
+                title="Close & reset conversation"
+                aria-label="Close and reset chat"
               >
-                ✕
+                <X className="size-3.5" />
               </button>
             )}
           </div>
