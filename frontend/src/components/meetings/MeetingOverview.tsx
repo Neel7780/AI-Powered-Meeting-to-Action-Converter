@@ -7,11 +7,12 @@ interface Participant { id: string; name: string; userId?: string }
 interface Props {
   participants: Participant[];
   tasks: KanbanTaskItem[];
+  pending: number;
   onShowTasks: () => void;
 }
 
 /** Progress measures approved tasks; people without assignments stay visible. */
-export function MeetingOverview({ participants, tasks, onShowTasks }: Props) {
+export function MeetingOverview({ participants, tasks, pending, onShowTasks }: Props) {
   const [now] = useState(Date.now);
   const people = new Map(participants.map((p) => [p.userId || p.id, p]));
   for (const task of tasks) {
@@ -38,17 +39,22 @@ export function MeetingOverview({ participants, tasks, onShowTasks }: Props) {
       <section className="rounded-xl border border-white/10 bg-white/[0.02] p-5">
         <div className="flex items-center justify-between gap-3"><div>
           <h3 className="text-sm font-semibold text-white">Meeting progress</h3>
-          <p className="mt-1 text-xs text-neutral-400">{done} of {tasks.length} confirmed tasks completed</p>
-        </div><span className="text-3xl font-semibold tracking-tight text-white">{completion}%</span></div>
-        <div role="progressbar" aria-label="Meeting task completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={completion} className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-          <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${completion}%` }} />
-        </div>
-        <div className="mt-5 grid grid-cols-3 gap-3 text-xs">
-          <div><span className="flex items-center gap-1.5 text-neutral-500"><Clock className="size-3.5" /> In progress</span><p className="mt-1 text-lg font-semibold text-white">{tasks.filter((t) => t.status === 'in_progress').length}</p></div>
-          <div><span className="flex items-center gap-1.5 text-neutral-500"><AlertCircle className="size-3.5" /> Blocked</span><p className="mt-1 text-lg font-semibold text-amber-300">{blocked}</p></div>
-          <div><span className="flex items-center gap-1.5 text-neutral-500"><Clock className="size-3.5" /> Overdue</span><p className="mt-1 text-lg font-semibold text-rose-300">{late}</p></div>
-        </div>
-        {!tasks.length && <p className="mt-4 text-xs leading-5 text-neutral-400">No confirmed tasks for this meeting yet.</p>}
+          <p className="mt-1 text-xs text-neutral-400">{tasks.length
+            ? `${done} of ${tasks.length} confirmed tasks completed`
+            : pending > 0 ? 'Progress starts after actions are approved.' : 'No confirmed tasks for this meeting yet.'}</p>
+        </div>{tasks.length > 0 && <span className="text-3xl font-semibold tracking-tight text-white">{completion}%</span>}</div>
+        {tasks.length > 0 && (
+          <>
+            <div role="progressbar" aria-label="Meeting task completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={completion} className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${completion}%` }} />
+            </div>
+            <div className="mt-5 grid grid-cols-3 gap-3 text-xs">
+              <div><span className="flex items-center gap-1.5 text-neutral-500"><Clock className="size-3.5" /> In progress</span><p className="mt-1 text-lg font-semibold text-white">{tasks.filter((t) => t.status === 'in_progress').length}</p></div>
+              <div><span className="flex items-center gap-1.5 text-neutral-500"><AlertCircle className="size-3.5" /> Blocked</span><p className="mt-1 text-lg font-semibold text-amber-300">{blocked}</p></div>
+              <div><span className="flex items-center gap-1.5 text-neutral-500"><Clock className="size-3.5" /> Overdue</span><p className="mt-1 text-lg font-semibold text-rose-300">{late}</p></div>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="overflow-hidden rounded-xl border border-white/10">

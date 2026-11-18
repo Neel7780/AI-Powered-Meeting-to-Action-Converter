@@ -1,32 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Lock, Video } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ListChecks, Lock, Video } from 'lucide-react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { requestApi } from '../lib/api';
+import { useMeetingResource } from '../hooks/useMeetingResource';
 import { supabase } from '../lib/supabase';
 import { canOrganise, loadMeeting, meetingDate } from '../services/meetingNavigation';
 import type { MeetingSummaryData } from '../types/meetingDetails';
 import { MeetingOverview } from '../components/meetings/MeetingOverview';
-import { MeetingChapters, MeetingSummary, MeetingTranscript } from '../components/meetings/MeetingContent';
+import { MeetingChapters, MeetingPreparation, MeetingSummary, MeetingTranscript } from '../components/meetings/MeetingContent';
 import { MeetingTasks } from '../components/meetings/MeetingTasks';
 import { FollowUpModal } from '../components/meetings/FollowUpModal';
 import { Button } from '../components/ui/button';
 import MeetingReview from './MeetingReview';
 import SpeakerMapping from './SpeakerMapping';
-
-function useMeetingResource<T>(load: (() => Promise<T>) | null) {
-  const [state, setState] = useState<{ data?: T; error?: string }>({});
-  useEffect(() => {
-    if (!load) return;
-    let current = true;
-    load().then(
-      (data) => { if (current) setState({ data }); },
-      (error: Error) => { if (current) setState({ error: error.message || 'Could not load this content.' }); },
-    );
-    return () => { current = false; };
-  }, [load]);
-  return state;
-}
 
 const tabs = [
   ['overview', 'Overview'], ['chapters', 'Chapters'], ['transcript', 'Transcript'],
@@ -38,6 +24,8 @@ type MeetingData = Awaited<ReturnType<typeof loadMeeting>>;
 function MeetingWorkspace({ data, reload }: { data: MeetingData; reload: () => Promise<void> }) {
   const { meeting, tasks, role } = data;
   const canManage = canOrganise(role);
+  const canReview = canManage && meeting.ai_processing;
+  const processing = meeting.status === 'processing';
   const [searchParams, setSearchParams] = useSearchParams();
   const { state } = useLocation();
   const returnTo = typeof state?.meetingsReturnTo === 'string' && state.meetingsReturnTo.startsWith('/meetings?')
@@ -47,7 +35,7 @@ function MeetingWorkspace({ data, reload }: { data: MeetingData; reload: () => P
   const [loadSummary, setLoadSummary] = useState(false);
   const desiredTab = searchParams.get('tab') || initialTab;
   const availableTabs = tabs.filter(([id]) => {
-    if (id === 'review' || id === 'follow-up') return canManage && meeting.ai_processing;
+    if (id === 'review' || id === 'follow-up') return canReview;
     if (id === 'speakers') {
       const resumingAudio = desiredTab === 'speakers' && !meeting.transcripts
         && ['processing', 'failed'].includes(meeting.status);
@@ -62,8 +50,11 @@ function MeetingWorkspace({ data, reload }: { data: MeetingData; reload: () => P
   const setTab = (next: Tab) => setSearchParams({ tab: next }, { state });
   const showQuote = (timestamp: string) => setSearchParams({ tab: 'transcript', at: timestamp }, { state });
   const transcriptId = meeting.transcripts?.id;
-  const summaryRequest = useCallback(() => requestApi<MeetingSummaryData>(`/api/meetings/${meeting.id}/summary`), [meeting.id]);
-  const summary = useMeetingResource((tab === 'overview' || loadSummary) && transcriptId && meeting.status !== 'processing' ? summaryRequest : null);
+  const canLoadSummary = !!transcriptId && !processing && !meeting.needsSpeakers;
+  const summary = useMeetingResource<MeetingSummaryData>(
+    `/api/meetings/${meeting.id}/summary`, canLoadSummary && (tab === 'overview' || loadSummary), transcriptId,
+  );
+  const waitingForSummary = canLoadSummary && !summary.data && !summary.error;
   useEffect(() => {
     if (tab === 'overview' && transcriptId) setLoadSummary(true);
   }, [tab, transcriptId]);
@@ -96,12 +87,44 @@ function MeetingWorkspace({ data, reload }: { data: MeetingData; reload: () => P
         </Button>)}
       </nav>
 
-      {tab === 'overview' && <div className="grid gap-5 lg:grid-cols-2">
-        <MeetingSummary summary={summary.data} error={summary.error} meeting={meeting} onTimestamp={showQuote} />
-        <MeetingOverview participants={meeting.participants} tasks={tasks} onShowTasks={() => setTab('tasks')} />
-      </div>}
-      {tab === 'chapters' && (transcriptId
-        ? <MeetingChapters meetingId={meeting.id} onTimestamp={showQuote} />
+      {processing && (tab === 'overview' || tab === 'chapters' || tab === 'review') && (
+        <MeetingPreparation
+          title="Preparing your meeting"
+          description={transcriptId
+            ? 'Your transcript is saved. We’re identifying decisions and suggested actions.'
+            : 'We’re turning your recording into a transcript.'}
+        />
+      )}
+      {tab === 'overview' && !processing && (
+        <div className="space-y-5">
+          {canReview && meeting.pending > 0 && (
+            <section className="dashboard-surface flex flex-wrap items-center justify-between gap-4 rounded-xl border border-indigo-500/25 p-4 sm:p-5">
+              <div className="flex items-center gap-3">
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-indigo-500/10 text-indigo-300"><ListChecks className="size-5" /></span>
+                <div>
+                  <h2 className="text-sm font-semibold text-white">Suggested actions</h2>
+                  <p className="mt-1 text-sm text-neutral-400">{meeting.pending} {meeting.pending === 1 ? 'action needs' : 'actions need'} your review.</p>
+                </div>
+              </div>
+              <Button onClick={() => setTab('review')}>Review {meeting.pending} {meeting.pending === 1 ? 'action' : 'actions'} <ArrowRight /></Button>
+            </section>
+          )}
+          {meeting.status === 'failed' && transcriptId && canReview && (
+            <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/25 p-4 text-sm text-neutral-300">
+              Action extraction could not finish.
+              <Button variant="outline" size="sm" onClick={() => setTab('transcript')}>Open transcript to retry</Button>
+            </div>
+          )}
+          <div className="grid items-start gap-5 lg:grid-cols-2">
+            {waitingForSummary
+              ? <MeetingPreparation title="Preparing the summary" description="Organizing the discussion, decisions and open questions." />
+              : <MeetingSummary summary={summary.data} error={summary.error} meeting={meeting} onTimestamp={showQuote} onRetry={summary.retry} />}
+            <MeetingOverview participants={meeting.participants} tasks={tasks} pending={meeting.pending} onShowTasks={() => setTab('tasks')} />
+          </div>
+        </div>
+      )}
+      {tab === 'chapters' && !processing && (transcriptId
+        ? <MeetingChapters meetingId={meeting.id} transcriptId={transcriptId} onTimestamp={showQuote} />
         : <p className="text-sm text-neutral-400">No transcript available for chapters.</p>)}
       {tab === 'transcript' && <MeetingTranscript meeting={meeting} canManage={canManage}
         timestamp={searchParams.get('at')}
@@ -109,7 +132,7 @@ function MeetingWorkspace({ data, reload }: { data: MeetingData; reload: () => P
         onBackToReview={sourceSuggestion && availableTabs.some(([id]) => id === 'review') ? () => setTab('review') : undefined}
         onRefresh={reload} onTab={setTab} />}
       {tab === 'tasks' && <MeetingTasks tasks={tasks} onRefresh={reload} />}
-      {(tab === 'review' || reviewOpened) && availableTabs.some(([id]) => id === 'review') && (
+      {(tab === 'review' || reviewOpened) && canReview && !processing && (
         <div hidden={tab !== 'review'}>
           <MeetingReview meetingId={meeting.id} workspaceId={meeting.workspace_id} onChanged={reload}
             onOpenSource={(itemId) => setSearchParams({ tab: 'transcript', suggestion: itemId }, { state })} />
@@ -154,6 +177,10 @@ function MeetingDetails({ id, userId }: { id: string; userId: string }) {
   }, [processing, reload]);
 
   if (error) return <div className="space-y-3 p-8"><p role="alert" className="text-sm text-rose-300">{error}</p><Button onClick={reload} variant="outline">Retry</Button> <Link to="/meetings" className="text-sm underline">Back to meetings</Link></div>;
-  if (!data) return <p role="status" className="p-8 text-sm text-neutral-400">Loading meeting…</p>;
+  if (!data) return (
+    <div className="mx-auto max-w-7xl p-4 sm:p-8">
+      <MeetingPreparation title="Loading meeting" description="Getting your meeting details." />
+    </div>
+  );
   return <MeetingWorkspace data={data} reload={reload} />;
 }

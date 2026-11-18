@@ -441,7 +441,8 @@ def test_submit_transcript_unsupported_file_extension():
         app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_get_meeting_summary_success():
+@pytest.mark.parametrize("role", ["member", "owner"])
+def test_get_meeting_summary_success(role):
     meeting_id = uuid4()
     workspace_id = uuid4()
     caller_id = uuid4()
@@ -463,7 +464,7 @@ def test_get_meeting_summary_success():
     wm_mock = MagicMock()
     wm_mock.select.return_value = wm_mock
     wm_mock.eq.return_value = wm_mock
-    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+    wm_mock.execute.return_value = MagicMock(data=[{"role": role}])
 
     transcripts_mock = MagicMock()
     transcripts_mock.select.return_value = transcripts_mock
@@ -674,7 +675,8 @@ def test_get_meeting_summary_forbidden_for_guest_role():
         app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_get_meeting_chapters_success():
+@pytest.mark.parametrize("role", ["member", "owner"])
+def test_get_meeting_chapters_success(role):
     meeting_id = uuid4()
     workspace_id = uuid4()
     caller_id = uuid4()
@@ -694,7 +696,7 @@ def test_get_meeting_chapters_success():
     wm_mock = MagicMock()
     wm_mock.select.return_value = wm_mock
     wm_mock.eq.return_value = wm_mock
-    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+    wm_mock.execute.return_value = MagicMock(data=[{"role": role}])
 
     transcripts_mock = MagicMock()
     transcripts_mock.select.return_value = transcripts_mock
