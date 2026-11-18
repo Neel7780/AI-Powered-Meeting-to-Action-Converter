@@ -24,7 +24,7 @@ type AuthView = "login" | "forgot_email" | "link_sent" | "new_password" | "reset
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signIn, devSignIn } = useAuth();
+  const { user, signIn, devSignIn } = useAuth();
 
   // Navigation & View State
   const [view, setView] = useState<AuthView>("login");
@@ -45,6 +45,21 @@ export default function Login() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Redirect authenticated users to dashboard (unless completing a password recovery flow)
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    const isRecovery =
+      view === "new_password" ||
+      hash.includes("type=recovery") ||
+      search.includes("type=recovery") ||
+      search.includes("flow=reset");
+
+    if (user && !isRecovery) {
+      navigate(location.state?.from || "/dashboard", { replace: true });
+    }
+  }, [user, navigate, location.state, view]);
 
   // Check if arriving from a recovery link or password reset redirect
   useEffect(() => {
