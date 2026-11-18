@@ -41,7 +41,7 @@ export default function CalendarCallback() {
         const res = await handleCalendarCallback(code, state, redirectUri);
         setStatus('success');
         setMessage(`Successfully connected Google Calendar (${res.account_email})!`);
-        
+
         const returnTo = sessionStorage.getItem('calendar_return_to') || '/calendar';
         sessionStorage.removeItem('calendar_return_to');
 
