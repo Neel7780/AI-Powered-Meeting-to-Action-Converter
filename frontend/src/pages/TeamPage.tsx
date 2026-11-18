@@ -743,12 +743,12 @@ export default function TeamPage() {
                         value={member.role}
                         disabled={isBusy}
                         onChange={(e) => handleRoleChange(member, e.target.value as AppRole)}
-                        className="h-8 rounded-md border border-white/10 bg-[#141419] px-2 text-xs text-neutral-200 outline-none hover:border-white/20 focus:border-indigo-500 cursor-pointer"
+                        className="h-8 rounded-md border border-white/10 dashboard-surface bg-[#141419] px-2 text-xs text-neutral-200 outline-none hover:border-white/20 focus:border-indigo-500 cursor-pointer"
                         title="Change member role (Owner only)"
                       >
-                        <option value="member" className="bg-[#121217] text-white">Member</option>
-                        <option value="organiser" className="bg-[#121217] text-white">Organiser</option>
-                        <option value="admin" className="bg-[#121217] text-white">Admin</option>
+                        <option value="member" className="dashboard-surface bg-[#121217] text-white">Member</option>
+                        <option value="organiser" className="dashboard-surface bg-[#121217] text-white">Organiser</option>
+                        <option value="admin" className="dashboard-surface bg-[#121217] text-white">Admin</option>
                       </select>
                     )}
 

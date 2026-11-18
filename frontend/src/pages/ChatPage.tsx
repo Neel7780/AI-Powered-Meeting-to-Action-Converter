@@ -44,7 +44,7 @@ export default function ChatPage() {
           <AlertCircle className="mx-auto size-8 text-neutral-500" />
           <h2 className="mt-3 text-lg font-medium text-white">No Workspace Selected</h2>
           <p className="mt-1 text-sm text-neutral-400">
-            Please select or create a workspace to query meeting data.
+            Select or create a workspace to ask about your meetings.
           </p>
         </div>
       </div>
@@ -60,13 +60,12 @@ export default function ChatPage() {
             <span className="grid size-7 place-items-center rounded-md border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
               <Sparkles className="size-4" />
             </span>
-            <p className="eyebrow">Workspace Intelligence</p>
           </div>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">
             AI Meeting Copilot
           </h1>
           <p className="mt-1 text-sm text-neutral-400">
-            Query across transcripts, decisions, and action items with grounded citations.
+            Ask about your meetings and tasks.
           </p>
         </div>
 
@@ -103,14 +102,14 @@ export default function ChatPage() {
             <div className="flex items-center gap-2 text-indigo-400">
               <ShieldCheck className="size-4" />
               <h3 className="text-xs font-semibold uppercase tracking-wider text-white">
-                Factual Grounding
+                Sources
               </h3>
             </div>
             <p className="text-xs leading-relaxed text-neutral-400">
-              Every answer provided by the copilot is strictly verified against your workspace's stored transcripts and confirmed Kanban tasks.
+              Answers use your workspace’s meeting transcripts and tasks. Check the linked sources for context.
             </p>
-            <div className="rounded-md border border-white/5 bg-[#050508] p-2.5 text-[11px] text-neutral-400">
-              <p className="font-medium text-neutral-200">🔍 Verifiable Citations</p>
+            <div className="rounded-md border border-white/5 dashboard-surface bg-[#050508] p-2.5 text-[11px] text-neutral-400">
+              <p className="font-medium text-neutral-200">Source references</p>
               <p className="mt-1 text-neutral-500">
                 Click any citation excerpt to jump straight to the meeting review or Kanban board.
               </p>
@@ -122,7 +121,7 @@ export default function ChatPage() {
             <div className="flex items-center gap-2 text-amber-400">
               <Lightbulb className="size-4" />
               <h3 className="text-xs font-semibold uppercase tracking-wider text-white">
-                Helpful Prompts
+                Try asking
               </h3>
             </div>
             <ul className="space-y-2 text-xs text-neutral-300">

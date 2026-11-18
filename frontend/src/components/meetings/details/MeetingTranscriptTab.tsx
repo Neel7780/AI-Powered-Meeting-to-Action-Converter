@@ -16,6 +16,7 @@ import type { MeetingChapter } from '../../../types/meetingDetails';
 
 interface TranscriptTabProps {
   segments: TranscriptSegment[];
+  readOnly?: boolean;
   playbackSeconds: number;
   highlightedTimestamp?: string | null;
   highlightedSegmentId?: string | null;
@@ -54,6 +55,7 @@ function getSpeakerColorTheme(speakerName: string, explicitColor?: string) {
 
 export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
   segments,
+  readOnly = false,
   playbackSeconds,
   highlightedTimestamp,
   highlightedSegmentId,
@@ -271,18 +273,20 @@ export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
           )}
 
           {/* 4. Edit Mode Toggle */}
-          <button
-            onClick={() => setIsEditMode(!isEditMode)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
-              isEditMode
-                ? 'bg-amber-950/80 text-amber-300 border-amber-800/60 shadow-xs'
-                : 'bg-[#151922] hover:bg-[#1d2330] text-slate-300 border-[#242b38]'
-            }`}
-            title="Toggle inline transcript text editing"
-          >
-            <Edit3 className="size-3.5 text-slate-400" />
-            <span className="hidden sm:inline">{isEditMode ? 'Done' : 'Edit'}</span>
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => setIsEditMode(!isEditMode)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
+                isEditMode
+                  ? 'bg-amber-950/80 text-amber-300 border-amber-800/60 shadow-xs'
+                  : 'bg-[#151922] hover:bg-[#1d2330] text-slate-300 border-[#242b38]'
+              }`}
+              title="Toggle inline transcript text editing"
+            >
+              <Edit3 className="size-3.5 text-slate-400" />
+              <span className="hidden sm:inline">{isEditMode ? 'Done' : 'Edit'}</span>
+            </button>
+          )}
 
           {/* 5. Copy Transcript */}
           <button

@@ -289,18 +289,15 @@ export default function ChatInterface({
     meetings.find((m) => m.id === selectedMeetingId)?.title || 'All Workspace Meetings';
 
   return (
-    <div className={`flex flex-col h-full bg-[#050508] text-white ${isCompact ? '' : 'rounded-xl border border-white/10'}`}>
+    <div className={`flex flex-col h-full dashboard-surface bg-[#050508] text-white ${isCompact ? '' : 'rounded-xl border border-white/10'}`}>
       {/* Top Header / Scoping Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#08080c] px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 dashboard-surface bg-[#08080c] px-4 py-3">
         <div className="flex items-center gap-2.5">
           <div className="grid size-8 place-items-center rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
             <Sparkles className="size-4" />
           </div>
           <div>
             <h2 className="text-sm font-medium tracking-tight text-white">{title}</h2>
-            <p className="text-[11px] text-neutral-400">
-              Grounded in meetings & tasks
-            </p>
           </div>
         </div>
 
@@ -312,7 +309,7 @@ export default function ChatInterface({
               value={selectedMeetingId}
               onChange={(e) => setSelectedMeetingId(e.target.value)}
               title="Select meeting scope"
-              className="h-8 max-w-[190px] sm:max-w-[240px] appearance-none truncate rounded-md border border-white/10 bg-[#0e0e14] pl-8 pr-7 text-xs text-neutral-200 transition-colors hover:border-white/20 focus:border-indigo-500 focus:outline-none"
+              className="h-8 max-w-[190px] sm:max-w-[240px] appearance-none truncate rounded-md border border-white/10 dashboard-control bg-[#0e0e14] pl-8 pr-7 text-xs text-neutral-200 transition-colors hover:border-white/20 focus:border-indigo-500 focus:outline-none"
             >
               <option value="">🌐 All Meetings ({meetings.length})</option>
               {meetings.map((m) => (
@@ -382,7 +379,7 @@ export default function ChatInterface({
                   key={i}
                   type="button"
                   onClick={() => handleSend(p.query)}
-                  className="group flex flex-col items-start rounded-lg border border-white/10 bg-[#09090e] p-3 text-left transition-all hover:border-indigo-500/40 hover:bg-indigo-500/[0.03]"
+                  className="group flex flex-col items-start rounded-lg border border-white/10 dashboard-surface bg-[#09090e] p-3 text-left transition-all hover:border-indigo-500/40 hover:bg-indigo-500/[0.03]"
                 >
                   <span className="flex items-center gap-2 text-xs font-medium text-white group-hover:text-indigo-300">
                     <span>{p.icon}</span>
@@ -418,7 +415,7 @@ export default function ChatInterface({
                     className={`rounded-xl px-4 py-3 ${
                       isUser
                         ? 'border border-indigo-500/30 bg-indigo-600/20 text-white'
-                        : 'panel border-white/10 bg-[#0a0a0f]'
+                        : 'panel border-white/10 dashboard-surface bg-[#0a0a0f]'
                     }`}
                   >
                     {isUser ? (
@@ -430,7 +427,7 @@ export default function ChatInterface({
 
                   {/* Supporting Evidence / Citations Accordion */}
                   {hasCitations && (
-                    <div className="rounded-lg border border-white/10 bg-[#06060a] overflow-hidden">
+                    <div className="rounded-lg border border-white/10 dashboard-surface bg-[#06060a] overflow-hidden">
                       <button
                         type="button"
                         onClick={() => toggleCitations(msg.id)}
@@ -471,7 +468,7 @@ export default function ChatInterface({
                                 {cit.meeting_id && (
                                   <button
                                     type="button"
-                                    onClick={() => navigate(`/meetings/${cit.meeting_id}/review`)}
+                                    onClick={() => navigate(`/meetings/${cit.meeting_id}?tab=overview`)}
                                     className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-neutral-300 hover:border-white/20 hover:bg-white/10 hover:text-white"
                                   >
                                     <Calendar className="size-3" />
@@ -533,7 +530,7 @@ export default function ChatInterface({
             <div className="grid size-7 shrink-0 place-items-center rounded-md border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
               <Sparkles className="size-4 animate-pulse" />
             </div>
-            <div className="panel flex items-center gap-2.5 rounded-xl border-white/10 bg-[#0a0a0f] px-4 py-3 text-xs text-neutral-400">
+            <div className="panel flex items-center gap-2.5 rounded-xl border-white/10 dashboard-surface bg-[#0a0a0f] px-4 py-3 text-xs text-neutral-400">
               <LoaderCircle className="size-4 animate-spin text-indigo-400" />
               <span>Analyzing transcripts and verifying citations…</span>
             </div>
@@ -544,7 +541,7 @@ export default function ChatInterface({
       </div>
 
       {/* Input Bar */}
-      <div className="border-t border-white/10 bg-[#08080c] p-3">
+      <div className="border-t border-white/10 dashboard-surface bg-[#08080c] p-3">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -565,7 +562,7 @@ export default function ChatInterface({
                   : 'Ask about previous meetings, decisions, or pending tasks…'
               }
               disabled={loading || !workspaceId}
-              className="w-full resize-none rounded-lg border border-white/10 bg-[#0e0e14] px-3.5 py-2.5 pr-10 text-xs text-white placeholder-neutral-500 transition-colors focus:border-indigo-500 focus:outline-none disabled:opacity-50"
+              className="w-full resize-none rounded-lg border border-white/10 dashboard-control bg-[#0e0e14] px-3.5 py-2.5 pr-10 text-xs text-white placeholder-neutral-500 transition-colors focus:border-indigo-500 focus:outline-none disabled:opacity-50"
             />
           </div>
 
@@ -578,10 +575,6 @@ export default function ChatInterface({
             <CornerDownLeft className="size-3.5" />
           </button>
         </form>
-
-        <p className="mt-1.5 text-center text-[10px] text-neutral-500">
-          Answers are grounded directly in your workspace meetings & tasks.
-        </p>
       </div>
     </div>
   );

@@ -36,6 +36,7 @@ export interface MeetingSummaryData {
   overview: string;
   key_discussion_points: SummaryDiscussionPoint[];
   decisions: SummaryDecision[];
+  open_questions?: string[];
   outcomes: string[];
   next_steps: string[];
   takeaways?: string[];

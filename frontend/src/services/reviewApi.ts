@@ -577,7 +577,8 @@ export const reviewApi = {
               id: item.id,
               meeting_id: item.meeting_id,
               title: item.task || item.source_excerpt || 'Action Item',
-              description: item.source_excerpt || item.task || '',
+              description: item.source_excerpt || '',
+              source_excerpt: item.source_excerpt || undefined,
               due_date: dueDate,
               extracted_due_date: dueDate,
               assignee_id: item.owner_user_id || assignee?.user_id || null,
@@ -653,6 +654,10 @@ export const reviewApi = {
         task: i.title,
         owner_user_id: ownerId,
       };
+
+      if (i.source_excerpt && i.description !== i.source_excerpt) {
+        payloadItem.description = i.description;
+      }
 
       if (isValidUuid(i.blocked_by_id)) {
         payloadItem.blocked_by_id = i.blocked_by_id;

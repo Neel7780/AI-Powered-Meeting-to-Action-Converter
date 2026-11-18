@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
@@ -15,6 +16,42 @@ from app.services.llm.summary_service import (
 from main import app
 
 client = TestClient(app)
+
+
+@pytest.mark.parametrize("resource", ["summary", "chapters"])
+def test_private_meeting_access_applies_to_cached_content(resource):
+    meeting_id = uuid4()
+    user = CurrentUser(id=uuid4(), email="member@example.com")
+    cached = {"meeting_id": str(meeting_id)}
+    if resource == "summary":
+        cached.update(
+            overview="Discussion summary",
+            key_discussion_points=[],
+            decisions=[],
+            outcomes=[],
+            next_steps=[],
+            generated_at="2026-11-18T00:00:00Z",
+        )
+    else:
+        cached.update(chapter_count=0, chapters=[])
+    meeting = {
+        "id": str(meeting_id),
+        "visibility": "private",
+        "organiser_id": str(uuid4()),
+        resource: cached,
+    }
+    db = MagicMock()
+    db.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        with patch("app.api.meetings.require_meeting_role", return_value=meeting), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+            response = client.get(f"/api/meetings/{meeting_id}/{resource}")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 404
 
 
 def test_create_meeting_success():

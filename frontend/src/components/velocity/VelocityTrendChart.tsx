@@ -65,7 +65,7 @@ export const VelocityTrendChart: React.FC<VelocityTrendChartProps> = ({ trendHis
                 {/* Vertical Stacked Bar */}
                 <div className="w-16 sm:w-20 bg-neutral-900 rounded-lg p-1 flex flex-col justify-end border border-white/10 h-36 gap-1 relative overflow-hidden group">
                   {/* Tooltip on hover */}
-                  <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-1 text-[10px] text-center z-10 pointer-events-none">
+                  <div className="dashboard-chart-tooltip absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-1 text-[10px] text-center z-10 pointer-events-none">
                     <span className="text-emerald-400 font-bold">{point.completed_tasks} Done</span>
                     <span className="text-amber-400 font-bold">{point.carried_over} Spillover</span>
                     <span className="text-neutral-400 font-mono">{point.planned_tasks} Total</span>

@@ -60,6 +60,7 @@ CREATE TABLE workspace_invites (
 CREATE UNIQUE INDEX workspace_invites_one_pending ON workspace_invites(workspace_id, email) WHERE accepted_at IS NULL;
 
 CREATE TABLE meetings (
+  speaker_mapping_required BOOLEAN,
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   title TEXT NOT NULL CHECK (length(trim(title)) BETWEEN 1 AND 300),
@@ -275,6 +276,9 @@ class _Query:
 
     def gte(self, col, val):
         return self._filter(f"{col} >= ?", val)
+
+    def lte(self, col, val):
+        return self._filter(f"{col} <= ?", val)
 
     def in_(self, col, vals):
         vals = list(vals)

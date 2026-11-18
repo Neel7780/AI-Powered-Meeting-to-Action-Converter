@@ -15,6 +15,8 @@ Endpoints:
 import hashlib
 import hmac
 import logging
+import re
+from urllib.parse import urlsplit
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -247,6 +249,7 @@ def _ingest_and_extract_meeting(
     raw_text: str,
     file_stem: str,
     auto_extract: bool,
+    existing_meeting: Optional[Dict[str, Any]] = None,
 ) -> tuple[UUID, datetime, UUID, int, int]:
     """Persist meeting + consent + transcript + segments and execute real LLM extraction.
 
@@ -278,10 +281,10 @@ def _ingest_and_extract_meeting(
             ) from exc
 
     canonical_text = to_canonical_text(segments)
-    meeting_id = uuid4()
+    meeting_id = UUID(existing_meeting["id"]) if existing_meeting else uuid4()
     transcript_id = uuid4()
     now = datetime.now(timezone.utc)
-    meeting_starts_at = now - timedelta(minutes=duration_minutes)
+    meeting_starts_at = datetime.fromisoformat(existing_meeting["starts_at"].replace("Z", "+00:00")) if existing_meeting else now - timedelta(minutes=duration_minutes)
     conf_url = _build_conference_url(provider, meeting_id, conference_url)
 
     created_meeting = {
@@ -301,7 +304,8 @@ def _ingest_and_extract_meeting(
     }
 
     try:
-        client.table("meetings").insert(created_meeting).execute()
+        if not existing_meeting:
+            client.table("meetings").insert(created_meeting).execute()
     except Exception as exc:
         logger.error("Failed to insert automated meeting: %s", exc)
         raise HTTPException(
@@ -310,15 +314,14 @@ def _ingest_and_extract_meeting(
         ) from exc
 
     try:
-        client.table("consents").insert(
-            {
+        if not existing_meeting:
+            client.table("consents").insert({
                 "meeting_id": str(meeting_id),
                 "attested_by": str(user.id),
                 "notice_version": settings.AI_NOTICE_VERSION,
                 "status": "attested",
                 "created_at": now.isoformat(),
-            }
-        ).execute()
+            }).execute()
 
         transcript_row = {
             "id": str(transcript_id),
@@ -350,7 +353,10 @@ def _ingest_and_extract_meeting(
     except Exception as exc:
         logger.error("Failed to store transcript/consent for meeting %s, rolling back: %s", meeting_id, exc)
         try:
-            client.table("meetings").delete().eq("id", str(meeting_id)).execute()
+            if existing_meeting:
+                client.table("transcripts").delete().eq("id", str(transcript_id)).execute()
+            else:
+                client.table("meetings").delete().eq("id", str(meeting_id)).execute()
         except Exception as rollback_exc:
             logger.error("Rollback failed for meeting %s: %s", meeting_id, rollback_exc)
         raise HTTPException(
@@ -457,6 +463,52 @@ def simulate_online_meeting(
     )
 
 
+def _conference_key(value: str) -> tuple[str, str]:
+    """Ignore per-attendee query strings when recognizing the same browser call."""
+    parsed = urlsplit(value.strip())
+    host = (parsed.hostname or "").lower()
+    path = parsed.path.rstrip("/")
+    if host == "zoom.us" or host.endswith(".zoom.us"):
+        match = re.search(r"/(?:j|wc/(?:join/)?)/*(\d+)", path)
+        if match:
+            return "zoom.us", match[1]
+    return host, path
+
+
+def _scheduled_live_meeting(client: Any, payload: ExtensionMeetingUploadRequest, user: CurrentUser):
+    """Attach captions only to the uploader's unprocessed meeting in this workspace."""
+    if not payload.conference_url:
+        return None
+    now = datetime.now(timezone.utc)
+    rows = (client.table("meetings")
+            .select("id, title, starts_at, conference_url, ai_processing, status")
+            .eq("workspace_id", str(payload.workspace_id)).eq("organiser_id", str(user.id))
+            .eq("lifecycle", "active")
+            .gte("starts_at", (now - timedelta(days=1)).isoformat())
+            .lte("starts_at", (now + timedelta(days=1)).isoformat())
+            .limit(50).execute().data or [])
+    matches = [m for m in rows if m.get("conference_url")
+               and _conference_key(m["conference_url"]) == _conference_key(payload.conference_url)]
+    if len(matches) > 1:
+        raise HTTPException(409, "Several pending meetings use this call link. Upload the transcript to the intended meeting in ActionPulse.")
+    if not matches:
+        return None
+    meeting = matches[0]
+    if not meeting.get("ai_processing"):
+        raise HTTPException(409, "AI processing is disabled for this meeting")
+    consent = (client.table("consents").select("id").eq("meeting_id", meeting["id"])
+               .eq("status", "attested").execute().data)
+    if not consent:
+        raise HTTPException(409, "No active AI consent for this meeting")
+    if meeting["status"] not in ("draft", "failed"):
+        raise HTTPException(409, "Open the scheduled meeting to see its transcript and action items.")
+    transcript = (client.table("transcripts").select("id").eq("meeting_id", meeting["id"])
+                  .limit(1).execute().data)
+    if transcript:
+        raise HTTPException(409, "This meeting already has a transcript. Open the meeting to continue.")
+    return meeting
+
+
 @router.post(
     "/meetings/automation/extension-upload",
     response_model=ExtensionMeetingUploadResponse,
@@ -518,6 +570,7 @@ def upload_extension_meeting(
             detail="Captured transcript is empty. Ensure Closed Captions (CC) captured speech before uploading.",
         )
 
+    scheduled = _scheduled_live_meeting(client, payload, user)
     meeting_id, meeting_starts_at, transcript_id, segment_count, extracted_items_count = _ingest_and_extract_meeting(
         client=client,
         user=user,
@@ -529,12 +582,13 @@ def upload_extension_meeting(
         raw_text=raw_text,
         file_stem="extension_transcript",
         auto_extract=payload.auto_extract,
+        existing_meeting=scheduled,
     )
 
     return ExtensionMeetingUploadResponse(
         success=True,
         meeting_id=meeting_id,
-        title=payload.title,
+        title=scheduled["title"] if scheduled else payload.title,
         provider=payload.provider,
         starts_at=meeting_starts_at,
         transcript_id=transcript_id,

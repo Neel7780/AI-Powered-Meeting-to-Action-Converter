@@ -55,10 +55,10 @@ export default function AnalyticsPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-white">
-                Workspace Analytics & Health
+                Analytics
               </h1>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Turnaround metrics, bottleneck detection, and team performance tracking
+                Track completion, overdue work, and team progress.
               </p>
             </div>
           </div>

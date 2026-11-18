@@ -356,7 +356,7 @@ async function performBackendUpload(session, rawSettings) {
   }
 
   const normalizedRole = String(settings.managerRole || "").toLowerCase();
-  if (!["admin", "organiser"].includes(normalizedRole)) {
+  if (!["owner", "admin", "organiser"].includes(normalizedRole)) {
     throw new Error(
       `Manager access required: current role is "${normalizedRole || "none"}". Only Admin or Organiser can upload.`
     );

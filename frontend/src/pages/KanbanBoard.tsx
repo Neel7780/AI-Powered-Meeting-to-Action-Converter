@@ -436,10 +436,9 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       {/* Page header with View Switcher (Kanban Board vs Workflow Chains) */}
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Task Management & Orchestration</p>
-          <h1 className="mt-2 text-3xl font-medium tracking-tight text-white">Tasks & Workflow Chains</h1>
+          <h1 className="mt-2 text-3xl font-medium tracking-tight text-white">Tasks</h1>
           <p className="mt-2 text-sm text-neutral-400">
-            Approved action items, multi-step dependencies, and AI agent execution routing.
+            Manage assignments, progress, and dependencies.
           </p>
         </div>
 
@@ -468,7 +467,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
               }`}
             >
               <GitFork className="size-3.5 text-indigo-400" />
-              <span>Workflow Chains</span>
+              <span>Dependencies</span>
               {blockedCount > 0 && (
                 <span className="ml-1 rounded-full bg-red-500/20 px-1.5 py-0.2 text-[10px] text-red-400 font-mono">
                   {blockedCount}
@@ -638,7 +637,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           {[1, 2, 3, 4].map((i) => (
             <div
               key={i}
-              className="flex h-[520px] animate-pulse flex-col gap-3 rounded-xl border border-white/10 bg-[#040404] p-4"
+              className="flex h-[520px] animate-pulse flex-col gap-3 rounded-xl border border-white/10 dashboard-surface bg-[#040404] p-4"
             >
               <div className="h-6 w-24 rounded bg-white/5" />
               <div className="h-28 w-full rounded-lg bg-white/5" />
@@ -647,7 +646,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           ))}
         </div>
       ) : !activeWorkspaceId ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 bg-[#060606] p-12 text-center">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-white/10 dashboard-surface bg-[#060606] p-12 text-center">
           <Users className="size-10 text-neutral-500 mb-3" />
           <h3 className="text-lg font-medium text-white">No Workspace Selected</h3>
           <p className="mt-1 text-sm text-neutral-400 max-w-md">

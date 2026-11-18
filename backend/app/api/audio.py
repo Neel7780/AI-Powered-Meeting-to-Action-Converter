@@ -105,7 +105,7 @@ def run_diarization(meeting_id: str, audio: bytes, filename: str, mime_type: str
         db.table("transcript_segments").insert(
             [{**r, "transcript_id": transcript["id"]} for r in rows]
         ).execute()
-        db.table("meetings").update({"status": "draft"}).eq("id", meeting_id).execute()
+        db.table("meetings").update({"status": "draft", "speaker_mapping_required": True}).eq("id", meeting_id).execute()
     except Exception as exc:  # noqa: BLE001 - any failure must release the meeting
         logger.error("Diarization failed for meeting %s: %s", meeting_id, exc)
         db.table("meetings").update({"status": "failed"}).eq("id", meeting_id).execute()
@@ -123,6 +123,8 @@ def upload_audio(
     user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
+    if meeting.get("ai_processing") is False:
+        raise HTTPException(status.HTTP_409_CONFLICT, "AI processing is disabled for this meeting")
     if meeting.get("status") not in ("draft", "failed"):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -233,5 +235,8 @@ def update_speakers(meeting_id: UUID, payload: UpdateSpeakersRequest,
         if seg.get("speaker_label") in new_names:
             seg["speaker_name"] = new_names[seg["speaker_label"]]
     db.table("transcripts").update({"canonical_text": _canonical(segments)}).eq("id", transcript["id"]).execute()
+
+    if set(labels) == known:
+        db.table("meetings").update({"speaker_mapping_required": False}).eq("id", mid).execute()
 
     return {"speakers": [{"speaker_label": k, "speaker_name": v} for k, v in new_names.items()]}
