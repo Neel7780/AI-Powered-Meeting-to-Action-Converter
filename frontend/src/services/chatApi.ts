@@ -136,7 +136,7 @@ export async function createChatSession(
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error('Failed to create chat session');
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to create chat session`);
   }
   return data as ChatSession;
 }
@@ -164,7 +164,7 @@ export async function getChatSession(sessionId: string): Promise<ChatSession> {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error('Failed to get chat session');
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to get chat session`);
   }
   return data as ChatSession;
 }
@@ -182,11 +182,16 @@ export async function deleteChatSession(sessionId: string): Promise<void> {
   }
   const token = getActiveToken(sessionToken);
 
-  await fetch(getApiUrl(`/api/chat/sessions/${sessionId}`), {
+  const res = await fetch(getApiUrl(`/api/chat/sessions/${sessionId}`), {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to delete chat session`);
+  }
 }

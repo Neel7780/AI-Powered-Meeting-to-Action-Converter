@@ -235,6 +235,10 @@ export default function ChatInterface({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
+  const workspaceIdRef = useRef<string | undefined>(workspaceId);
+  workspaceIdRef.current = workspaceId;
 
   // When reopened after being minimized, auto-focus input and scroll to bottom
   useEffect(() => {
@@ -319,7 +323,10 @@ export default function ChatInterface({
 
   const handleSelectSession = async (session: ChatSession) => {
     if (activeSessionId === session.id) return;
-    setActiveSessionId(session.id);
+    const targetSessionId = session.id;
+    const targetWorkspaceId = workspaceId;
+
+    setActiveSessionId(targetSessionId);
     setSelectedMeetingId(session.selected_meeting_id || '');
     setExpandedCitations({});
 
@@ -328,7 +335,7 @@ export default function ChatInterface({
     } else {
       setMessages([]);
       try {
-        const detail = await getChatSession(session.id);
+        const detail = await getChatSession(targetSessionId);
         if (detail.messages) {
           const formatted: ChatMessage[] = detail.messages.map((m: any) => ({
             id: m.id,
@@ -338,12 +345,18 @@ export default function ChatInterface({
             citations: m.citations || [],
             suggestedFollowups: m.suggested_followups || [],
           }));
-          setMessages(formatted);
+
+          // Always bind message update to the originating thread's cache by session ID
           setSessions((prev) => {
-            const updated = prev.map((s) => (s.id === session.id ? { ...s, messages: formatted } : s));
-            if (workspaceId) saveLocalSessions(userId, workspaceId, updated);
+            const updated = prev.map((s) => (s.id === targetSessionId ? { ...s, messages: formatted } : s));
+            if (targetWorkspaceId) saveLocalSessions(userId, targetWorkspaceId, updated);
             return updated;
           });
+
+          // Guard visible messages against current session and workspace
+          if (activeSessionIdRef.current === targetSessionId && workspaceIdRef.current === targetWorkspaceId) {
+            setMessages(formatted);
+          }
         }
       } catch (err) {
         console.warn('Could not fetch server session detail:', err);
@@ -354,17 +367,19 @@ export default function ChatInterface({
   const handleDeleteSession = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     try {
-      deleteChatSession(sessionId).catch(() => {});
-    } catch {
-      // ignore
-    }
-    setSessions((prev) => {
-      const updated = prev.filter((s) => s.id !== sessionId);
-      if (workspaceId) saveLocalSessions(userId, workspaceId, updated);
-      return updated;
-    });
-    if (activeSessionId === sessionId) {
-      handleNewChat();
+      await deleteChatSession(sessionId);
+      // ONLY update local state and storage when deletion succeeds on the server
+      setSessions((prev) => {
+        const updated = prev.filter((s) => s.id !== sessionId);
+        if (workspaceId) saveLocalSessions(userId, workspaceId, updated);
+        return updated;
+      });
+      if (activeSessionId === sessionId) {
+        handleNewChat();
+      }
+    } catch (err: any) {
+      console.error('Failed to delete chat session:', err);
+      alert(err.message || 'Failed to delete chat session from server. Local thread was kept.');
     }
   };
 
@@ -389,21 +404,17 @@ export default function ChatInterface({
       let createdSession: ChatSession;
       try {
         createdSession = await createChatSession(workspaceId, titleCandidate, selectedMeetingId);
-      } catch (err) {
-        console.warn('Backend session creation fallback:', err);
-        const nowIso = new Date().toISOString();
-        const fallbackUuid =
-          typeof crypto !== 'undefined' && crypto.randomUUID
-            ? crypto.randomUUID()
-            : '00000000-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
-        createdSession = {
-          id: fallbackUuid,
-          workspace_id: workspaceId,
-          title: titleCandidate,
-          selected_meeting_id: selectedMeetingId || null,
-          created_at: nowIso,
-          updated_at: nowIso,
+      } catch (err: any) {
+        console.error('Backend session creation failed:', err);
+        setLoading(false);
+        const errorMessage: ChatMessage = {
+          id: `err-${Date.now()}`,
+          role: 'assistant',
+          content: `⚠️ **Failed to create chat session:** ${err?.message || 'Server error. Please try again.'}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
+        setMessages((prev) => [...prev, errorMessage]);
+        return;
       }
 
       currentSessionId = createdSession.id;
@@ -430,6 +441,9 @@ export default function ChatInterface({
       });
     }
 
+    const targetSessionId = currentSessionId;
+    const targetWorkspaceId = workspaceId;
+
     try {
       // Build history of previous turns
       const historyTurns = messages
@@ -444,7 +458,7 @@ export default function ChatInterface({
         meeting_id: selectedMeetingId ? selectedMeetingId : null,
         query: text,
         history: historyTurns,
-        session_id: currentSessionId,
+        session_id: targetSessionId,
       });
 
       const assistantMessage: ChatMessage = {
@@ -457,28 +471,31 @@ export default function ChatInterface({
         contextCount: res.meeting_context_count,
       };
 
-      setMessages((prev) => {
-        const nextMessages = [...prev, assistantMessage];
-        if (currentSessionId) {
-          setSessions((sPrev) => {
-            const sNext = sPrev.map((s) =>
-              s.id === currentSessionId
-                ? {
-                    ...s,
-                    updated_at: new Date().toISOString(),
-                    messages: nextMessages,
-                  }
-                : s
-            );
-            saveLocalSessions(userId, workspaceId, sNext);
-            return sNext;
+      // 1. Update originating thread's cache strictly by targetSessionId
+      if (targetSessionId) {
+        setSessions((sPrev) => {
+          const sNext = sPrev.map((s) => {
+            if (s.id === targetSessionId) {
+              const existing = s.messages || [];
+              return {
+                ...s,
+                updated_at: new Date().toISOString(),
+                messages: [...existing, assistantMessage],
+              };
+            }
+            return s;
           });
-        }
-        return nextMessages;
-      });
+          if (targetWorkspaceId) saveLocalSessions(userId, targetWorkspaceId, sNext);
+          return sNext;
+        });
+      }
 
-      if (res.citations && res.citations.length > 0) {
-        setExpandedCitations((prev) => ({ ...prev, [assistantMessage.id]: true }));
+      // 2. Guard visible messages: ONLY append to visible messages if the user is STILL viewing targetSessionId & targetWorkspaceId
+      if (activeSessionIdRef.current === targetSessionId && workspaceIdRef.current === targetWorkspaceId) {
+        setMessages((prev) => [...prev, assistantMessage]);
+        if (res.citations && res.citations.length > 0) {
+          setExpandedCitations((prev) => ({ ...prev, [assistantMessage.id]: true }));
+        }
       }
     } catch (err: any) {
       const errorMessage: ChatMessage = {
@@ -487,7 +504,28 @@ export default function ChatInterface({
         content: `⚠️ **Unable to retrieve answer:** ${err?.message || 'Server error. Please try again.'}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
-      setMessages((prev) => [...prev, errorMessage]);
+
+      if (targetSessionId) {
+        setSessions((sPrev) => {
+          const sNext = sPrev.map((s) => {
+            if (s.id === targetSessionId) {
+              const existing = s.messages || [];
+              return {
+                ...s,
+                updated_at: new Date().toISOString(),
+                messages: [...existing, errorMessage],
+              };
+            }
+            return s;
+          });
+          if (targetWorkspaceId) saveLocalSessions(userId, targetWorkspaceId, sNext);
+          return sNext;
+        });
+      }
+
+      if (activeSessionIdRef.current === targetSessionId && workspaceIdRef.current === targetWorkspaceId) {
+        setMessages((prev) => [...prev, errorMessage]);
+      }
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);

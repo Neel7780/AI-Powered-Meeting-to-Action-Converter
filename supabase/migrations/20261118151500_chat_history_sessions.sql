@@ -55,3 +55,9 @@ BEGIN
         )
     );
 END $$;
+
+-- Table Privileges
+-- Baseline schema revokes default table privileges on schema public from anon, authenticated, service_role.
+-- Newly created tables must explicitly grant privileges to authenticated and service_role.
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.chat_sessions TO authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.chat_messages TO authenticated, service_role;

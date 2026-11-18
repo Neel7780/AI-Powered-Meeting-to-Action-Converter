@@ -269,23 +269,20 @@ def create_chat_session(
             })
             .execute()
         )
-        if resp.data:
+        if resp.data and len(resp.data) > 0:
             return resp.data[0]
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to persist chat session in database"
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.warning("Error creating chat session: %s", exc)
-
-    # In-memory dev fallback
-    from datetime import datetime, timezone
-    from uuid import uuid4
-    now_iso = datetime.now(timezone.utc).isoformat()
-    return ChatSessionSummary(
-        id=uuid4(),
-        workspace_id=payload.workspace_id,
-        title=payload.title,
-        selected_meeting_id=payload.selected_meeting_id,
-        created_at=now_iso,
-        updated_at=now_iso,
-    )
+        logger.error("Error creating chat session: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error creating chat session: {exc}"
+        )
 
 
 @router.get(
@@ -366,5 +363,8 @@ def delete_chat_session(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.warning("Error deleting chat session: %s", exc)
-        return None
+        logger.error("Error deleting chat session: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error deleting chat session: {exc}"
+        )
