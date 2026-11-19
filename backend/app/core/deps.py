@@ -82,7 +82,7 @@ def require_role(
 ) -> str:
     """Check that user is a member of workspace_id with a role in allowed.
     
-    Returns the user's role.
+    Owners inherit administrator permissions. Returns the user's actual role.
     Raises 404 if not a member (avoids leaking workspace existence).
     Raises 403 if role is not allowed.
     """
@@ -105,7 +105,7 @@ def require_role(
             detail="Workspace not found or access denied"
         )
     role = members[0]["role"]
-    if role not in allowed:
+    if role not in allowed and not (role == "owner" and "admin" in allowed):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: insufficient permissions for this workspace"

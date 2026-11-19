@@ -118,7 +118,7 @@ export function CalendarImportPicker({
             <p className="text-xs text-neutral-400">
               {status?.connected
                 ? `Connected as ${status.account_email}`
-                : 'Import upcoming meetings and auto-fill details in 1 click'}
+                : 'Import details from an upcoming meeting'}
             </p>
           </div>
         </div>
@@ -230,7 +230,7 @@ export function CalendarImportPicker({
                     <div>
                       {ev.already_imported ? (
                         <a
-                          href={`/meetings/${ev.existing_meeting_id}/review`}
+                          href={`/meetings/${ev.existing_meeting_id}?tab=overview`}
                           className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:underline"
                         >
                           View <ExternalLink className="size-3" />

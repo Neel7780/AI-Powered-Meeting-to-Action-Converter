@@ -40,11 +40,13 @@ const fmtTalk = (ms: number) => (ms >= 60_000 ? `${Math.round(ms / 60_000)} min`
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Offline meeting step 2: wait for transcription + diarization, then the organiser tells us
+ * In-person meeting step 2: wait for transcription + diarization, then the organiser tells us
  * which detected speaker is which participant. Unmapped speakers stay "Speaker N" and their
  * action items get no owner (flagged for review), so nobody is ever guessed.
  */
-export function SpeakerMapping() {
+export function SpeakerMapping({ extractAfterSave, onSaved }: {
+  extractAfterSave: boolean; onSaved: (needsReview: boolean) => Promise<void>;
+}) {
   const { id: meetingId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [phase, setPhase] = useState<'processing' | 'mapping' | 'failed' | 'extracting'>('processing');
@@ -76,9 +78,14 @@ export function SpeakerMapping() {
     const started = Date.now();
     (async () => {
       while (!cancelled) {
-        const { data } = await supabase.from('meetings').select('status').eq('id', meetingId).single();
+        const { data, error: loadError } = await supabase.from('meetings').select('status').eq('id', meetingId).single();
         if (cancelled) return;
-        if (data?.status === 'failed') { setPhase('failed'); return; }
+        if (loadError) { setError(loadError.message); setPhase('failed'); return; }
+        if (data?.status === 'failed') {
+          const { data: transcript } = await supabase.from('transcripts').select('id').eq('meeting_id', meetingId).maybeSingle();
+          if (cancelled) return;
+          if (!transcript) { setPhase('failed'); return; }
+        }
         if (data && data.status !== 'processing') {
           try { await loadSpeakers(); } catch (err) { setError((err as Error).message); setPhase('failed'); }
           return;
@@ -106,11 +113,12 @@ export function SpeakerMapping() {
           mappings: speakers.map((s) => ({ speaker_label: s.speaker_label, participant_id: mapping[s.speaker_label] || null })),
         }),
       });
+      if (!extractAfterSave) { await onSaved(false); return; }
       await postApi(`/api/meetings/${meetingId}/extract`, {});
       for (let i = 0; i < 90; i++) {
         await sleep(2000);
         const { data } = await supabase.from('meetings').select('status').eq('id', meetingId).single();
-        if (data?.status === 'ready') { navigate(`/meetings/${meetingId}/review`); return; }
+        if (data?.status === 'ready') { await onSaved(true); return; }
         if (data?.status === 'failed') throw new Error('AI extraction failed. Please try again.');
       }
       throw new Error('Extraction is taking too long; check the meeting later.');
@@ -121,15 +129,13 @@ export function SpeakerMapping() {
   };
 
   return (
-    <div className="min-h-screen bg-black px-4 py-10 text-white">
+    <div className="py-4 text-white">
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
-          <p className="eyebrow">Offline meeting</p>
-          <h1 className="mt-2 text-3xl font-medium tracking-tight">Who said what?</h1>
+          <p className="eyebrow">In-person meeting</p>
+          <h1 className="mt-2 text-3xl font-medium tracking-tight">Identify speakers</h1>
           <p className="mt-2 text-sm text-neutral-400">
-            We detected the different voices in your recording. Match each one to a participant so action
-            items get the right owner. Leave a speaker as “Unknown” if you're not sure; their tasks will be
-            flagged for review instead of guessed.
+            Match each voice to a participant. Leave speakers you don’t recognise as “Unknown”.
           </p>
         </div>
 
@@ -138,8 +144,7 @@ export function SpeakerMapping() {
             <LoaderCircle className="size-6 animate-spin text-neutral-400" />
             <p className="text-sm text-white">Transcribing and detecting speakers…</p>
             <p className="max-w-md text-xs text-neutral-500">
-              This runs on a free worker and can take up to about as long as the meeting itself. You can leave
-              this page and come back via the meeting later.
+              Longer recordings take more time. You can return to this meeting later.
             </p>
             <p className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
               {Math.floor(elapsed / 60)}m {elapsed % 60}s elapsed
@@ -149,12 +154,13 @@ export function SpeakerMapping() {
 
         {phase === 'failed' && (
           <section className="panel space-y-4 p-6">
-            <Notice tone="error">{error || 'Transcription failed. The recording may be silent, corrupted, or the worker is down.'}</Notice>
-            <Button variant="outline" onClick={() => navigate('/meetings')}>Back to meetings</Button>
+            <Notice tone="error">{error || 'Could not transcribe this recording. Please try another recording or try again later.'}</Notice>
+            <Button variant="outline" onClick={() => navigate(`/meetings/${meetingId}?tab=transcript`)}>Back to transcript</Button>
           </section>
         )}
 
-        {(phase === 'mapping' || phase === 'extracting') && (
+        {phase === 'mapping' && speakers.length === 0 && <p className="text-sm text-neutral-400">No speakers were detected in this recording.</p>}
+        {(phase === 'mapping' || phase === 'extracting') && speakers.length > 0 && (
           <>
             <div className="space-y-4">
               {speakers.map((sp, idx) => (
@@ -213,9 +219,9 @@ export function SpeakerMapping() {
               </p>
               <Button onClick={saveAndExtract} disabled={phase === 'extracting' || speakers.length === 0}>
                 {phase === 'extracting' ? (
-                  <><LoaderCircle className="animate-spin" /> Extracting action items…</>
+                  <><LoaderCircle className="animate-spin" /> {extractAfterSave ? 'Extracting action items…' : 'Saving speakers…'}</>
                 ) : (
-                  <>Save & extract action items <ArrowRight /></>
+                  <>{extractAfterSave ? 'Save & extract action items' : 'Save speakers'} <ArrowRight /></>
                 )}
               </Button>
             </div>

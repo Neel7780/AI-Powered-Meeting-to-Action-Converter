@@ -10,7 +10,6 @@ import {
   Lock,
   Mail,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -24,7 +23,7 @@ type AuthView = "login" | "forgot_email" | "link_sent" | "new_password" | "reset
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, signIn, devSignIn } = useAuth();
+  const { user, signIn } = useAuth();
 
   // Navigation & View State
   const [view, setView] = useState<AuthView>("login");
@@ -144,11 +143,6 @@ export default function Login() {
     }
   };
 
-  const handleDevSignIn = () => {
-    devSignIn();
-    navigate(location.state?.from || "/dashboard");
-  };
-
   // Step 1: Request password reset link
   const handleSendResetLink = async (event?: FormEvent) => {
     if (event) event.preventDefault();
@@ -190,14 +184,6 @@ export default function Login() {
         });
 
         if (resetErr) {
-          if (import.meta.env.DEV || targetEmail.includes("dev@") || targetEmail.includes("test@")) {
-            console.warn("Dev mode password reset warning:", resetErr.message);
-            setResetEmail(targetEmail);
-            setResendCooldown(30);
-            setView("link_sent");
-            setSuccessMessage("Password reset link dispatched! (Dev evaluation mode)");
-            return;
-          }
           throw resetErr;
         }
       }
@@ -238,13 +224,6 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // Dev mode fallback
-      if (import.meta.env.DEV && localStorage.getItem("actionpulse_dev_session")) {
-        setView("reset_success");
-        setSuccessMessage("Your password has been reset successfully!");
-        return;
-      }
-
       const { error: updateErr } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -382,18 +361,6 @@ export default function Login() {
                 </>
               )}
             </Button>
-
-            {/* Dev Evaluation Quick-Sign-In */}
-            <div className="pt-2 border-t border-white/10">
-              <button
-                type="button"
-                onClick={handleDevSignIn}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/60 transition"
-              >
-                <Sparkles className="size-3.5 text-amber-400" />
-                Dev Evaluation Mode (Bypass Auth)
-              </button>
-            </div>
           </form>
         )}
 

@@ -97,6 +97,7 @@ class MeetingSummaryResponse(BaseModel):
     overview: str
     key_discussion_points: list[SummaryDiscussionPointItem]
     decisions: list[SummaryDecisionItem]
+    open_questions: list[str] = Field(default_factory=list)
     outcomes: list[str]
     next_steps: list[str]
     takeaways: list[str] = Field(default_factory=list)
@@ -121,6 +122,15 @@ class MeetingListItem(BaseModel):
     created_at: datetime
     organiser_id: UUID
     conference_url: Optional[str] = None
+    ai_processing: bool = True
+    transcript_source: str | None = None
+    needs_speaker_mapping: bool = False
+    open_task_count: int = 0
+    overdue_task_count: int = 0
+    blocked_task_count: int = 0
+    pending_review_count: int = 0
+    decision_count: int = 0
+    has_summary: bool = Field(default=False, description="Whether a summary can be generated from the transcript.")
 
 
 class MeetingDetail(BaseModel):

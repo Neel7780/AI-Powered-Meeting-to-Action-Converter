@@ -18,11 +18,10 @@ import {
   X,
   CalendarCheck2,
   CheckSquare2,
-  Eye,
   Loader2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useWorkspace, type Workspace } from '../context/WorkspaceContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { Button } from '../components/ui/button';
 import { CreateMeetingModal } from '../components/meetings/CreateMeetingModal';
 import { FollowUpModal } from '../components/meetings/FollowUpModal';
@@ -149,83 +148,6 @@ const STATUS_BADGES: Record<string, string> = {
   done: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
 };
 
-// Generate optional demo meetings when testing empty environments
-function generateDemoMeetings(workspaces: Workspace[]): CalendarMeeting[] {
-  const now = new Date();
-  const ws1 = workspaces[0]?.id || 'ws-team-10';
-  const ws1Name = workspaces[0]?.name || 'ActionPulse Engineering';
-  const ws2 = workspaces[1]?.id || 'ws-design-01';
-  const ws2Name = workspaces[1]?.name || 'Frontend & Product Design';
-
-  const makeDate = (offsetDays: number, hours: number, minutes: number = 0) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() + offsetDays);
-    d.setHours(hours, minutes, 0, 0);
-    return d.toISOString();
-  };
-
-  return [
-    {
-      id: '00000000-0000-0000-0000-000000000102',
-      title: 'Sprint 2 Architecture & AI Staging Review',
-      starts_at: makeDate(-2, 10, 0),
-      ends_at: makeDate(-2, 11, 0),
-      timezone: 'Asia/Kolkata',
-      conference_url: 'https://meet.google.com/abc-defg-hij',
-      workspace_id: ws1,
-      workspace_name: ws1Name,
-      workspace_color_idx: 0,
-      tasks_count: 4,
-      description: 'Review Sprint 2 vertical slice, Supabase RLS security policies, and Gemini Flash-Lite token limits.',
-      source_excerpt: 'Bharat will verify transcript parser handles .vtt and .srt subtitle files properly by Friday.',
-      is_demo: true,
-    },
-    {
-      id: '00000000-0000-0000-0000-000000000103',
-      title: 'Design Sprint Review & Next Steps',
-      starts_at: makeDate(-1, 14, 30),
-      ends_at: makeDate(-1, 15, 30),
-      timezone: 'Asia/Kolkata',
-      conference_url: 'https://meet.google.com/xyz-uvwx-rst',
-      workspace_id: ws2,
-      workspace_name: ws2Name,
-      workspace_color_idx: 1,
-      tasks_count: 3,
-      description: 'Design system alignment, high-contrast dark theme verification, and mobile drawer accessibility review.',
-      source_excerpt: 'Vikram will finalize the PR for action item auto-tagger and chapter parser before Monday.',
-      is_demo: true,
-    },
-    {
-      id: '00000000-0000-0000-0000-000000000104',
-      title: 'Sprint 3 Kickoff & Personal Calendar Sync',
-      starts_at: makeDate(0, 16, 0),
-      ends_at: makeDate(0, 17, 0),
-      timezone: 'Asia/Kolkata',
-      conference_url: 'https://meet.google.com/act-puls-s3k',
-      workspace_id: ws1,
-      workspace_name: ws1Name,
-      workspace_color_idx: 0,
-      tasks_count: 2,
-      description: 'Planning Sprint 3 epics: Multi-workspace personal calendar view, offline PWA caching, and WhatsApp link generator.',
-      is_demo: true,
-    },
-    {
-      id: '00000000-0000-0000-0000-000000000105',
-      title: 'Zero-Budget Security & Audit Policy Review',
-      starts_at: makeDate(2, 11, 0),
-      ends_at: makeDate(2, 12, 0),
-      timezone: 'Asia/Kolkata',
-      conference_url: 'https://meet.google.com/sec-audit-team',
-      workspace_id: ws1,
-      workspace_name: ws1Name,
-      workspace_color_idx: 0,
-      tasks_count: 3,
-      description: 'Audit audit_logs triggers, verify backend-only task mutation rules, and validate prompt injection XML fences.',
-      is_demo: true,
-    },
-  ];
-}
-
 /** Downloads an RFC 5545 .ics iCalendar file for Google Calendar, Apple Calendar, or Outlook */
 function exportMeetingToIcs(meeting: CalendarMeeting) {
   const start = new Date(meeting.starts_at);
@@ -281,7 +203,7 @@ function exportMeetingToIcs(meeting: CalendarMeeting) {
 
 export default function CalendarPage() {
   const navigate = useNavigate();
-  const { workspaces, currentWorkspace, loading: workspaceLoading } = useWorkspace();
+  const { workspaces, currentWorkspace, switchWorkspace, loading: workspaceLoading } = useWorkspace();
 
   // State
   const [meetings, setMeetings] = useState<CalendarMeeting[]>([]);
@@ -294,7 +216,6 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [showDemoData, setShowDemoData] = useState(false);
 
   // Selected item modals
   const [activeMeeting, setActiveMeeting] = useState<CalendarMeeting | null>(null);
@@ -417,12 +338,6 @@ export default function CalendarPage() {
           });
         }
       }
-
-      // If user enabled Demo Mode (or has absolutely zero items and clicks preview)
-      if (showDemoData && loadedMeetings.length === 0) {
-        loadedMeetings = generateDemoMeetings(workspaces);
-      }
-
       setMeetings(loadedMeetings);
       setTasks(loadedTasks);
     } catch (err) {
@@ -430,7 +345,7 @@ export default function CalendarPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [workspaces, workspaceLoading, workspaceColorMap, workspaceNameMap, showDemoData]);
+  }, [workspaces, workspaceLoading, workspaceColorMap, workspaceNameMap]);
 
   useEffect(() => {
     fetchAllWorkspaceData();
@@ -750,7 +665,7 @@ export default function CalendarPage() {
   const totalItemCount = filteredMeetings.length + filteredTasks.length;
 
   return (
-    <div className="min-h-screen bg-neutral-950 p-4 sm:p-6 lg:p-8 text-white space-y-6">
+    <div className="dashboard-page min-h-screen bg-neutral-950 p-4 sm:p-6 lg:p-8 text-white space-y-6">
       {/* 1. Header & Title Banner */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-white/10 pb-6">
         <div>
@@ -760,32 +675,20 @@ export default function CalendarPage() {
             </span>
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                Personal Calendar
+                Calendar
                 {isLoading && <Loader2 className="size-4 animate-spin text-cyan-400" />}
                 <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-normal">
                   All Workspaces
                 </span>
               </h1>
               <p className="text-sm text-neutral-400 mt-0.5">
-                Unified scheduled sessions, video conference calls, and action items with deadlines across your teams
+                Meetings and deadlines across your workspaces.
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Demo toggle if user wants to see sample presentation data */}
-          {meetings.length === 0 && (
-            <button
-              type="button"
-              onClick={() => setShowDemoData((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/20 transition"
-            >
-              <Eye className="size-3.5" />
-              {showDemoData ? 'Hide Sample Demo' : 'Preview Demo Data'}
-            </button>
-          )}
-
           {/* Google Calendar Sync button */}
           <button
             type="button"
@@ -1322,7 +1225,7 @@ export default function CalendarPage() {
               <CalendarIcon className="size-10 text-neutral-400 mx-auto mb-3" />
               <h3 className="text-base font-semibold text-white">No scheduled meetings or tasks found</h3>
               <p className="text-xs text-neutral-400 mt-1 max-w-md mx-auto">
-                Schedule a meeting, sync your Google Calendar, or approve action items in the review gate to view them here.
+                Create a meeting or connect Google Calendar to get started.
               </p>
               <div className="mt-4 flex items-center justify-center gap-3">
                 <Button
@@ -1449,11 +1352,11 @@ export default function CalendarPage() {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/meetings/${meeting.id}/review`);
+                            navigate(`/meetings/${meeting.id}?tab=overview`);
                           }}
                           className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-cyan-300 transition"
                         >
-                          <span>Review Gate</span>
+                          <span>Open meeting</span>
                           <ArrowRight className="size-3" />
                         </button>
                       )}
@@ -1663,17 +1566,18 @@ export default function CalendarPage() {
                 className="text-xs border-white/20 hover:bg-white/10"
               >
                 <Sparkles className="size-3.5 text-cyan-400 mr-1.5" />
-                Draft 1-Click Follow-Up
+                Draft follow-up
               </Button>
 
               {!activeMeeting.is_demo && (
                 <Button
                   onClick={() => {
-                    navigate(`/meetings/${activeMeeting.id}/review`);
+                    switchWorkspace(activeMeeting.workspace_id);
+                    navigate(`/meetings/${activeMeeting.id}?tab=overview`);
                   }}
                   className="text-xs bg-cyan-600 hover:bg-cyan-500 text-white"
                 >
-                  Open Review Gate <ArrowRight className="size-3.5 ml-1.5" />
+                  Open meeting <ArrowRight className="size-3.5 ml-1.5" />
                 </Button>
               )}
             </div>

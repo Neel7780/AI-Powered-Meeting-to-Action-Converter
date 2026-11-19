@@ -1,16 +1,14 @@
 import { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
 
 import ActionPulseLanding from "./components/landing/ActionPulseLanding";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
-import MeetingReview from "./pages/MeetingReview";
 import AcceptInvite from "./pages/AcceptInvite";
 import CalendarCallback from "./pages/CalendarCallback";
 import GitHubCallback from "./pages/GitHubCallback";
-import SpeakerMapping from "./pages/SpeakerMapping";
 import WorkspaceChatPage from "./pages/WorkspaceChatPage";
 import { useAuth } from "./context/AuthContext";
 
@@ -41,6 +39,11 @@ function AuthRecoveryListener() {
   return null;
 }
 
+function MeetingTabRedirect({ tab }: { tab: "review" | "speakers" }) {
+  const { id } = useParams();
+  return <Navigate to={`/meetings/${id}?tab=${tab}`} replace />;
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -51,15 +54,15 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/create-meeting" element={<Navigate to="/meetings" replace />} />
-        <Route path="/meeting-review" element={<MeetingReview />} />
+        <Route path="/create-meeting" element={<Navigate to="/meetings?create=1" replace />} />
+        <Route path="/meeting-review" element={<Navigate to="/meetings" replace />} />
         <Route path="/invite/:token" element={<ProtectedRoute><AcceptInvite /></ProtectedRoute>} />
         <Route path="/calendar/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
         <Route path="/github/callback" element={<ProtectedRoute><GitHubCallback /></ProtectedRoute>} />
         <Route path="/settings/github" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/meetings/:id/review" element={<MeetingReview />} />
-        <Route path="/meetings/:id/speakers" element={<ProtectedRoute><SpeakerMapping /></ProtectedRoute>} />
-        <Route path="/meetings/:id" element={<MeetingReview />} />
+        <Route path="/meetings/:id/review" element={<MeetingTabRedirect tab="review" />} />
+        <Route path="/meetings/:id/speakers" element={<MeetingTabRedirect tab="speakers" />} />
+        <Route path="/meetings/:id" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/meeting-details" element={<Navigate to="/meetings" replace />} />
 
         <Route
@@ -81,15 +84,7 @@ function App() {
           }
         />
 
-        {/* /meetings-list — Meetings list page rendered inside Dashboard layout */}
-        <Route
-          path="/meetings-list"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/meetings-list" element={<Navigate to="/meetings" replace />} />
 
         <Route
           path="/calendar"

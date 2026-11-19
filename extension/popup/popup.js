@@ -1,381 +1,326 @@
-/**
- * ActionPulse - Popup UI Controller
- * 
- * Accurately displays live call state, captures spoken closed captions,
- * freezes duration when call ends, and provides 1-click upload to the Manager Review Gate.
- */
+const el = (id) => document.getElementById(id);
+const getState = () => chrome.runtime.sendMessage({ type: "GET_STATE" });
+const managerRoles = { owner: "Owner", admin: "Admin", organiser: "Organiser" };
+const providerNames = { google_meet: "Google Meet", zoom: "Zoom Web", teams: "Microsoft Teams" };
+const appUrlInput = el("appUrlInput");
+const apiUrlInput = el("apiUrlInput");
+const defaultsButton = el("useDeployedDefaultsBtn");
+const editedSettings = new Set();
+const feed = el("transcriptFeed");
+const transcriptPanel = el("transcriptPanel");
+const uploadButton = el("uploadBtn");
+const reviewLink = el("reviewGateLink");
 
-document.addEventListener("DOMContentLoaded", async () => {
-  const platformNameEl = document.getElementById("platformName");
-  const statusDotEl = document.getElementById("statusDot");
-  const meetingTimerEl = document.getElementById("meetingTimer");
-  const cueCountStatEl = document.getElementById("cueCountStat");
-  const sessionStateTagEl = document.getElementById("sessionStateTag");
-  const transcriptFeedEl = document.getElementById("transcriptFeed");
-  const clearBufferBtn = document.getElementById("clearBufferBtn");
+let session;
+let settings;
+let defaultConnection;
+let savingSettings = false;
+let tabStatus;
+let isUploading = false;
+let submittingUpload = false;
+let refreshInFlight = false;
+let localUploadError = "";
+let captionSignature = "";
 
-  const uploadBtn = document.getElementById("uploadBtn");
-  const saveVttBtn = document.getElementById("saveVttBtn");
-  const saveTxtBtn = document.getElementById("saveTxtBtn");
-  const rolePillEl = document.getElementById("rolePill");
-  const syncAccountStatEl = document.getElementById("syncAccountStat");
-  const syncWorkspaceTagEl = document.getElementById("syncWorkspaceTag");
+function setText(id, value) {
+  const node = el(id);
+  if (node.textContent !== value) node.textContent = value;
+}
 
-  const resultBanner = document.getElementById("resultBanner");
-  const resultContent = document.getElementById("resultContent");
-  const reviewGateLink = document.getElementById("reviewGateLink");
+function showMessage(id, text = "") {
+  el(id).hidden = !text;
+  setText(id, text);
+}
 
-  const workspaceIdInput = document.getElementById("workspaceIdInput");
-  const apiUrlInput = document.getElementById("apiUrlInput");
-  const appUrlInput = document.getElementById("appUrlInput");
-  const saveSettingsBtn = document.getElementById("saveSettingsBtn");
-
-  let activeSession = null;
-  let timerInterval = null;
-
-  // Format seconds into MM:SS
-  function formatSecs(totalSecs) {
-    const mins = Math.floor(totalSecs / 60);
-    const secs = totalSecs % 60;
-    return String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+function webUrl(value) {
+  try {
+    const url = new URL(value);
+    if (["https:", "http:"].includes(url.protocol) && !url.username && !url.password) return url;
+  } catch {
+    // Invalid or missing URL.
   }
+  return null;
+}
 
-  // Calculate duration string
-  function getDurationDisplay(session) {
-    if (!session || !session.startTime) return "00:00";
-    if (session.isCompleted || (!session.isRecording && session.endTime)) {
-      const start = new Date(session.startTime).getTime();
-      const end = new Date(session.endTime).getTime();
-      const diffSecs = Math.max(0, Math.floor((end - start) / 1000));
-      return formatSecs(diffSecs);
-    }
-    if (session.isRecording) {
-      const start = new Date(session.startTime).getTime();
-      const diffSecs = Math.max(0, Math.floor((Date.now() - start) / 1000));
-      return formatSecs(diffSecs);
-    }
-    return "00:00";
+function getProvider(url) {
+  const host = webUrl(url)?.hostname;
+  if (host === "meet.google.com") return "google_meet";
+  if (host === "zoom.us" || host?.endsWith(".zoom.us")) return "zoom";
+  if (host === "teams.microsoft.com" || host === "teams.live.com") return "teams";
+  return null;
+}
+
+async function getMeetingTabStatus() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const provider = getProvider(tab?.url);
+  if (!provider) return null;
+  try {
+    const status = await chrome.tabs.sendMessage(tab.id, { type: "CHECK_PLATFORM_STATUS" });
+    return { provider, ...status };
+  } catch {
+    return { provider, needsRefresh: true };
   }
+}
 
-  function renderCues(cues) {
-    if (!cues || cues.length === 0) {
-      transcriptFeedEl.innerHTML = `
-        <div class="empty-state">
-          <p>Captions are currently idle.</p>
-          <p class="sub">Turn on Closed Captions (CC) in Google Meet, Zoom, or Teams to automatically capture live speech.</p>
-        </div>
-      `;
-      return;
-    }
-
-    transcriptFeedEl.innerHTML = "";
-    const displayCues = cues.slice(-20);
-    displayCues.forEach((cue) => {
-      const item = document.createElement("div");
-      item.className = "cue-item";
-      item.innerHTML = `
-        <span class="cue-speaker">${escapeHtml(cue.speaker || "You")}:</span>
-        <span class="cue-text">${escapeHtml(cue.text || "")}</span>
-      `;
-      transcriptFeedEl.appendChild(item);
-    });
-
-    transcriptFeedEl.scrollTop = transcriptFeedEl.scrollHeight;
+function updateDuration() {
+  let seconds = 0;
+  if (session?.startTime) {
+    const end = session.endTime ? Date.parse(session.endTime) : Date.now();
+    seconds = Math.max(0, Math.floor((end - Date.parse(session.startTime)) / 1000));
   }
+  const time = [Math.floor(seconds / 60), seconds % 60].map((unit) => String(unit).padStart(2, "0")).join(":");
+  setText("meetingTimer", time);
+}
 
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+function workspaceStatus() {
+  const role = Object.hasOwn(managerRoles, settings?.managerRole) ? managerRoles[settings.managerRole] : "";
+  const expired = settings?.tokenExpiresAt > 0 && settings.tokenExpiresAt * 1000 <= Date.now();
+  if (!settings?.hasAccessToken || expired) {
+    return { title: expired ? "Session expired" : "Sign in to ActionPulse", help: "Open ActionPulse and select your workspace to upload.", role: "", canUpload: false };
   }
-
-  function formatPlatformTitle(p) {
-    if (p === "google_meet") return "Google Meet";
-    if (p === "zoom") return "Zoom Web";
-    if (p === "teams") return "Microsoft Teams";
-    return "Meeting";
+  if (!settings.workspaceId) {
+    return { title: "Select a workspace", help: "Choose the workspace for this meeting in ActionPulse.", role: "", canUpload: false };
   }
+  return {
+    title: settings.workspaceName || "Workspace connected",
+    help: role ? (settings.userEmail || "Signed in") : "Ask an owner, admin or organiser to upload.",
+    role: role || "Read only",
+    canUpload: Boolean(role),
+  };
+}
 
-  async function refreshState() {
-    chrome.runtime.sendMessage({ type: "GET_STATE" }, (response) => {
-      if (!response) return;
-
-      activeSession = response.session;
-      const settings = response.settings;
-
-      if (settings) {
-        if (workspaceIdInput) workspaceIdInput.value = settings.workspaceId || "";
-        if (apiUrlInput) apiUrlInput.value = settings.apiUrl || "http://localhost:8000";
-        if (appUrlInput) appUrlInput.value = settings.appUrl || "http://localhost:5173";
-
-        const role = String(settings.managerRole || "").toLowerCase();
-        const isSignedIn = Boolean(settings.hasAccessToken);
-        const isManager = role === "admin" || role === "organiser";
-
-        if (rolePillEl) {
-          if (!isSignedIn) {
-            rolePillEl.innerText = "SIGN IN REQUIRED";
-            rolePillEl.style.color = "#fca5a5";
-            rolePillEl.style.background = "rgba(239, 68, 68, 0.15)";
-            rolePillEl.style.borderColor = "rgba(239, 68, 68, 0.35)";
-          } else if (isManager) {
-            rolePillEl.innerText = role.toUpperCase();
-            rolePillEl.style.color = "#6ee7b7";
-            rolePillEl.style.background = "rgba(16, 185, 129, 0.15)";
-            rolePillEl.style.borderColor = "rgba(16, 185, 129, 0.35)";
-          } else {
-            rolePillEl.innerText = `${(role || "MEMBER").toUpperCase()} (READ-ONLY)`;
-            rolePillEl.style.color = "#fcd34d";
-            rolePillEl.style.background = "rgba(245, 158, 11, 0.15)";
-            rolePillEl.style.borderColor = "rgba(245, 158, 11, 0.35)";
-          }
-        }
-
-        if (syncAccountStatEl) {
-          syncAccountStatEl.innerText = isSignedIn
-            ? `Signed in: ${settings.userEmail || "Synced"}`
-            : "Auth: Open ActionPulse tab & sign in";
-        }
-
-        if (syncWorkspaceTagEl) {
-          syncWorkspaceTagEl.innerText = settings.workspaceId
-            ? settings.workspaceName || settings.workspaceId.slice(0, 8)
-            : "No workspace";
-        }
-
-        if (uploadBtn && !uploadBtn.dataset.uploading) {
-          const canUpload = isSignedIn && Boolean(settings.workspaceId) && isManager;
-          uploadBtn.disabled = !canUpload;
-          uploadBtn.title = !isSignedIn
-            ? "Sign in on your ActionPulse tab first"
-            : !settings.workspaceId
-              ? "Select a workspace in ActionPulse first"
-              : !isManager
-                ? "Only Admin or Organiser can upload transcripts"
-                : "";
-        }
-      }
-
-      const cueCount = response.cueCount || 0;
-      if (cueCountStatEl) {
-        cueCountStatEl.innerText = `${cueCount} caption${cueCount === 1 ? "" : "s"} captured`;
-      }
-
-      if (activeSession) {
-        renderCues(activeSession.cues);
-        if (meetingTimerEl) {
-          meetingTimerEl.innerText = getDurationDisplay(activeSession);
-        }
-
-        if (activeSession.uploaded && activeSession.reviewUrl) {
-          resultBanner.classList.remove("hidden");
-          resultBanner.classList.remove("error");
-          const count = activeSession.uploadResult?.extractedItemsCount || 0;
-          const segs = activeSession.uploadResult?.segmentCount || activeSession.cues?.length || 0;
-          resultContent.innerHTML = `
-            <strong>✓ Transcripts Ingested & Parsed!</strong><br/>
-            <span>${segs} segments saved • ${count} tasks generated for review.</span>
-          `;
-          reviewGateLink.href = activeSession.reviewUrl;
-          reviewGateLink.classList.remove("hidden");
-          reviewGateLink.onclick = (e) => {
-            e.preventDefault();
-            chrome.tabs.create({ url: activeSession.reviewUrl });
-          };
-        }
-      }
-    });
-
-    // Inspect active browser tab for real-time meeting status
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const activeTab = tabs && tabs[0];
-      const url = activeTab?.url || "";
-
-      let isMeetingTab = false;
-      let platformLabel = "Standby (No Meeting)";
-
-      if (url.includes("meet.google.com")) {
-        isMeetingTab = true;
-        platformLabel = "Google Meet";
-      } else if (url.includes("zoom.us")) {
-        isMeetingTab = true;
-        platformLabel = "Zoom Web";
-      } else if (url.includes("teams.microsoft.com") || url.includes("teams.live.com")) {
-        isMeetingTab = true;
-        platformLabel = "Microsoft Teams";
-      }
-
-      if (activeTab?.id && isMeetingTab) {
-        chrome.tabs.sendMessage(activeTab.id, { type: "CHECK_PLATFORM_STATUS" }, (res) => {
-          if (chrome.runtime.lastError || !res) {
-            handleTabState(isMeetingTab, platformLabel, false, false);
-            return;
-          }
-          handleTabState(isMeetingTab, formatPlatformTitle(res.platform), res.active, res.captionsActive);
-        });
-      } else {
-        handleTabState(isMeetingTab, platformLabel, false, false);
-      }
-    });
-  }
-
-  function handleTabState(isMeetingTab, platformLabel, isCallActive, isCaptionsActive) {
-    if (!statusDotEl || !platformNameEl || !sessionStateTagEl) return;
-
-    statusDotEl.className = "status-dot";
-    sessionStateTagEl.className = "status-tag";
-
-    if (activeSession?.isCompleted) {
-      statusDotEl.classList.add("ended");
-      platformNameEl.innerText = `${platformLabel}: Call Ended`;
-      sessionStateTagEl.innerText = "Call Completed";
-      sessionStateTagEl.classList.add("ended");
-    } else if (isCallActive) {
-      statusDotEl.classList.add(isCaptionsActive ? "pulsing" : "active");
-      platformNameEl.innerText = isCaptionsActive
-        ? `${platformLabel}: Captions Active`
-        : `${platformLabel}: In Call`;
-      sessionStateTagEl.innerText = isCaptionsActive ? "Recording Live" : "Call Active (Turn on CC)";
-      sessionStateTagEl.classList.add("active");
-    } else if (isMeetingTab) {
-      platformNameEl.innerText = `${platformLabel}: Ready`;
-      sessionStateTagEl.innerText = "Meeting Ready";
-    } else {
-      platformNameEl.innerText = "Standby (No Meeting)";
-      sessionStateTagEl.innerText = "Standby";
-      if (!activeSession?.startTime) {
-        meetingTimerEl.innerText = "00:00";
-      }
-    }
-  }
-
-  function startTimerLoop() {
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-      if (activeSession && activeSession.isRecording && !activeSession.isCompleted) {
-        meetingTimerEl.innerText = getDurationDisplay(activeSession);
-      }
-    }, 1000);
-  }
-
-  // 1-Click Upload to Backend & AI Extraction
-  uploadBtn.addEventListener("click", () => {
-    uploadBtn.dataset.uploading = "true";
-    uploadBtn.disabled = true;
-    uploadBtn.innerHTML = `
-      <span style="display:inline-block;width:12px;height:12px;border:2px solid white;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;"></span>
-      <span>Uploading & Parsing with AI...</span>
-    `;
-
-    resultBanner.classList.add("hidden");
-    resultBanner.classList.remove("error");
-
-    chrome.runtime.sendMessage({ type: "UPLOAD_TO_BACKEND" }, (response) => {
-      delete uploadBtn.dataset.uploading;
-      uploadBtn.disabled = false;
-      uploadBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="17 8 12 3 7 8"></polyline>
-          <line x1="12" y1="3" x2="12" y2="15"></line>
-        </svg>
-        <span>Upload & Generate AI Tasks</span>
-      `;
-
-      if (!response || !response.success) {
-        resultBanner.classList.remove("hidden");
-        resultBanner.classList.add("error");
-        resultContent.innerHTML = `
-          <strong>Upload Error:</strong> ${escapeHtml(response?.error || "Could not connect to backend.")}<br/>
-          <small>Tip: You can use "Save Backup (.VTT)" below to preserve your transcript locally.</small>
-        `;
-        reviewGateLink.classList.add("hidden");
-        return;
-      }
-
-      resultBanner.classList.remove("hidden");
-      resultBanner.classList.remove("error");
-      resultContent.innerHTML = `
-        <strong>✓ Transcripts Ingested & Parsed!</strong><br/>
-        <span>${response.segmentCount} segments saved • ${response.extractedItemsCount} tasks generated for review.</span>
-      `;
-
-      if (response.reviewUrl) {
-        reviewGateLink.href = response.reviewUrl;
-        reviewGateLink.classList.remove("hidden");
-        reviewGateLink.onclick = (e) => {
-          e.preventDefault();
-          chrome.tabs.create({ url: response.reviewUrl });
-        };
-      }
-    });
+function renderCaptions(cues) {
+  const latest = cues.slice(-20);
+  const nextSignature = JSON.stringify(latest);
+  if (nextSignature === captionSignature) return;
+  const nearEnd = feed.scrollHeight - feed.clientHeight - feed.scrollTop < 14;
+  captionSignature = nextSignature;
+  const rows = latest.map((cue) => {
+    const row = document.createElement("li");
+    const speaker = document.createElement("strong");
+    speaker.textContent = cue.speaker || "Speaker";
+    row.append(speaker, document.createTextNode(cue.text || ""));
+    return row;
   });
+  feed.replaceChildren(...rows);
+  if (nearEnd) feed.scrollTop = feed.scrollHeight;
+}
 
-  function triggerDownload(content, filename, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 100);
+function render() {
+  const workspace = workspaceStatus();
+  setText("syncWorkspaceTag", workspace.title);
+  setText("syncAccountStat", workspace.help);
+  setText("rolePill", workspace.role);
+  el("rolePill").hidden = !workspace.role;
+
+  const cues = session?.cues || [];
+  const count = cues.length;
+  const busy = isUploading || submittingUpload;
+  const completed = Boolean(session?.isCompleted || session?.uploaded);
+  const provider = providerNames[session?.platform] || providerNames[tabStatus?.provider] || "";
+  const saved = session?.uploaded && session.uploadResult;
+  const resultReviewUrl = webUrl(session?.reviewUrl);
+  const error = localUploadError || session?.uploadError;
+  let state = "Ready";
+  let tone = "idle";
+  let hint = "Open a Meet, Zoom or Teams call in this browser, then turn on captions.";
+
+  if (busy) {
+    state = "Uploading"; tone = "working";
+    hint = "Saving the transcript and preparing tasks for review.";
+  } else if (saved) {
+    state = "Saved"; tone = "done";
+    const segments = saved.segmentCount ?? count;
+    const items = saved.extractedItemsCount ?? 0;
+    hint = `${segments} transcript segment${segments === 1 ? "" : "s"} saved. ${items ? `${items} item${items === 1 ? "" : "s"} ready to review.` : "No suggested items to review."}`;
+  } else if (completed) {
+    state = error ? "Upload needs attention" : "Call ended";
+    tone = error ? "warning" : "idle";
+    hint = count ? (workspace.canUpload ? "Upload the captions to review suggested tasks." : "Connect an organiser account to upload, or download a copy.")
+      : "No captions were captured. Turn them on at the start of your next call.";
+  } else if (tabStatus?.needsRefresh && !session?.isRecording) {
+    state = "Reload call tab"; tone = "warning";
+    hint = "Refresh the meeting tab so ActionPulse can connect.";
+  } else if (tabStatus?.active && tabStatus?.captionsActive) {
+    state = "Capturing captions"; tone = "live";
+    hint = "New captions will appear after someone speaks.";
+  } else if (tabStatus?.active) {
+    state = "Captions off"; tone = "warning";
+    hint = "Turn on captions in the call. ActionPulse will start capturing automatically.";
+  } else if (session?.isRecording) {
+    state = "Call in progress"; tone = "live";
+    hint = "Switch to the call tab to check whether captions are on.";
+  } else if (tabStatus?.provider) {
+    state = "Ready to join";
+    hint = "Join the call and turn on captions to start capturing.";
   }
 
-  saveVttBtn.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "GET_TRANSCRIPT_EXPORT" }, (res) => {
-      if (!res || !res.vtt) {
-        alert("No transcript cues available in buffer to export.");
-        return;
-      }
-      const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      const filename = `ActionPulse-${res.title || "Meeting"}-${dateStr}.vtt`;
-      triggerDownload(res.vtt, filename, "text/vtt;charset=utf-8");
-    });
-  });
+  setText("statusLabel", state);
+  el("sessionStateTag").dataset.tone = tone;
+  setText("platformName", provider);
+  setText("meetingTitle", session?.title || "Live meeting");
+  setText("statusHint", hint);
+  setText("cueCountStat", String(count));
+  setText("previewCount", `Latest ${Math.min(count, 20)} of ${count}`);
+  updateDuration();
+  showMessage("uploadError", !busy && error ? `${error} Your captions are still on this device.` : "");
 
-  saveTxtBtn.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "GET_TRANSCRIPT_EXPORT" }, (res) => {
-      if (!res || !res.txt) {
-        alert("No transcript cues available in buffer to export.");
-        return;
-      }
-      const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-      const filename = `ActionPulse-${res.title || "Meeting"}-${dateStr}.txt`;
-      triggerDownload(res.txt, filename, "text/plain;charset=utf-8");
-    });
-  });
+  reviewLink.hidden = !saved || !resultReviewUrl;
+  if (!reviewLink.hidden) {
+    const items = saved.extractedItemsCount ?? 0;
+    const meetingUrl = saved.meetingId ? new URL(`/meetings/${encodeURIComponent(saved.meetingId)}?tab=overview`, resultReviewUrl) : resultReviewUrl;
+    setText("reviewLinkLabel", items > 0 ? "Review tasks" : "Open meeting");
+    reviewLink.href = items > 0 ? resultReviewUrl.href : meetingUrl.href;
+  }
+  uploadButton.hidden = !busy && (!completed || !count || Boolean(saved));
+  uploadButton.disabled = busy || !workspace.canUpload;
+  setText("uploadLabel", busy ? "Uploading captions…" : error ? "Retry upload" : "Upload captions");
+  el("uploadSpinner").hidden = !busy;
+  transcriptPanel.hidden = !count;
+  el("clearBufferBtn").hidden = !completed || busy;
+  renderCaptions(cues);
+}
 
-  clearBufferBtn.addEventListener("click", () => {
-    if (confirm("Are you sure you want to clear the current transcript buffer?")) {
-      chrome.runtime.sendMessage({ type: "CLEAR_BUFFER" }, () => {
-        refreshState();
-        resultBanner.classList.add("hidden");
-      });
+async function refresh() {
+  if (refreshInFlight) return;
+  refreshInFlight = true;
+  try {
+    const [state, tab] = await Promise.all([getState(), getMeetingTabStatus().catch(() => null)]);
+    if (!state?.settings) throw new Error("No extension state");
+    if (session?.id !== state.session?.id) localUploadError = "";
+    ({ session, settings, isUploading, defaultConnection } = state);
+    defaultsButton.disabled = savingSettings || !defaultConnection;
+    tabStatus = tab;
+    if (!editedSettings.has(appUrlInput)) appUrlInput.value = settings.appUrl || "";
+    if (!editedSettings.has(apiUrlInput)) apiUrlInput.value = settings.apiUrl || "";
+    if (el("panelError").dataset.source === "refresh") {
+      showMessage("panelError");
+      delete el("panelError").dataset.source;
     }
-  });
+    render();
+  } catch {
+    el("panelError").dataset.source = "refresh";
+    showMessage("panelError", "ActionPulse couldn't load the capture status. Close and reopen this popup.");
+  } finally {
+    refreshInFlight = false;
+  }
+}
 
-  saveSettingsBtn.addEventListener("click", () => {
-    const settings = {
-      workspaceId: workspaceIdInput.value.trim(),
-      apiUrl: apiUrlInput.value.trim(),
-      appUrl: appUrlInput.value.trim(),
-    };
-    chrome.runtime.sendMessage({ type: "UPDATE_SETTINGS", data: settings }, () => {
-      saveSettingsBtn.innerText = "Saved ✓";
-      setTimeout(() => {
-        saveSettingsBtn.innerText = "Save Configuration";
-      }, 1500);
-    });
-  });
-
-  await refreshState();
-  startTimerLoop();
-  setInterval(refreshState, 1500);
+el("openAppBtn").addEventListener("click", () => {
+  const site = webUrl(settings?.appUrl);
+  if (site) {
+    void chrome.tabs.create({ url: new URL("/meetings", site).href });
+  } else {
+    el("settingsPanel").open = true;
+    appUrlInput.focus();
+  }
 });
+
+uploadButton.addEventListener("click", async () => {
+  submittingUpload = true;
+  localUploadError = "";
+  render();
+  try {
+    const result = await chrome.runtime.sendMessage({ type: "UPLOAD_TO_BACKEND" });
+    if (!result?.success) throw new Error(result?.error || "The upload could not be completed.");
+    session = { ...session, uploaded: true, uploadResult: result, reviewUrl: result.reviewUrl, uploadError: "" };
+  } catch (error) {
+    localUploadError = error.message;
+  } finally {
+    // The reply arrives after the worker has finished saving.
+    submittingUpload = false;
+    isUploading = false;
+    render();
+    void refresh();
+  }
+});
+
+transcriptPanel.addEventListener("toggle", () => {
+  if (transcriptPanel.open) feed.scrollTop = feed.scrollHeight;
+});
+
+async function download(format) {
+  try {
+    const transcript = await chrome.runtime.sendMessage({ type: "GET_TRANSCRIPT_EXPORT" });
+    if (!transcript?.cueCount || !transcript[format]) return;
+    const blob = new Blob([transcript[format]], { type: format === "vtt" ? "text/vtt;charset=utf-8" : "text/plain;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    const title = String(transcript.title || "meeting").replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(0, 80);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = `ActionPulse-${title}-${stamp}.${format}`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  } catch {
+    showMessage("panelError", "The transcript couldn't be downloaded. Please try again.");
+  }
+}
+
+el("saveVttBtn").addEventListener("click", () => void download("vtt"));
+el("saveTxtBtn").addEventListener("click", () => void download("txt"));
+el("clearBufferBtn").addEventListener("click", async () => {
+  if (!confirm("Discard the local transcript copy? Any transcript already saved to ActionPulse will remain there.")) return;
+  try {
+    const result = await chrome.runtime.sendMessage({ type: "CLEAR_BUFFER" });
+    if (result?.status !== "cleared") throw new Error("Could not clear");
+    session = result.session;
+    localUploadError = "";
+    transcriptPanel.open = false;
+    render();
+  } catch {
+    showMessage("panelError", "The local transcript couldn't be discarded. Please try again.");
+  }
+});
+
+[appUrlInput, apiUrlInput].forEach((input) => {
+  input.addEventListener("input", () => {
+    editedSettings.add(input);
+    setText("settingsStatus", "");
+  });
+});
+defaultsButton.addEventListener("click", () => {
+  if (!defaultConnection || savingSettings) return;
+  appUrlInput.value = defaultConnection.appUrl;
+  apiUrlInput.value = defaultConnection.apiUrl;
+  editedSettings.add(appUrlInput);
+  editedSettings.add(apiUrlInput);
+  el("settingsForm").requestSubmit();
+});
+
+el("settingsForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (savingSettings) return;
+  const site = webUrl(appUrlInput.value);
+  const api = webUrl(apiUrlInput.value);
+  if (!site || !api) {
+    setText("settingsStatus", "Enter valid HTTP or HTTPS URLs.");
+    return;
+  }
+
+  const saveButton = el("saveSettingsBtn");
+  savingSettings = true;
+  saveButton.disabled = true;
+  defaultsButton.disabled = true;
+  setText("settingsStatus", "Saving…");
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: "UPDATE_SETTINGS", data: { appUrl: site.origin, apiUrl: api.origin },
+    });
+    if (result?.status !== "settings_updated") throw new Error("Could not save settings");
+    settings = { ...settings, appUrl: site.origin, apiUrl: api.origin };
+    editedSettings.clear();
+    setText("settingsStatus", "Settings saved");
+    void refresh();
+  } catch {
+    setText("settingsStatus", "Couldn't save. Try again.");
+  } finally {
+    savingSettings = false;
+    saveButton.disabled = false;
+    defaultsButton.disabled = !defaultConnection;
+  }
+});
+
+void refresh();
+setInterval(refresh, 1500);
+setInterval(updateDuration, 1000);

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import type { FormEvent } from "react";
 import { createPortal } from "react-dom";
+import { DashboardLightContext } from "../../context/DashboardThemeContext";
 import { useWorkspace } from "../../context/WorkspaceContext";
 import { Button } from "../ui/button";
 import { Notice } from "../ui/notice";
@@ -14,6 +15,7 @@ export default function CreateWorkspaceModal({
   isOpen,
   onClose,
 }: CreateWorkspaceModalProps) {
+  const light = useContext(DashboardLightContext);
   const { createWorkspace } = useWorkspace();
 
   const [name, setName] = useState("");
@@ -57,7 +59,8 @@ export default function CreateWorkspaceModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm"
+      data-dashboard-theme={light ? "light" : "dark"}
+      className="dashboard-scrim fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !loading) {
           onClose();
@@ -68,7 +71,7 @@ export default function CreateWorkspaceModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-workspace-title"
-        className="w-full max-w-md rounded-xl border border-white/15 bg-[#0e0e13] p-6 shadow-2xl text-white animate-in fade-in zoom-in-95 duration-150"
+        className="dashboard-surface w-full max-w-md rounded-xl border border-white/15 bg-[#0e0e13] p-6 shadow-2xl text-white animate-in fade-in zoom-in-95 duration-150"
       >
         <div className="mb-5">
           <p className="eyebrow">New workspace</p>

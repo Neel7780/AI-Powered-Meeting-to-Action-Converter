@@ -26,6 +26,7 @@ export interface ChatRequestPayload {
   meeting_id?: string | null;
   query: string;
   history?: Array<{ role: string; content: string }>;
+  session_id?: string | null;
 }
 
 export interface ChatApiResponse {
@@ -33,6 +34,7 @@ export interface ChatApiResponse {
   citations: ChatCitation[];
   suggested_followups: string[];
   meeting_context_count: number;
+  session_id?: string | null;
 }
 
 export interface MeetingOption {
@@ -40,5 +42,15 @@ export interface MeetingOption {
   title: string;
   starts_at: string;
   status: string;
+}
+
+export interface ChatSession {
+  id: string;
+  workspace_id: string;
+  title: string;
+  selected_meeting_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  messages?: ChatMessage[];
 }
 

@@ -75,7 +75,7 @@ export const WhatsAppShareButton: React.FC<WhatsAppShareButtonProps> = ({
       target="_blank"
       rel="noopener noreferrer"
       onClick={handleClick}
-      title="1-Tap WhatsApp Share"
+      title="Share on WhatsApp"
       aria-label={`Share ${taskTitle} on WhatsApp`}
       className={`group/wa inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-all duration-200 
         bg-emerald-50 hover:bg-emerald-100 text-emerald-700 hover:text-emerald-800 border border-emerald-200 hover:border-emerald-300 

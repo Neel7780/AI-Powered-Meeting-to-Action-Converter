@@ -16,7 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.config import settings
-from app.core.deps import CurrentUser, get_current_user, require_role
+from app.core.deps import WORKSPACE_ROLES, CurrentUser, get_current_user, require_role
 from app.core.supabase import get_supabase_client
 from app.schemas.calendar import (
     CalendarCallbackRequest,
@@ -36,8 +36,6 @@ from app.services.calendar import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-WORKSPACE_ROLES = {"admin", "organiser", "member"}
 
 
 @router.get(

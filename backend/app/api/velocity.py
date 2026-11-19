@@ -10,7 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.deps import CurrentUser, get_current_user, require_role
+from app.core.deps import WORKSPACE_ROLES, CurrentUser, get_current_user, require_role
 from app.core.supabase import get_supabase_client
 from app.schemas.velocity import (
     DiffTaskSchema,
@@ -54,7 +54,7 @@ def get_sprint_velocity(
     user: CurrentUser = Depends(get_current_user),
 ) -> SprintVelocityResponse:
     """Retrieve consecutive meeting diffs, velocity score, and carryover tasks."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
     client = get_supabase_client()
 
     # 1. Fetch meetings in workspace chronologically
@@ -241,8 +241,18 @@ def rollover_task(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Rollover/carry forward an action item to a consecutive meeting via privileged backend update."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
     client = get_supabase_client()
+    target = (
+        client.table("meetings")
+        .select("id")
+        .eq("id", str(payload.target_meeting_id))
+        .eq("workspace_id", str(workspace_id))
+        .execute()
+    )
+    if not target.data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Target meeting not found in this workspace")
+
     resp = (
         client.table("tasks")
         .update({

@@ -108,6 +108,118 @@ def test_install_callback_requires_separate_pkce_proof(environment, monkeypatch)
     mocked.assert_called_once_with(str(WORKSPACE), USER, "oauth", 101)
 
 
+def test_new_actionpulse_user_discovers_existing_installation_and_connects_after_verification(environment, monkeypatch):
+    second_workspace = UUID("20000000-0000-0000-0000-000000000002")
+    new_user = UUID("10000000-0000-0000-0000-000000000002")
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(id=new_user, email="new@example.test")
+    states = {}
+    connections = []
+
+    def rpc(name, **params):
+        if name == "github_begin_state":
+            states[params["p_state_hash"]] = params
+        elif name == "github_consume_state":
+            saved = states.get(params["p_state_hash"])
+            if saved and all(saved[key] == params[key] for key in ("p_actor_id", "p_phase")):
+                states.pop(params["p_state_hash"])
+                return {"workspace_id": saved["p_workspace_id"], "installation_id": saved["p_installation_id"]}
+        elif name == "github_complete_connection":
+            connections.append(params)
+
+    monkeypatch.setattr(github, "rpc", rpc)
+    monkeypatch.setattr(github, "exchange_code", AsyncMock(return_value="fresh-user-token"))
+    monkeypatch.setattr(github, "app_jwt", lambda: "app-jwt")
+    organization = {"id": 101, "app_id": 99, "account": {"id": 55, "login": "org", "type": "Organization"},
+                    "permissions": {"metadata": "read"}, "suspended_at": None}
+    pages = AsyncMock(side_effect=[[
+        organization, {**organization, "id": 102, "app_id": 100},
+        {**organization, "id": 103, "suspended_at": "2026-11-18T00:00:00Z"},
+    ], [organization], [
+        {"id": 501, "full_name": "org/repo", "private": True, "permissions": {"admin": True}},
+        {"id": 502, "full_name": "org/read-only", "private": True, "permissions": {"pull": True}},
+    ]])
+    monkeypatch.setattr(github, "paginate", pages)
+    monkeypatch.setattr(github, "request", AsyncMock(side_effect=[
+        {"login": "github-user", "email": "private@example.test"}, organization,
+    ]))
+    db = MagicMock()
+    monkeypatch.setattr(api, "get_supabase_client", db)
+    target = f"/api/workspaces/{second_workspace}/github"
+
+    response = environment.post(f"{target}/discover")
+    assert response.status_code == 200
+    url = urlparse(response.json()["url"])
+    params = parse_qs(url.query)
+    assert url.netloc == "github.com" and url.path == "/login/oauth/authorize"
+    assert params["prompt"] == ["select_account"]
+    assert params["code_challenge_method"] == ["S256"]
+    discovery_payload = {"state": params["state"][0], "code": "discovery-code"}
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(id=USER, email="original@example.test")
+    assert environment.post("/api/github/callback", json=discovery_payload).status_code == 400
+    pages.assert_not_awaited()
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(id=new_user, email="new@example.test")
+
+    response = environment.post("/api/github/callback", json=discovery_payload)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json() == {
+        "workspace_id": str(second_workspace), "github_login": "github-user",
+        "installations": [{"id": 101, "account_login": "org", "account_type": "Organization"}],
+    }
+    db.assert_not_called()  # Discovery never uses other ActionPulse users' stored connections.
+    assert not connections
+    assert environment.post("/api/github/callback", json=discovery_payload).status_code == 400
+
+    response = environment.post(f"{target}/connect-existing", json={"installation_id": 101})
+    assert response.status_code == 200
+    url = urlparse(response.json()["url"])
+    params = parse_qs(url.query)
+    assert url.path == "/login/oauth/authorize"  # Never sends an installed account back to installation settings.
+    assert params["code_challenge_method"] == ["S256"]
+    assert not connections
+    assert list(states.values())[0]["p_workspace_id"] == str(second_workspace)
+    assert list(states.values())[0]["p_phase"] == "oauth"
+
+    payload = {"state": params["state"][0], "code": "new-code"}
+    response = environment.post("/api/github/callback", json=payload)
+    assert response.status_code == 200
+    assert response.json() == {"workspace_id": str(second_workspace), "account": "org"}
+    assert len(connections) == 1
+    assert connections[0]["p_workspace_id"] == str(second_workspace)
+    assert connections[0]["p_actor_id"] == str(new_user)
+    assert connections[0]["p_installation"]["id"] == 101
+    assert connections[0]["p_repositories"] == [
+        {"repository_id": 501, "full_name": "org/repo", "private": True},
+    ]
+    assert "fresh-user-token" not in repr(connections)
+    assert environment.post("/api/github/callback", json=payload).status_code == 400
+    assert len(connections) == 1
+
+
+def test_discovery_returns_empty_list_for_a_github_account_without_installations(environment, monkeypatch):
+    monkeypatch.setattr(github, "consume_state", lambda *_: {"workspace_id": str(WORKSPACE), "installation_id": None})
+    monkeypatch.setattr(github, "exchange_code", AsyncMock(return_value="fresh-user-token"))
+    monkeypatch.setattr(github, "request", AsyncMock(return_value={"login": "new-github-user"}))
+    monkeypatch.setattr(github, "paginate", AsyncMock(return_value=[]))
+    save = MagicMock()
+    monkeypatch.setattr(github, "rpc", save)
+    response = environment.post("/api/github/callback", json={"state": STATE, "code": "discovery-code"})
+    assert response.status_code == 200
+    assert response.json() == {"workspace_id": str(WORKSPACE), "github_login": "new-github-user", "installations": []}
+    save.assert_not_called()
+
+
+@pytest.mark.parametrize("payload", [
+    {"installation_id": 0}, {"installation_id": 2**53},
+    {"installation_id": 101, "workspace_id": str(WORKSPACE)},
+])
+def test_existing_connection_rejects_invalid_or_overridden_context(environment, monkeypatch, payload):
+    begin = MagicMock()
+    monkeypatch.setattr(github, "new_state", begin)
+    assert environment.post(f"{BASE}/connect-existing", json=payload).status_code == 422
+    begin.assert_not_called()
+
+
 def test_spoofed_installation_is_rejected_before_mapping(environment, monkeypatch):
     monkeypatch.setattr(github, "consume_state", lambda *_: {"workspace_id": str(WORKSPACE), "installation_id": 101})
     monkeypatch.setattr(github, "exchange_code", AsyncMock(return_value="transient-user-token"))
@@ -463,3 +575,15 @@ def test_owner_revoked_during_settings_load_cannot_receive_manager_data(environm
     response = environment.get(BASE)
     assert response.status_code == 403
     assert "owner@example.test" not in response.text
+
+
+def test_role_revoked_during_account_discovery_blocks_response(environment, role_database, monkeypatch):
+    async def revoke(*_):
+        role_database["workspace_members"][0]["role"] = "member"
+        return {"github_login": "private-hint", "installations": []}
+
+    monkeypatch.setattr(github, "consume_state", lambda *_: {"workspace_id": str(WORKSPACE), "installation_id": None})
+    monkeypatch.setattr(github, "discover_installations", revoke)
+    response = environment.post("/api/github/callback", json={"state": STATE, "code": "discovery-code"})
+    assert response.status_code == 403
+    assert "private-hint" not in response.text

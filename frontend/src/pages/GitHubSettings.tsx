@@ -118,7 +118,7 @@ export default function GitHubSettings() {
           <p className="mt-2 text-sm text-neutral-300">{currentWorkspace?.name} · Repository connections and member access</p>
         </div>
         {data?.can_manage && <Button disabled={busy || !data.configured} onClick={() => {
-          void run(async () => { window.location.assign((await githubApi.connect(workspaceId)).url); }, '');
+          void run(async () => { window.location.assign((await githubApi.discover(workspaceId)).url); }, '');
         }}>Connect GitHub</Button>}
       </header>
       {error && <Notice tone="error">{error}</Notice>}

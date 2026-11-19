@@ -93,3 +93,50 @@ def test_rls_cross_workspace_isolation(service_db, anon_db):
             service_db.auth.admin.delete_user(user_a.user.id)
         if user_b:
             service_db.auth.admin.delete_user(user_b.user.id)
+
+
+def test_chat_tables_service_role_and_authenticated_permissions(service_db, anon_db):
+    """Verify deployed service_role and authenticated roles have table privileges on chat tables."""
+    user_email = f"chat_{uuid.uuid4()}@example.com"
+    password = "password123"
+    user = None
+
+    try:
+        user = service_db.auth.admin.create_user({"email": user_email, "password": password, "email_confirm": True})
+        uid = user.user.id
+
+        anon_db.auth.sign_in_with_password({"email": user_email, "password": password})
+        ws_id = anon_db.rpc("create_workspace", {"p_name": "Chat Test WS"}).execute().data
+
+        # 1. service_role can insert into chat_sessions
+        session_res = service_db.table("chat_sessions").insert({
+            "workspace_id": ws_id,
+            "user_id": uid,
+            "title": "Backend Deployed Role Test"
+        }).execute()
+        assert len(session_res.data) == 1
+        s_id = session_res.data[0]["id"]
+
+        # 2. service_role can insert into chat_messages
+        msg_res = service_db.table("chat_messages").insert({
+            "session_id": s_id,
+            "role": "user",
+            "content": "Testing service_role table grant"
+        }).execute()
+        assert len(msg_res.data) == 1
+
+        # 3. service_role can select from both
+        s_fetch = service_db.table("chat_sessions").select("*").eq("id", s_id).execute()
+        assert len(s_fetch.data) == 1
+        m_fetch = service_db.table("chat_messages").select("*").eq("session_id", s_id).execute()
+        assert len(m_fetch.data) == 1
+
+        # 4. authenticated role can also select own session
+        anon_fetch = anon_db.table("chat_sessions").select("*").eq("id", s_id).execute()
+        assert len(anon_fetch.data) == 1
+
+        # 5. Clean up via service_db
+        service_db.table("chat_sessions").delete().eq("id", s_id).execute()
+    finally:
+        if user:
+            service_db.auth.admin.delete_user(user.user.id)

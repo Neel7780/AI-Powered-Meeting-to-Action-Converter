@@ -28,6 +28,8 @@ interface AudioRecorderProps {
   /** Called with the finished recording (or an uploaded audio file); null when cleared. */
   onChange: (file: File | null) => void;
   onError: (message: string) => void;
+  onRecordingChange?: (recording: boolean) => void;
+  canRecord?: boolean;
 }
 
 /**
@@ -35,7 +37,7 @@ interface AudioRecorderProps {
  * Speech-friendly settings: mono, echo cancellation + noise suppression, ~32 kbps Opus
  * (about 15 MB per hour, well under the 50 MB limit).
  */
-export function AudioRecorder({ onChange, onError }: AudioRecorderProps) {
+export function AudioRecorder({ onChange, onError, onRecordingChange, canRecord = true }: AudioRecorderProps) {
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [file, setFile] = useState<File | null>(null);
@@ -94,6 +96,7 @@ export function AudioRecorder({ onChange, onError }: AudioRecorderProps) {
       setResult(null);
       setSeconds(0);
       setRecording(true);
+      onRecordingChange?.(true);
       timerRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
     } catch (err) {
       onError((err as Error).name === 'NotAllowedError'
@@ -108,6 +111,7 @@ export function AudioRecorder({ onChange, onError }: AudioRecorderProps) {
     if (timerRef.current) window.clearInterval(timerRef.current);
     timerRef.current = null;
     setRecording(false);
+    onRecordingChange?.(false);
   };
 
   const pickFile = (f: File | undefined) => {
@@ -142,7 +146,7 @@ export function AudioRecorder({ onChange, onError }: AudioRecorderProps) {
           {recording ? (
             <Button type="button" variant="destructive" onClick={stop}><Square /> Stop</Button>
           ) : (
-            <Button type="button" variant="outline" onClick={start} disabled={!supported}>
+            <Button type="button" variant="outline" onClick={start} disabled={!supported || !canRecord}>
               <Circle className="fill-red-500 text-red-500" /> {file ? 'Record again' : 'Start recording'}
             </Button>
           )}

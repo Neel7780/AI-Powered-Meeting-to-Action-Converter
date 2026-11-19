@@ -88,7 +88,7 @@ export const MeetingTopNav: React.FC<TopNavProps> = ({
         <button
           onClick={() => navigate('/meeting-review')}
           className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white bg-[#151921] hover:bg-[#1b212c] border border-[#232936] rounded-lg transition"
-          title="Open Action Item Review & Staging Gate"
+          title="Review actions"
         >
           <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
           <span className="hidden md:inline">Review Items</span>

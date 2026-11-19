@@ -8,6 +8,7 @@ export type {
   ChatRequestPayload,
   ChatApiResponse,
   MeetingOption,
+  ChatSession,
 } from './aiChat';
 
 // ============================================================

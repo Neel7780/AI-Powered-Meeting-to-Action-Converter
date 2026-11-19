@@ -113,7 +113,7 @@ export const MeetingVideoPlayer: React.FC<VideoPlayerProps> = ({
           <Sparkles className="w-3 h-3 text-teal-400" />
           <span className="font-medium text-teal-300">Chapter 3:</span>
           <span className="truncate max-w-[180px] sm:max-w-[260px] text-slate-300">
-            Action Item Staging Gate
+            Review actions
           </span>
         </div>
       </div>

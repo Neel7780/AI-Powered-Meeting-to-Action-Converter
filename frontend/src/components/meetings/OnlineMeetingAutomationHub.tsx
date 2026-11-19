@@ -152,11 +152,10 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <h2 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-              Online Meeting Automation & Auto-Ingest
+              Online meeting connections
             </h2>
             <p className="text-xs text-neutral-400 max-w-2xl leading-relaxed">
-              Eliminate manual transcript uploads. ActionPulse automatically listens for completed Google Meet,
-              Zoom, and Microsoft Teams meetings, fetches cloud transcripts, and feeds them directly into the GenAI review pipeline.
+              Connect your meeting platform to import available transcripts.
             </p>
           </div>
 
@@ -182,7 +181,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
               className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 text-xs h-9 font-medium"
             >
               <Play className="size-3.5 mr-1.5 fill-current" />
-              Live Ingest Simulation
+              Test connection
             </Button>
           </div>
         </div>
@@ -255,7 +254,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
 
               <div className="mt-4 bg-white/[0.02] rounded-lg p-2.5 border border-white/5">
                 <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
-                  {p.limitations || 'Ready to auto-ingest meeting audio transcripts upon completion.'}
+                  {p.limitations || 'Ready to import available transcripts.'}
                 </p>
               </div>
             </div>
@@ -268,9 +267,8 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
         <div className="rounded-xl border border-white/10 bg-[#060608] p-5 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-              Recently Ingested Online Meetings ({feedItems.length})
+              Recent online meetings ({feedItems.length})
             </h3>
-            <span className="text-[11px] text-neutral-500">Grounded in cloud recordings</span>
           </div>
 
           <div className="divide-y divide-white/5">
@@ -323,8 +321,8 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
                   <Zap className="size-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-white">Simulate Online Meeting Webhook</h3>
-                  <p className="text-xs text-neutral-400">Test zero-touch automated ingest from Zoom, Google Meet, or Teams</p>
+                  <h3 className="text-base font-semibold text-white">Test meeting import</h3>
+                  <p className="text-xs text-neutral-400">Simulate a meeting import to test the connection.</p>
                 </div>
               </div>
 
@@ -380,7 +378,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
                     type="text"
                     value={meetingTitle}
                     onChange={(e) => setMeetingTitle(e.target.value)}
-                    placeholder="e.g. Q3 Architecture Review & Webhook Sync"
+                    placeholder="e.g. Weekly product review"
                     className="w-full rounded-lg border border-white/10 bg-[#060608] px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-indigo-500 focus:outline-none transition-colors"
                   />
                 </div>
@@ -406,7 +404,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
                     </label>
                     <div className="flex h-10 items-center gap-2 rounded-lg border border-white/10 bg-[#060608] px-3 text-xs text-neutral-300">
                       <Sparkles className="size-3.5 text-indigo-400" />
-                      <span>Gemini GenAI Extraction</span>
+                      <span>Find action items</span>
                     </div>
                   </div>
                 </div>
@@ -416,21 +414,21 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
                   <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2.5">
                     <div className="flex items-center gap-2 text-xs font-medium text-indigo-400">
                       <div className="size-2 rounded-full bg-indigo-400 animate-ping" />
-                      <span>Executing Real-time Online Automation Pipeline…</span>
+                      <span>Running test import…</span>
                     </div>
 
                     <div className="space-y-1.5 text-xs text-neutral-400">
                       <div className={`flex items-center gap-2 ${simulationStep >= 1 ? 'text-white' : 'opacity-40'}`}>
                         {simulationStep > 1 ? <CheckCircle2 className="size-3.5 text-emerald-400" /> : <div className="size-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />}
-                        <span>1. Receiving provider webhook: <code>meeting.ended</code></span>
+                        <span>Receiving meeting details</span>
                       </div>
                       <div className={`flex items-center gap-2 ${simulationStep >= 2 ? 'text-white' : 'opacity-40'}`}>
                         {simulationStep > 2 ? <CheckCircle2 className="size-3.5 text-emerald-400" /> : <div className="size-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />}
-                        <span>2. Fetching & parsing cloud transcript (.VTT multi-speaker)</span>
+                        <span>Importing transcript</span>
                       </div>
                       <div className={`flex items-center gap-2 ${simulationStep >= 3 ? 'text-white' : 'opacity-40'}`}>
                         {simulationStep > 3 ? <CheckCircle2 className="size-3.5 text-emerald-400" /> : <div className="size-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />}
-                        <span>3. Grounding action items and saving segments in Supabase</span>
+                        <span>Finding suggested actions</span>
                       </div>
                     </div>
                   </div>
@@ -453,7 +451,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
                     size="sm"
                     className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20"
                   >
-                    {isSimulating ? 'Processing Pipeline…' : 'Trigger Automation Webhook'}
+                    {isSimulating ? 'Importing…' : 'Run test import'}
                   </Button>
                 </div>
               </div>
@@ -461,7 +459,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
               <div className="space-y-4">
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-center space-y-2">
                   <CheckCircle2 className="size-8 text-emerald-400 mx-auto" />
-                  <h4 className="text-sm font-bold text-white">Online Meeting Ingestion Complete!</h4>
+                  <h4 className="text-sm font-bold text-white">Test import complete</h4>
                   <p className="text-xs text-neutral-300">{simulationResult.message}</p>
                 </div>
 
@@ -498,7 +496,7 @@ export const OnlineMeetingAutomationHub: React.FC<OnlineMeetingAutomationHubProp
                     size="sm"
                     className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 text-xs font-medium"
                   >
-                    Open Review Gate & Approve Tasks
+                    Review actions
                     <ArrowRight className="size-3.5 ml-1.5" />
                   </Button>
                 </div>
