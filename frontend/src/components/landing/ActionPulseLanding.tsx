@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, CircleHelp, ClipboardCheck, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, X } from "lucide-react";
 import logoImg from "@/assets/logo.png";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import SelectionList from "@/components/ui/SelectionList";
 import { Cover } from "@/components/ui/cover";
@@ -44,6 +45,7 @@ function SectionHeading({ eyebrow, title, description }: { eyebrow: string; titl
 
 export default function ActionPulseLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { user } = useAuth();
 
   return (
     <div id="top" className="min-h-screen bg-black text-white selection:bg-white selection:text-black">
@@ -59,12 +61,20 @@ export default function ActionPulseLanding() {
             ))}
           </nav>
           <div className="hidden items-center gap-3 md:flex">
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/login">Sign in</Link>
-            </Button>
-            <Button size="sm" asChild>
-              <Link to="/signup">Get started <ArrowRight/></Link>
-            </Button>
+            {user ? (
+              <Button size="sm" asChild>
+                <Link to="/dashboard">Dashboard <ArrowRight/></Link>
+              </Button>
+            ) : (
+              <>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/login">Sign in</Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link to="/signup">Get started <ArrowRight/></Link>
+                </Button>
+              </>
+            )}
           </div>
           <Button variant="ghost" size="icon" className="md:hidden text-white" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X/> : <Menu/>}
@@ -78,12 +88,20 @@ export default function ActionPulseLanding() {
               </a>
             ))}
             <div className="mt-2 flex gap-2 border-t border-white/10 pt-3">
-              <Button variant="outline" asChild>
-                <Link to="/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
-              </Button>
-              <Button asChild>
-                <Link to="/signup" onClick={() => setMenuOpen(false)}>Get started</Link>
-              </Button>
+              {user ? (
+                <Button asChild className="w-full">
+                  <Link to="/dashboard" onClick={() => setMenuOpen(false)}>Go to Dashboard</Link>
+                </Button>
+              ) : (
+                <>
+                  <Button variant="outline" asChild>
+                    <Link to="/login" onClick={() => setMenuOpen(false)}>Sign in</Link>
+                  </Button>
+                  <Button asChild>
+                    <Link to="/signup" onClick={() => setMenuOpen(false)}>Get started</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </nav>
         )}
@@ -118,7 +136,7 @@ export default function ActionPulseLanding() {
                 <a href="#demo">Try the demo <ArrowDown/></a>
               </Button>
               <Button variant="outline" size="lg" asChild>
-                <Link to="/signup">Get started <ArrowRight/></Link>
+                <Link to={user ? "/dashboard" : "/signup"}>{user ? "Go to Dashboard" : "Get started"} <ArrowRight/></Link>
               </Button>
             </div>
           </div>
@@ -341,7 +359,7 @@ export default function ActionPulseLanding() {
             </p>
             <div className="mt-7 flex flex-wrap justify-center gap-3">
               <Button size="lg" asChild>
-                <Link to="/signup">Get started <ArrowRight/></Link>
+                <Link to={user ? "/dashboard" : "/signup"}>{user ? "Go to Dashboard" : "Get started"} <ArrowRight/></Link>
               </Button>
               <Button variant="outline" size="lg" asChild>
                 <a href="#demo">Explore the demo <ArrowUpRight/></a>
