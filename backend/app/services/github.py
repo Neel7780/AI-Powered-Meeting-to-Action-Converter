@@ -139,12 +139,15 @@ def verifier(state: str) -> str:
     )).rstrip(b"=").decode()
 
 
-def authorization_url(state: str) -> str:
+def authorization_url(state: str, *, choose_account: bool = False) -> str:
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier(state).encode()).digest()).rstrip(b"=").decode()
-    return "https://github.com/login/oauth/authorize?" + urlencode({
+    params = {
         "client_id": settings.GITHUB_CLIENT_ID, "redirect_uri": settings.GITHUB_REDIRECT_URI,
         "state": state, "code_challenge": challenge, "code_challenge_method": "S256",
-    })
+    }
+    if choose_account:
+        params["prompt"] = "select_account"
+    return "https://github.com/login/oauth/authorize?" + urlencode(params)
 
 
 async def exchange_code(code: str, state: str) -> str:
@@ -181,6 +184,20 @@ def installation_record(data: dict, observed_at: str) -> dict:
 
 def repository_records(rows: list[dict]) -> list[dict]:
     return [{"repository_id": r["id"], "full_name": r["full_name"], "private": r["private"]} for r in rows]
+
+
+async def discover_installations(code: str, state: str) -> dict:
+    user_token = await exchange_code(code, state)
+    identity = await request("GET", "/user", user_token)
+    installations = await paginate("/user/installations", user_token, "installations")
+    return {
+        "github_login": identity["login"],
+        "installations": [
+            {"id": item["id"], "account_login": item["account"]["login"], "account_type": item["account"]["type"]}
+            for item in installations
+            if str(item["app_id"]) == settings.GITHUB_APP_ID and not item.get("suspended_at") and item.get("account")
+        ],
+    }
 
 
 async def verify_installer(installation_id: int, code: str, state: str) -> tuple[dict, list[dict]]:
