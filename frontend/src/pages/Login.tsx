@@ -11,7 +11,6 @@ import { supabase } from "../lib/supabase";
 import { requestApi } from "../lib/api";
 import { Notice } from "../components/ui/notice";
 import { DotMatrixBackground } from "../components/ui/dot-matrix-background";
-import { ShimmerButton } from "../components/ui/shimmer-button";
 import logoImg from "../assets/logo.png";
 
 type AuthView = "login" | "forgot_email" | "link_sent" | "new_password" | "reset_success";
@@ -19,7 +18,7 @@ type AuthView = "login" | "forgot_email" | "link_sent" | "new_password" | "reset
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, signIn, devSignIn } = useAuth();
+  const { user, signIn } = useAuth();
 
   // Navigation & View State
   const [view, setView] = useState<AuthView>("login");
@@ -136,11 +135,6 @@ export default function Login() {
     }
   };
 
-  const handleDevSignIn = () => {
-    devSignIn();
-    navigate(location.state?.from || "/dashboard");
-  };
-
   // Step 1: Request password reset link
   const handleSendResetLink = async (event?: FormEvent) => {
     if (event) event.preventDefault();
@@ -180,13 +174,6 @@ export default function Login() {
         });
 
         if (resetErr) {
-          if (import.meta.env.DEV || targetEmail.includes("dev@") || targetEmail.includes("test@")) {
-            setResetEmail(targetEmail);
-            setResendCooldown(30);
-            setView("link_sent");
-            setSuccessMessage("Password reset link dispatched! (Dev evaluation mode)");
-            return;
-          }
           throw resetErr;
         }
       }
@@ -227,12 +214,6 @@ export default function Login() {
     setLoading(true);
 
     try {
-      if (import.meta.env.DEV && localStorage.getItem("actionpulse_dev_session")) {
-        setView("reset_success");
-        setSuccessMessage("Your password has been reset successfully!");
-        return;
-      }
-
       const { error: updateErr } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -286,18 +267,6 @@ export default function Login() {
     boxSizing: "border-box",
   };
 
-  const SparkleIcon = (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      style={{ width: 16, height: 16, color: "#fcd34d", flexShrink: 0 }}
-      aria-hidden="true"
-    >
-      <path d="M12 2C12 7.523 7.523 12 2 12C7.523 12 12 16.477 12 22C12 16.477 16.477 12 22 12C16.477 12 12 7.523 12 2Z" />
-      <path d="M19 2C19 3.657 17.657 5 16 5C17.657 5 19 6.343 19 8C19 6.343 20.343 5 22 5C20.343 5 19 3.657 19 2Z" />
-      <circle cx="5" cy="19" r="2" />
-    </svg>
-  );
 
   const Logo = (
     <div
@@ -463,40 +432,6 @@ export default function Login() {
                 >
                   {loading ? "Signing in…" : "Sign In"}
                 </button>
-
-                {/* Dev Evaluation Mode with Magic UI Shimmer Button */}
-                <div style={{ width: "100%", marginTop: "0.35rem" }}>
-                  <ShimmerButton
-                    type="button"
-                    onClick={handleDevSignIn}
-                    className="shadow-2xl"
-                    shimmerColor="#ffffff"
-                    shimmerDuration="3s"
-                    borderRadius="6px"
-                    background="#000000"
-                    style={{
-                      width: "100%",
-                      padding: "0.65rem",
-                      cursor: "pointer",
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "0.5rem",
-                        fontSize: "0.875rem",
-                        fontWeight: 500,
-                        color: "#fff",
-                      }}
-                    >
-                      {SparkleIcon}
-                      <span>Dev Evaluation Mode</span>
-                    </span>
-                  </ShimmerButton>
-                </div>
               </form>
 
               {/* Don't have an account link */}
