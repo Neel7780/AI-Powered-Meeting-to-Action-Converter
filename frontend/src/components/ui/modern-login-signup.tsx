@@ -19,12 +19,17 @@ export default function Component() {
     const initThree = (THREE: any) => {
       if (!canvasRef.current || !active) return;
       const canvas = canvasRef.current;
-      renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false });
-      renderer.setPixelRatio(window.devicePixelRatio || 1);
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      try {
+        renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: false, failIfMajorPerformanceCaveat: false });
+        renderer.setPixelRatio(window.devicePixelRatio || 1);
+        renderer.setSize(window.innerWidth, window.innerHeight);
 
-      scene = new THREE.Scene();
-      camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        scene = new THREE.Scene();
+        camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      } catch (e) {
+        console.warn("WebGL not supported:", e);
+        return;
+      }
 
       const uniforms = {
         u_time: { value: 0 },

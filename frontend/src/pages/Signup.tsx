@@ -95,21 +95,6 @@ export default function Signup() {
     </div>
   );
 
-  const Footer = (
-    <div style={{ marginTop: "0.85rem", fontSize: "0.75rem", color: "#666", lineHeight: 1.5, textAlign: "center" }}>
-      By proceeding, you agree to create an Action Pulse account<br />
-      subject to our{" "}
-      <a href="#" className="hover-whitish" style={{ textDecoration: "underline" }}>
-        Terms of Service
-      </a>{" "}
-      and{" "}
-      <a href="#" className="hover-whitish" style={{ textDecoration: "underline" }}>
-        Privacy Policy
-      </a>
-      .
-    </div>
-  );
-
   return (
     <div
       style={{
@@ -266,8 +251,6 @@ export default function Signup() {
               Sign In
             </Link>
           </div>
-
-          {Footer}
         </div>
       </div>
     </div>

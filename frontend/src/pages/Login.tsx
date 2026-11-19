@@ -318,21 +318,6 @@ export default function Login() {
     </div>
   );
 
-  const Footer = (
-    <div style={{ marginTop: "0.85rem", fontSize: "0.75rem", color: "#666", lineHeight: 1.5, textAlign: "center" }}>
-      By proceeding, you agree to create an Action Pulse account<br />
-      subject to our{" "}
-      <a href="#" className="hover-whitish" style={{ textDecoration: "underline" }}>
-        Terms of Service
-      </a>{" "}
-      and{" "}
-      <a href="#" className="hover-whitish" style={{ textDecoration: "underline" }}>
-        Privacy Policy
-      </a>
-      .
-    </div>
-  );
-
   return (
     <div
       style={{
@@ -522,7 +507,7 @@ export default function Login() {
                 </Link>
               </div>
 
-              {Footer}
+
             </>
           )}
 
@@ -593,7 +578,7 @@ export default function Login() {
                 </div>
               </form>
 
-              {Footer}
+
             </>
           )}
 
@@ -664,7 +649,7 @@ export default function Login() {
                 Back to Sign In
               </button>
 
-              {Footer}
+
             </>
           )}
 
@@ -770,7 +755,7 @@ export default function Login() {
                 </button>
               </form>
 
-              {Footer}
+
             </>
           )}
 
@@ -800,7 +785,7 @@ export default function Login() {
                 Sign In With New Password
               </button>
 
-              {Footer}
+
             </>
           )}
         </div>
