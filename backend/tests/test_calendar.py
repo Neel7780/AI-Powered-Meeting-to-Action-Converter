@@ -44,7 +44,8 @@ def test_state_generation_and_tampering():
         verify_oauth_state(tampered_state)
 
 
-def test_get_connect_url():
+@pytest.mark.parametrize("role", ["organiser", "owner"])
+def test_get_connect_url(role):
     """Verify GET /api/calendar/connect-url returns Google OAuth URL."""
     workspace_id = uuid4()
     user_id = uuid4()
@@ -55,7 +56,7 @@ def test_get_connect_url():
     mock_db = MagicMock()
     # Mock require_role check in workspace_members
     mock_db.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value = (
-        MagicMock(data=[{"role": "organiser"}])
+        MagicMock(data=[{"role": role}])
     )
 
     with (

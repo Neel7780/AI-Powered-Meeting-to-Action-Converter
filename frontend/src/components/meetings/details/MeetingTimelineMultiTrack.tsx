@@ -325,7 +325,7 @@ export const MeetingTimelineMultiTrack: React.FC<TimelineProps> = ({
             <div className="text-[10px] text-slate-400 mt-0.5">High team cohesion</div>
           </div>
           <div className="p-3 rounded-xl bg-[#161a22] border border-[#262d3d]">
-            <div className="text-slate-400 text-[11px]">Staging Items</div>
+            <div className="text-slate-400 text-[11px]">Suggested actions</div>
             <div className="text-lg font-bold text-teal-300 mt-1">{meeting.metrics.action_items_count} Action Items</div>
             <div className="text-[10px] text-slate-400 mt-0.5">{meeting.metrics.decisions_count} Decisions made</div>
           </div>

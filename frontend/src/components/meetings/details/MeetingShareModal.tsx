@@ -105,10 +105,10 @@ export const MeetingShareModal: React.FC<ShareModalProps> = ({
             </div>
           </div>
 
-          {/* 1-Tap Zero-Cost Sharing Channels */}
+          {/* Share meeting Channels */}
           <div>
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-              1-Tap Zero-Cost Sharing
+              Share meeting
             </div>
             <div className="grid grid-cols-2 gap-2.5">
               {/* WhatsApp 1-Tap */}

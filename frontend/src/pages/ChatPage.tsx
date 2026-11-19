@@ -13,7 +13,7 @@ export default function ChatPage() {
           <AlertCircle className="mx-auto size-8 text-neutral-500" />
           <h2 className="mt-3 text-lg font-medium text-white">No Workspace Selected</h2>
           <p className="mt-1 text-sm text-neutral-400">
-            Please select or create a workspace to query meeting data.
+            Select or create a workspace to ask about your meetings.
           </p>
         </div>
       </div>
@@ -21,7 +21,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] w-full flex flex-col bg-[#08080c]">
+    <div className="h-[calc(100dvh-61px)] w-full flex flex-col">
       <ChatInterface workspaceId={workspaceId} isCompact={false} />
     </div>
   );

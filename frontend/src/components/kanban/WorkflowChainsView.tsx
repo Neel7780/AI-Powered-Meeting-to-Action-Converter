@@ -152,12 +152,12 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-[#202020] dark:bg-[#0c0c0e]">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-500 dark:text-neutral-400">
-              Agent Workflows
+              AI-assisted tasks
             </span>
             <Bot className="size-4 text-purple-500" />
           </div>
           <p className="mt-2 text-2xl font-bold text-purple-600 dark:text-purple-400">{metrics.agentTasksCount}</p>
-          <p className="text-[11px] text-slate-400 dark:text-neutral-500">AI auto-executable tasks</p>
+          <p className="text-[11px] text-slate-400 dark:text-neutral-500">Tasks marked for AI assistance</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-[#202020] dark:bg-[#0c0c0e]">
@@ -240,7 +240,7 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
                     #{idx + 1}
                   </span>
                   <span className="text-xs font-semibold text-slate-900 dark:text-white">
-                    Workflow Sequence: {chain.root.title.slice(0, 45)}...
+                    {chain.root.title.slice(0, 45)}...
                   </span>
                 </div>
                 <span className="text-[11px] font-mono text-slate-400 dark:text-neutral-500">

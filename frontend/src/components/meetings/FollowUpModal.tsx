@@ -112,7 +112,7 @@ function FollowUpPreview({ content }: { content: string }) {
     const headers = parseRow(headerLine);
 
     elements.push(
-      <div key={key} className="overflow-x-auto my-3 rounded-lg border border-white/10 bg-[#090a0f]">
+      <div key={key} className="overflow-x-auto my-3 rounded-lg border border-white/10 dashboard-surface bg-[#090a0f]">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.04]">
@@ -356,13 +356,13 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative flex flex-col w-full max-w-4xl max-h-[90vh] rounded-xl border border-white/10 bg-[#0c0d12] text-white shadow-2xl overflow-hidden">
+    <div className="dashboard-scrim fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative flex flex-col w-full max-w-4xl max-h-[90vh] rounded-xl border border-white/10 dashboard-surface bg-[#0c0d12] text-white shadow-2xl overflow-hidden">
         {/* Toast Alert */}
         {toast && (
           <div
             role="status"
-            className="absolute top-4 right-4 z-50 flex items-center gap-2 rounded-md border border-white/10 bg-black/90 px-3.5 py-2 text-xs font-medium shadow-2xl"
+            className="absolute top-4 right-4 z-50 flex items-center gap-2 rounded-md border border-white/10 dashboard-surface bg-black/90 px-3.5 py-2 text-xs font-medium shadow-2xl"
           >
             {toast.type === 'success' ? (
               <CheckCircle2 className="size-4 text-emerald-400" />
@@ -381,13 +381,10 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold text-white">Draft Follow-Up in 1 Click</h2>
-                <span className="rounded-full bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-indigo-300 uppercase">
-                  Zero-Budget AI
-                </span>
+                <h2 className="text-base font-semibold text-white">Draft follow-up</h2>
               </div>
               <p className="text-xs text-neutral-400">
-                Personalized recap & deliverables for <span className="text-neutral-200">{meetingTitle}</span>
+                <span className="text-neutral-200">{meetingTitle}</span>
               </p>
             </div>
           </div>
@@ -401,7 +398,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
         </div>
 
         {/* Control Toolbar: Recipient Selector & Tone Toggles */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/5 bg-[#090a0e] px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/5 dashboard-surface bg-[#090a0e] px-6 py-3">
           {/* Personalized Recipient Selector */}
           <div className="flex items-center gap-2">
             <label htmlFor="recipient-select" className="text-xs font-medium text-neutral-400 flex items-center gap-1.5">
@@ -413,7 +410,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
               value={selectedTargetId}
               onChange={handleTargetChange}
               disabled={loading}
-              className="rounded-md border border-white/10 bg-[#14151e] px-2.5 py-1 text-xs text-white focus:border-indigo-500 focus:outline-none"
+              className="rounded-md border border-white/10 dashboard-control bg-[#14151e] px-2.5 py-1 text-xs text-white focus:border-indigo-500 focus:outline-none"
             >
               <option value="all">👥 All Attendees (Team-Wide Summary)</option>
               {participants.map(p => (
@@ -490,7 +487,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
               value={subject}
               onChange={e => setSubject(e.target.value)}
               disabled={loading}
-              className="w-full rounded-md border border-white/10 bg-[#11121a] px-3 py-2 text-xs font-medium text-white placeholder-neutral-500 focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-white/10 dashboard-control bg-[#11121a] px-3 py-2 text-xs font-medium text-white placeholder-neutral-500 focus:border-indigo-500 focus:outline-none"
             />
           </div>
 
@@ -526,14 +523,11 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
             <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
               <RefreshCw className="size-8 animate-spin text-indigo-400" />
               <p className="text-sm font-medium text-neutral-300">
-                Synthesizing meeting transcript & confirmed tasks…
-              </p>
-              <p className="text-xs text-neutral-500">
-                Generating personalized follow-up via Gemini 3.1 Flash-Lite
+                Preparing follow-up…
               </p>
             </div>
           ) : viewMode === 'preview' ? (
-            <div className="rounded-lg border border-white/10 bg-[#0e0f17] p-5 text-neutral-200 text-xs leading-relaxed overflow-x-auto select-text">
+            <div className="rounded-lg border border-white/10 dashboard-surface bg-[#0e0f17] p-5 text-neutral-200 text-xs leading-relaxed overflow-x-auto select-text">
               <FollowUpPreview content={markdownBody} />
             </div>
           ) : (
@@ -541,7 +535,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
               rows={12}
               value={markdownBody}
               onChange={e => setMarkdownBody(e.target.value)}
-              className="w-full rounded-lg border border-white/10 bg-[#0e0f17] p-4 text-xs font-mono text-neutral-200 placeholder-neutral-500 focus:border-indigo-500 focus:outline-none resize-y"
+              className="w-full rounded-lg border border-white/10 dashboard-surface bg-[#0e0f17] p-4 text-xs font-mono text-neutral-200 placeholder-neutral-500 focus:border-indigo-500 focus:outline-none resize-y"
               placeholder="Enter markdown follow-up..."
             />
           )}
@@ -592,7 +586,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
               onClick={handleSendEmail}
               disabled={loading || sending || recipientEmails.length === 0}
               className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium"
-              title="Dispatch follow-up email via Brevo SMTP"
+              title="Send follow-up email"
             >
               {sending ? (
                 <>

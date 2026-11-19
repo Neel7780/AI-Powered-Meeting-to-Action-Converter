@@ -4,7 +4,6 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import {
   fetchWorkspaceAnalytics,
   type WorkspaceAnalyticsResponse,
-  DEMO_ANALYTICS_DATA,
 } from '../services/analyticsApi';
 import { KpiCards } from '../components/analytics/KpiCards';
 import { MemberEvaluationTable } from '../components/analytics/MemberEvaluationTable';
@@ -14,15 +13,19 @@ import { Button } from '../components/ui/button';
 
 export default function AnalyticsPage() {
   const { currentWorkspace, currentRole } = useWorkspace();
-  const workspaceId = currentWorkspace?.id || 'default-workspace';
+  const workspaceId = currentWorkspace?.id;
 
   const [timeframe, setTimeframe] = useState<string>('30d');
-  const [data, setData] = useState<WorkspaceAnalyticsResponse>(DEMO_ANALYTICS_DATA);
+  const [data, setData] = useState<WorkspaceAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadAnalytics = useCallback(async (isManual = false) => {
+    if (!workspaceId) {
+      setLoading(false);
+      return;
+    }
     if (isManual) setRefreshing(true);
     else setLoading(true);
     setError(null);
@@ -33,7 +36,7 @@ export default function AnalyticsPage() {
     } catch (err: any) {
       console.error('Failed to load analytics:', err);
       setError(err?.message || 'Failed to fetch workspace analytics');
-      setData(DEMO_ANALYTICS_DATA);
+      setData(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -55,10 +58,10 @@ export default function AnalyticsPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-white">
-                Workspace Analytics & Health
+                Analytics
               </h1>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Turnaround metrics, bottleneck detection, and team performance tracking
+                Track completion, overdue work, and team progress.
               </p>
             </div>
           </div>
@@ -87,7 +90,7 @@ export default function AnalyticsPage() {
             variant="ghost"
             size="sm"
             onClick={() => loadAnalytics(true)}
-            disabled={refreshing}
+            disabled={refreshing || !workspaceId}
             className="border border-white/10 bg-white/[0.03] hover:bg-white/[0.07] text-neutral-300"
           >
             <RefreshCw className={`size-3.5 mr-1.5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -110,24 +113,16 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* 1. High-Level KPI Summary Cards */}
-      <KpiCards kpis={data.kpis} />
-
-      {/* 2. Manager-Only Employee Scorecard (RBAC) */}
-      <MemberEvaluationTable
-        memberEvaluations={data.member_evaluations}
-        userRole={currentRole || data.user_role || 'member'}
-      />
-
-      {/* 3. Task Status, Priority & Meeting Follow-Through */}
-      <TaskBreakdownSection
-        statusBreakdown={data.kpis.status_breakdown}
-        priorityBreakdown={data.kpis.priority_breakdown}
-        meetingYield={data.meeting_yield}
-      />
-
-      {/* 4. Workflow Bottlenecks & Blocked Chains */}
-      <BottleneckSection bottlenecks={data.bottlenecks} />
+      {!workspaceId && !loading && <p className="text-sm text-neutral-400">Select a workspace to view analytics.</p>}
+      {data && (
+        <>
+          <KpiCards kpis={data.kpis} />
+          <MemberEvaluationTable memberEvaluations={data.member_evaluations} userRole={currentRole || data.user_role} />
+          <TaskBreakdownSection statusBreakdown={data.kpis.status_breakdown}
+            priorityBreakdown={data.kpis.priority_breakdown} meetingYield={data.meeting_yield} />
+          <BottleneckSection bottlenecks={data.bottlenecks} />
+        </>
+      )}
     </div>
   );
 }

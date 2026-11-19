@@ -3,7 +3,6 @@ import {
   Sparkles, 
   Copy, 
   Check, 
-  RotateCw, 
   CheckCircle2, 
   ArrowRight, 
   FileText,
@@ -27,7 +26,6 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
   onJumpToCandidate
 }) => {
   const [copied, setCopied] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const handleCopySummary = () => {
     const text = `# ${summary.overview}\n\n## Key Discussion Points\n` +
@@ -40,41 +38,22 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleRegenerate = () => {
-    setIsRegenerating(true);
-    setTimeout(() => {
-      setIsRegenerating(false);
-    }, 1200);
-  };
-
   return (
     <div className="p-4 sm:p-5 space-y-6 text-slate-200 text-xs sm:text-[13px] leading-relaxed">
       {/* Top Banner: AI Model & Actions */}
-      <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gradient-to-r from-teal-950/40 via-[#161d28] to-indigo-950/30 border border-teal-800/40">
+      <div className="flex items-center justify-between gap-3 p-3 rounded-xl dashboard-tinted-gradient bg-gradient-to-r from-teal-950/40 via-[#161d28] to-indigo-950/30 border border-teal-800/40">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-teal-400 flex-shrink-0" />
           <div>
-            <span className="font-semibold text-teal-300">Grounded Meeting Summary</span>
-            <span className="text-[11px] text-slate-400 ml-2 hidden sm:inline">
-              via Gemini 3.1 Flash-Lite
-            </span>
+            <span className="font-semibold text-teal-300">Meeting summary</span>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button
-            onClick={handleRegenerate}
-            disabled={isRegenerating}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1a202c] hover:bg-[#222a3a] border border-[#2d3748] text-slate-300 hover:text-white text-xs transition disabled:opacity-50"
-            title="Refresh summary with Gemini"
-          >
-            <RotateCw className={`w-3 h-3 ${isRegenerating ? 'animate-spin text-teal-400' : ''}`} />
-            <span className="hidden sm:inline">{isRegenerating ? 'Refreshing...' : 'Refresh'}</span>
-          </button>
 
           <button
             onClick={handleCopySummary}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1a202c] hover:bg-[#222a3a] border border-[#2d3748] text-slate-300 hover:text-white text-xs transition"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg dashboard-surface bg-[#1a202c] dashboard-surface-hover hover:bg-[#222a3a] border dashboard-line border-[#2d3748] text-slate-300 hover:text-white text-xs transition"
             title="Copy summary in Markdown format"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-teal-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
@@ -89,7 +68,7 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
           <FileText className="w-3.5 h-3.5" />
           <span>Executive Overview</span>
         </div>
-        <p className="text-slate-200 leading-relaxed bg-[#11141c] p-3.5 rounded-xl border border-[#1e2330]">
+        <p className="text-slate-200 leading-relaxed dashboard-surface bg-[#11141c] p-3.5 rounded-xl border dashboard-line border-[#1e2330]">
           {summary.overview}
         </p>
       </div>
@@ -107,12 +86,12 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {summary.speaker_insights.map((spk) => (
-              <div key={spk.speaker} className="p-3 rounded-xl bg-[#131620] border border-[#202636] space-y-1.5">
+              <div key={spk.speaker} className="p-3 rounded-xl dashboard-surface bg-[#131620] border dashboard-line border-[#202636] space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-slate-200 text-xs">{spk.speaker}</span>
                   <span className="font-mono text-xs font-bold text-teal-300">{spk.talk_percentage}%</span>
                 </div>
-                <div className="w-full h-1.5 bg-[#1f2536] rounded-full overflow-hidden">
+                <div className="w-full h-1.5 dashboard-surface bg-[#1f2536] rounded-full overflow-hidden">
                   <div
                     className="h-full bg-teal-400 rounded-full"
                     style={{ width: `${spk.talk_percentage}%` }}
@@ -136,7 +115,7 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
 
         <div className="space-y-3">
           {summary.key_discussion_points.map((topic, idx) => (
-            <div key={idx} className="p-3.5 rounded-xl bg-[#131620] border border-[#202636] space-y-2">
+            <div key={idx} className="p-3.5 rounded-xl dashboard-surface bg-[#131620] border dashboard-line border-[#202636] space-y-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="font-bold text-slate-100 text-xs sm:text-[13px]">{topic.topic}</span>
                 {topic.timestamp && (
@@ -168,16 +147,17 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
         <div className="text-[11px] font-bold tracking-wider uppercase text-emerald-400 flex items-center justify-between">
           <span className="flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Decisions Formally Agreed ({summary.decisions.length})</span>
+            <span>Decisions ({summary.decisions.length})</span>
           </span>
           <span className="text-[10px] text-slate-400 font-normal">Grounded quotes</span>
         </div>
 
+        {!summary.decisions.length && <p className="text-xs text-slate-400">No decisions recorded.</p>}
         <div className="space-y-2.5">
           {summary.decisions.map((dec) => (
             <div
               key={dec.id}
-              className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/30 via-[#12181f] to-[#10141a] border border-emerald-800/40 space-y-2"
+              className="p-3.5 rounded-xl dashboard-tinted-gradient bg-gradient-to-r from-emerald-950/30 via-[#12181f] to-[#10141a] border border-emerald-800/40 space-y-2"
             >
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-emerald-300">{dec.speaker} agreed:</span>
@@ -193,7 +173,7 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
               <p className="text-slate-200 text-xs font-medium">{dec.text}</p>
               
               {dec.excerpt && (
-                <div className="text-[11px] text-slate-400 italic bg-[#0f1416] p-2 rounded-lg border border-emerald-950">
+                <div className="text-[11px] text-slate-400 italic dashboard-surface bg-[#0f1416] p-2 rounded-lg border border-emerald-950">
                   "{dec.excerpt}"
                 </div>
               )}
@@ -202,18 +182,25 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
         </div>
       </div>
 
+      <section className="space-y-2">
+        <h4 className="text-sm font-medium">Open questions</h4>
+        {summary.open_questions?.length ? <ul className="list-disc space-y-1 pl-4 text-slate-300">
+          {summary.open_questions.map((question) => <li key={question}>{question}</li>)}
+        </ul> : <p className="text-xs text-slate-400">No open questions recorded.</p>}
+      </section>
+
       {/* Outcomes & Connected Action Items Context */}
-      <div className="space-y-3">
+      {candidates.length > 0 && <div className="space-y-3">
         <div className="text-[11px] font-bold tracking-wider uppercase text-indigo-400 flex items-center justify-between">
           <span>Connected Action Items ({candidates.length})</span>
-          <span className="text-slate-400 text-[10px]">Staging Gate Ready</span>
+          <span className="text-slate-400 text-[10px]">Ready for review</span>
         </div>
 
         <div className="space-y-2">
           {candidates.map((cand) => (
             <div
               key={cand.id}
-              className="p-3 rounded-xl bg-[#151722] border border-[#24293c] hover:border-indigo-600/50 transition flex items-center justify-between gap-3"
+              className="p-3 rounded-xl dashboard-surface bg-[#151722] border dashboard-line border-[#24293c] hover:border-indigo-600/50 transition flex items-center justify-between gap-3"
             >
               <div
                 onClick={() => onJumpToCandidate(cand.id)}
@@ -242,7 +229,7 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
             </div>
           ))}
         </div>
-      </div>
+      </div>}
     </div>
   );
 };

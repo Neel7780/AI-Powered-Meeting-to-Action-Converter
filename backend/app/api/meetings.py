@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from app.core.config import settings
 from app.core.deps import (
     ORGANISER_ROLES,
+    WORKSPACE_ROLES,
     CurrentUser,
     get_current_user,
     require_meeting_role,
@@ -22,7 +23,7 @@ from app.core.deps import (
 )
 from app.core.supabase import get_supabase_client
 from app.parsers import TranscriptParseError, parse_transcript, to_canonical_text
-from datetime import datetime
+from datetime import UTC, datetime
 from app.schemas.meetings import (
     MeetingDetail,
     MeetingListItem,
@@ -345,6 +346,8 @@ def submit_transcript(
             for idx, seg in enumerate(segments)
         ]
         client.table("transcript_segments").insert(segment_rows).execute()
+        if meeting.get("speaker_mapping_required"):
+            client.table("meetings").update({"speaker_mapping_required": False}).eq("id", str(meeting_id)).execute()
 
         # Clear any cached summary and chapters for this meeting
         try:
@@ -366,6 +369,22 @@ def submit_transcript(
     )
 
 
+def _check_private_meeting_access(db, meeting: dict, user: CurrentUser) -> None:
+    """Match the meeting SELECT policy for service-role reads."""
+    uid = str(user.id)
+    if meeting.get("visibility") != "private" or meeting["organiser_id"] == uid:
+        return
+    mid = str(meeting["id"])
+    participants = db.table("meeting_participants").select("id").eq("meeting_id", mid) \
+        .eq("user_id", uid).limit(1).execute()
+    if participants.data:
+        return
+    assignments = db.table("task_assignees").select("task_id, tasks!inner(meeting_id)") \
+        .eq("user_id", uid).eq("tasks.meeting_id", mid).limit(1).execute()
+    if not assignments.data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Meeting not found")
+
+
 @router.get(
     "/meetings/{meeting_id}/summary",
     response_model=MeetingSummaryResponse,
@@ -377,8 +396,10 @@ def get_meeting_summary(
     user: CurrentUser = Depends(get_current_user)
 ) -> MeetingSummaryResponse:
     """Retrieve grounded summary for a meeting. Allowed roles: admin, organiser, member."""
-    meeting = require_meeting_role(meeting_id, {"admin", "organiser", "member"}, user)
+    meeting = require_meeting_role(meeting_id, WORKSPACE_ROLES, user)
     mid = str(meeting_id)
+    client = get_supabase_client()
+    _check_private_meeting_access(client, meeting, user)
 
     # Return cached summary if present and not force-refreshed
     if not refresh and meeting.get("summary"):
@@ -386,8 +407,6 @@ def get_meeting_summary(
             return MeetingSummaryResponse.model_validate(meeting["summary"])
         except Exception as exc:
             logger.warning("Cached summary invalid for meeting %s, regenerating: %s", mid, exc)
-
-    client = get_supabase_client()
 
     # 1. Fetch transcript record
     transcript_resp = (
@@ -415,11 +434,11 @@ def get_meeting_summary(
     # 3. Fetch extracted items (both decisions and action items)
     items_resp = (
         client.table("extracted_items")
-        .select("id, task, type, source_excerpt, source_start_ms, owner_name")
+        .select("id, task, type, source_excerpt, source_start_ms, owner_name, review_status")
         .eq("meeting_id", mid)
         .execute()
     )
-    extracted_items = items_resp.data or []
+    extracted_items = [item for item in (items_resp.data or []) if item.get("review_status") != "rejected"]
 
     # 4. Generate grounded summary (LLM with deterministic fallback)
     summary_res = generate_meeting_summary(
@@ -452,8 +471,10 @@ def get_meeting_chapters(
     user: CurrentUser = Depends(get_current_user)
 ) -> MeetingChaptersResponse:
     """Retrieve topic-based chapters for a meeting. Allowed roles: admin, organiser, member."""
-    meeting = require_meeting_role(meeting_id, {"admin", "organiser", "member"}, user)
+    meeting = require_meeting_role(meeting_id, WORKSPACE_ROLES, user)
     mid = str(meeting_id)
+    client = get_supabase_client()
+    _check_private_meeting_access(client, meeting, user)
 
     # Return cached chapters if present and not force-refreshed
     if not refresh and meeting.get("chapters"):
@@ -461,8 +482,6 @@ def get_meeting_chapters(
             return MeetingChaptersResponse.model_validate(meeting["chapters"])
         except Exception as exc:
             logger.warning("Cached chapters invalid for meeting %s, regenerating: %s", mid, exc)
-
-    client = get_supabase_client()
 
     # 1. Fetch transcript record
     transcript_resp = (
@@ -490,11 +509,11 @@ def get_meeting_chapters(
     # 3. Fetch extracted items
     items_resp = (
         client.table("extracted_items")
-        .select("id, task, type, source_excerpt, source_start_ms, owner_name")
+        .select("id, task, type, source_excerpt, source_start_ms, owner_name, review_status")
         .eq("meeting_id", mid)
         .execute()
     )
-    extracted_items = items_resp.data or []
+    extracted_items = [item for item in (items_resp.data or []) if item.get("review_status") != "rejected"]
 
     # 4. Generate grounded chapters
     chapters_res = generate_meeting_chapters(
@@ -532,31 +551,60 @@ def list_meetings(
     user: CurrentUser = Depends(get_current_user),
 ) -> list[MeetingListItem]:
     """List all active meetings in *workspace_id*. Requires any member role."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
 
     db = get_supabase_client()
+    uid = str(user.id)
+    # Filter task assignments and participants down to this caller. They are used
+    # only for the private meeting visibility check and are never returned.
     res = (
         db.table("meetings")
-        .select("id, title, starts_at, timezone, visibility, created_at, organiser_id, conference_url")
+        .select(
+            "*, "
+            "transcripts(id, source), extracted_items(type, review_status),"
+            "meeting_participants(user_id), tasks(status, deadline_utc, task_assignees(user_id))"
+        )
         .eq("workspace_id", str(workspace_id))
         .eq("lifecycle", "active")
+        .eq("meeting_participants.user_id", uid)
+        .eq("tasks.task_assignees.user_id", uid)
         .order("starts_at", desc=True)
         .execute()
     )
+    return _meeting_list_items(res.data or [], uid, datetime.now(UTC))
 
-    return [
-        MeetingListItem(
-            id=UUID(r["id"]),
-            title=r["title"],
-            starts_at=datetime.fromisoformat(r["starts_at"]),
-            timezone=r["timezone"],
-            visibility=r.get("visibility", "workspace"),
-            created_at=datetime.fromisoformat(r["created_at"]),
-            organiser_id=UUID(r["organiser_id"]),
-            conference_url=r.get("conference_url"),
-        )
-        for r in (res.data or [])
-    ]
+
+def _meeting_list_items(rows: list[dict], uid: str, now: datetime) -> list[MeetingListItem]:
+    meetings = []
+    for row in rows:
+        tasks = row.get("tasks") or []
+        if row.get("visibility") == "private" and row["organiser_id"] != uid:
+            if not row.get("meeting_participants") and not any(task.get("task_assignees") for task in tasks):
+                continue
+        transcript = row.get("transcripts")
+        source = transcript.get("source") if transcript else None
+        items = row.get("extracted_items") or []
+        open_tasks = [task for task in tasks if task["status"] != "done"]
+        mapping_required = row.get("speaker_mapping_required")
+        meetings.append(MeetingListItem(
+            **row,
+            transcript_source=source,
+            needs_speaker_mapping=source == "audio" and (
+                mapping_required if mapping_required is not None else row["status"] == "draft"
+            ),
+            open_task_count=len(open_tasks),
+            overdue_task_count=sum(
+                1 for task in open_tasks
+                if task.get("deadline_utc") and datetime.fromisoformat(task["deadline_utc"]) < now
+            ),
+            blocked_task_count=sum(task["status"] == "blocked" for task in open_tasks),
+            pending_review_count=sum(
+                item["type"] == "action" and item["review_status"] == "needs_review" for item in items
+            ),
+            decision_count=sum(item["type"] == "decision" and item["review_status"] != "rejected" for item in items),
+            has_summary=bool(transcript),
+        ))
+    return meetings
 
 
 @router.get(
@@ -570,7 +618,7 @@ def get_meeting(
     user: CurrentUser = Depends(get_current_user),
 ) -> MeetingDetail:
     """Return full meeting detail including participants and transcript id."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
 
     db = get_supabase_client()
 
@@ -586,6 +634,7 @@ def get_meeting(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
     meeting = meeting_res.data[0]
+    _check_private_meeting_access(db, meeting, user)
 
     part_res = (
         db.table("meeting_participants")
@@ -638,7 +687,7 @@ def get_workspace_stats(
     user: CurrentUser = Depends(get_current_user),
 ) -> WorkspaceStatsResponse:
     """Return meeting count, open task count, and member count for the dashboard."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
 
     db = get_supabase_client()
     ws_id = str(workspace_id)

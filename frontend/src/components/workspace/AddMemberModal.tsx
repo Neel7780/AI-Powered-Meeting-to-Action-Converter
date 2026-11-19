@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
 import type { FormEvent } from "react";
 import { createPortal } from "react-dom";
+import { DashboardLightContext } from "../../context/DashboardThemeContext";
 import { X } from "lucide-react";
 import { Button } from "../ui/button";
 import { Notice } from "../ui/notice";
@@ -21,6 +22,7 @@ export default function AddMemberModal({
   onClose,
   onAddMember,
 }: AddMemberModalProps) {
+  const light = useContext(DashboardLightContext);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<MemberRole>("member");
 
@@ -89,7 +91,8 @@ export default function AddMemberModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      data-dashboard-theme={light ? "light" : "dark"}
+      className="dashboard-scrim fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           handleClose();
@@ -100,7 +103,7 @@ export default function AddMemberModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-member-title"
-        className="w-full max-w-md rounded-xl border border-white/15 bg-[#0e0e13] shadow-2xl text-white animate-in fade-in zoom-in-95 duration-150"
+        className="dashboard-surface w-full max-w-md rounded-xl border border-white/15 bg-[#0e0e13] shadow-2xl text-white animate-in fade-in zoom-in-95 duration-150"
       >
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>

@@ -24,17 +24,12 @@ export interface TaskDependencyModalProps {
   onOpenPrereqDialog?: (task: KanbanTaskItem) => void;
 }
 
-export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
-  isOpen,
-  onClose,
-  task,
-  allTasks,
-  onUpdateDependency,
-  onStatusChange,
-  onOpenPrereqDialog,
-}) => {
-  if (!isOpen || !task) return null;
+export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = (props) => {
+  if (!props.isOpen || !props.task) return null;
+  return <TaskDependencyContent key={props.task.id} {...props} task={props.task} />;
+};
 
+function TaskDependencyContent({ onClose, task, allTasks, onUpdateDependency, onStatusChange, onOpenPrereqDialog }: TaskDependencyModalProps & { task: KanbanTaskItem }) {
   const [selectedBlockedBy, setSelectedBlockedBy] = useState<string>(task.blocked_by || '');
   const [executionType, setExecutionType] = useState<'human' | 'agent'>(
     task.execution_type === 'agent' ? 'agent' : 'human'
@@ -109,7 +104,7 @@ export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
                 <LinkIcon className="size-4" />
               </span>
               <h2 id="dependency-modal-title" className="text-lg font-bold text-slate-900 dark:text-white">
-                Task Dependencies & Workflow Chain
+                Task dependencies
               </h2>
             </div>
             <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
@@ -189,8 +184,8 @@ export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
                   <User className="size-4" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-slate-900 dark:text-white">Human Assignee</p>
-                  <p className="text-[11px] text-slate-500 dark:text-neutral-400">Team member executes task manually</p>
+                  <p className="text-xs font-semibold text-slate-900 dark:text-white">Team member</p>
+                  <p className="text-[11px] text-slate-500 dark:text-neutral-400">Assign to a workspace member</p>
                 </div>
               </button>
 
@@ -208,9 +203,9 @@ export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-purple-900 dark:text-purple-300 flex items-center gap-1">
-                    AI Agent Runner <Sparkles className="size-3 text-purple-500" />
+                    AI assistance <Sparkles className="size-3 text-purple-500" />
                   </p>
-                  <p className="text-[11px] text-slate-500 dark:text-neutral-400">Auto-triggers research, drafting or checklist</p>
+                  <p className="text-[11px] text-slate-500 dark:text-neutral-400">Mark for AI assistance</p>
                 </div>
               </button>
             </div>

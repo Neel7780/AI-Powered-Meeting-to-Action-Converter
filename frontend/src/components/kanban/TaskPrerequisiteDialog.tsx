@@ -23,6 +23,7 @@ import {
 } from '../../services/taskCommunicationApi';
 import { supabase } from '../../lib/supabase';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { canOrganise } from '../../lib/workspaceRoles';
 
 export interface TaskPrerequisiteDialogProps {
   isOpen: boolean;
@@ -71,9 +72,9 @@ export const TaskPrerequisiteDialog: React.FC<TaskPrerequisiteDialogProps> = ({
   const { currentRole } = useWorkspace();
 
   // Determine user role relative to this task:
-  // A manager is either a workspace admin/organiser or the task creator
+  // Managers and the task creator can reply to prerequisite inquiries.
   const isManager = useMemo(() => {
-    if (currentRole === 'admin' || currentRole === 'organiser') return true;
+    if (canOrganise(currentRole)) return true;
     if (!currentUserId || !task) return false;
     return task.created_by === currentUserId;
   }, [currentUserId, task, currentRole]);

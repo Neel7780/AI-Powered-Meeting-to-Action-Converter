@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertCircle, Quote, ChevronDown, CheckCircle2, Clock, Link as LinkIcon, Bot, GitFork, MessageSquare } from 'lucide-react';
 import { WhatsAppShareButton } from './WhatsAppShareButton';
 
@@ -243,12 +244,10 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
           {showExcerpt && (
             <div className="mt-1.5 rounded bg-slate-50 p-2.5 border border-slate-200 text-[11px] text-slate-700 italic leading-snug dark:bg-black/60 dark:border-white/10 dark:text-neutral-300">
               &ldquo;{task.source_excerpt}&rdquo;
-              {task.meetings?.title && (
-                <div className="mt-1 text-[10px] not-italic text-slate-500 flex items-center gap-1 dark:text-neutral-500">
-                  <LinkIcon className="size-2.5" />
-                  <span>From meeting: {task.meetings.title}</span>
-                </div>
-              )}
+              <Link to={`/meetings/${task.meeting_id}?tab=transcript&task=${task.id}`}
+                className="mt-2 inline-flex items-center gap-1 font-medium not-italic text-indigo-600 hover:underline dark:text-indigo-300">
+                <LinkIcon className="size-3" />{task.meetings?.title ? `Open ${task.meetings.title}` : 'Open source meeting'}
+              </Link>
             </div>
           )}
         </div>

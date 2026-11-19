@@ -14,7 +14,7 @@ export default function FloatingChatWidget({ workspaceId }: FloatingChatWidgetPr
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
       <div
-        className={`mb-3 w-[92vw] sm:w-[480px] h-[580px] max-h-[calc(100vh-120px)] rounded-2xl border border-white/15 bg-[#07070a]/95 backdrop-blur-2xl shadow-2xl overflow-hidden flex flex-col transition-all duration-200 ${
+        className={`mb-3 w-[92vw] sm:w-[480px] h-[580px] max-h-[calc(100vh-120px)] rounded-2xl border border-white/15 dashboard-surface bg-[#07070a]/95 backdrop-blur-2xl shadow-2xl overflow-hidden flex flex-col transition-all duration-200 ${
           isOpen ? 'scale-100 opacity-100 pointer-events-auto' : 'hidden pointer-events-none'
         }`}
       >
@@ -33,7 +33,7 @@ export default function FloatingChatWidget({ workspaceId }: FloatingChatWidgetPr
         <button
           type="button"
           onClick={() => setIsOpen(false)}
-          className="group relative flex items-center gap-2 rounded-full border border-indigo-500/40 bg-[#0c0c16]/95 px-3.5 py-2 text-xs font-medium text-indigo-200 shadow-2xl backdrop-blur-md transition-all hover:border-indigo-400 hover:bg-[#141424] hover:text-white active:scale-95"
+          className="dashboard-chat-launcher group relative flex items-center gap-2 rounded-full border border-indigo-500/40 bg-[#0c0c16]/95 px-3.5 py-2 text-xs font-medium text-indigo-200 shadow-2xl backdrop-blur-md transition-all hover:border-indigo-400 hover:bg-[#141424] hover:text-white active:scale-95"
           aria-label="Minimize AI Meeting Copilot"
           title="Minimize AI Copilot"
         >
@@ -44,7 +44,7 @@ export default function FloatingChatWidget({ workspaceId }: FloatingChatWidgetPr
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="group relative flex items-center gap-2.5 rounded-full border border-indigo-500/35 bg-[#08080c]/90 px-4 py-2.5 text-xs font-medium text-white shadow-2xl backdrop-blur-md transition-all hover:border-indigo-400 hover:bg-[#0d0d14] hover:shadow-indigo-500/20 active:scale-95"
+          className="dashboard-chat-launcher group relative flex items-center gap-2.5 rounded-full border border-indigo-500/35 bg-[#08080c]/90 px-4 py-2.5 text-xs font-medium text-white shadow-2xl backdrop-blur-md transition-all hover:border-indigo-400 hover:bg-[#0d0d14] hover:shadow-indigo-500/20 active:scale-95"
           aria-label="Open AI Meeting Copilot"
           title="Open AI Meeting Copilot"
         >

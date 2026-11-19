@@ -26,6 +26,7 @@ import { Notice } from "../components/ui/notice";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspace, type AppRole } from "../context/WorkspaceContext";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { canAdministerWorkspace, canOrganise } from "../lib/workspaceRoles";
 import { postApi } from "../services/reviewApi";
 
 export interface TeamMember {
@@ -133,8 +134,8 @@ export default function TeamPage() {
 
   const workspaceId = currentWorkspace?.id;
   const isOwner = currentRole === "owner";
-  const isAdmin = currentRole === "admin" || currentRole === "owner";
-  const isOrganiserOrAdmin = currentRole === "admin" || currentRole === "organiser" || currentRole === "owner";
+  const isAdmin = canAdministerWorkspace(currentRole);
+  const isOrganiserOrAdmin = canOrganise(currentRole);
 
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
@@ -743,12 +744,12 @@ export default function TeamPage() {
                         value={member.role}
                         disabled={isBusy}
                         onChange={(e) => handleRoleChange(member, e.target.value as AppRole)}
-                        className="h-8 rounded-md border border-white/10 bg-[#141419] px-2 text-xs text-neutral-200 outline-none hover:border-white/20 focus:border-indigo-500 cursor-pointer"
+                        className="h-8 rounded-md border border-white/10 dashboard-surface bg-[#141419] px-2 text-xs text-neutral-200 outline-none hover:border-white/20 focus:border-indigo-500 cursor-pointer"
                         title="Change member role (Owner only)"
                       >
-                        <option value="member" className="bg-[#121217] text-white">Member</option>
-                        <option value="organiser" className="bg-[#121217] text-white">Organiser</option>
-                        <option value="admin" className="bg-[#121217] text-white">Admin</option>
+                        <option value="member" className="dashboard-surface bg-[#121217] text-white">Member</option>
+                        <option value="organiser" className="dashboard-surface bg-[#121217] text-white">Organiser</option>
+                        <option value="admin" className="dashboard-surface bg-[#121217] text-white">Admin</option>
                       </select>
                     )}
 

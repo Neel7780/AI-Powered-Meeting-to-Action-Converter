@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.core.deps import CurrentUser, get_current_user, require_role
+from app.core.deps import ORGANISER_ROLES, WORKSPACE_ROLES, CurrentUser, get_current_user, require_role
 from app.core.supabase import get_supabase_client
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def update_task_dependency(
     - If blocked_by is set to a task not yet 'done', marks this task as 'blocked'.
     - If blocked_by is cleared (or the prerequisite is already 'done'), restores to 'todo' if previously blocked.
     """
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
     client = get_supabase_client()
 
     # 1. Fetch target task
@@ -199,7 +199,7 @@ def update_task_status(
     - If status is 'done', any downstream task blocked_by this task is unblocked to 'todo'.
     - If status moves back from 'done', any downstream task is re-blocked.
     """
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
     client = get_supabase_client()
 
     target_resp = (
@@ -370,7 +370,7 @@ def get_task_communications(
     user: CurrentUser = Depends(get_current_user),
 ) -> list[TaskCommunicationItem]:
     """Retrieve full conversation thread regarding prerequisites for a specific task."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
     client = get_supabase_client()
 
     # Validate task belongs to workspace
@@ -484,7 +484,7 @@ def create_prerequisite_inquiry(
     user: CurrentUser = Depends(get_current_user),
 ) -> TaskCommunicationItem:
     """Submit an inquiry from the task assignee to the task creator/manager regarding prerequisites."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
     client = get_supabase_client()
 
     # 1. Fetch task details (including creator / manager)
@@ -503,13 +503,13 @@ def create_prerequisite_inquiry(
     task_record = task_resp.data[0]
     manager_id = task_record.get("created_by")
 
-    # If task creator is missing, route to the workspace Admin/Organiser as the Manager
+    # If task creator is missing, route to a workspace owner, admin, or organiser
     if not manager_id:
         admin_resp = (
             client.table("workspace_members")
             .select("user_id")
             .eq("workspace_id", str(workspace_id))
-            .in_("role", ["admin", "organiser"])
+            .in_("role", sorted(ORGANISER_ROLES))
             .limit(1)
             .execute()
         )
@@ -519,7 +519,7 @@ def create_prerequisite_inquiry(
     if not manager_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No workspace admin or task creator found to receive this inquiry",
+            detail="No workspace manager or task creator found to receive this inquiry",
         )
 
     now_iso = datetime.now(UTC).isoformat()
@@ -609,7 +609,7 @@ def create_prerequisite_reply(
     user: CurrentUser = Depends(get_current_user),
 ) -> TaskCommunicationItem:
     """Submit a reply from the manager to the task assignee, with optional prerequisite linking."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
     client = get_supabase_client()
 
     # 1. Fetch task
@@ -804,17 +804,11 @@ def resolve_prerequisite_inquiry(
     user: CurrentUser = Depends(get_current_user),
 ) -> TaskCommunicationItem:
     """Mark a prerequisite communication or entire task thread as resolved."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
     client = get_supabase_client()
 
     now_iso = datetime.now(UTC).isoformat()
     try:
-        # Mark all communications on this task as resolved
-        client.table("task_communications").update({
-            "status": "resolved",
-            "updated_at": now_iso,
-        }).eq("task_id", str(task_id)).execute()
-
         comm_resp = (
             client.table("task_communications")
             .select(
@@ -822,6 +816,8 @@ def resolve_prerequisite_inquiry(
                 "content, suggested_prerequisite_task_id, status, created_at, updated_at"
             )
             .eq("id", str(inquiry_id))
+            .eq("task_id", str(task_id))
+            .eq("workspace_id", str(workspace_id))
             .execute()
         )
         if not comm_resp.data:
@@ -830,6 +826,10 @@ def resolve_prerequisite_inquiry(
                 detail="Communication record not found",
             )
         row = comm_resp.data[0]
+        client.table("task_communications").update({
+            "status": "resolved",
+            "updated_at": now_iso,
+        }).eq("task_id", str(task_id)).eq("workspace_id", str(workspace_id)).execute()
     except HTTPException:
         raise
     except Exception as exc:

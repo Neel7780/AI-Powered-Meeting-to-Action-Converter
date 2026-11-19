@@ -76,21 +76,16 @@ export default function SprintVelocityPage() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold tracking-tight text-white">
-                  Sprint Velocity & Meeting Progress
+                  Meeting progress
                 </h1>
-                {isDemo ? (
+                {isDemo && (
                   <span className="rounded border border-white/15 bg-white/5 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-neutral-400">
-                    Sample Dataset
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-emerald-400">
-                    <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-                    Live Data
+                    Sample data
                   </span>
                 )}
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Meeting-to-meeting delta tracking, carryover spillover rates, and velocity burnup
+                Track completed work and tasks carried between meetings.
               </p>
             </div>
           </div>

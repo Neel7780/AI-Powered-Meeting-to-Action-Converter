@@ -551,12 +551,12 @@ export default function ChatInterface({
   const { today, previous } = groupSessions(sessions);
 
   return (
-    <div className="flex h-full w-full bg-[#08080c] text-white overflow-hidden">
+    <div className="flex h-full w-full dashboard-surface bg-[#08080c] text-white overflow-hidden">
       {/* 1. Left Chat History Sub-Panel (Foldable into a ChatGPT-style slim strip) */}
       <aside
         className={`${
           isHistoryOpen ? 'w-60 min-w-[240px]' : 'w-14 min-w-[56px]'
-        } shrink-0 border-r border-white/[0.06] bg-[#0c0c12]/95 backdrop-blur-md flex flex-col transition-all duration-300 overflow-hidden select-none`}
+        } shrink-0 border-r border-white/[0.06] dashboard-surface bg-[#0c0c12]/95 backdrop-blur-md flex flex-col transition-all duration-300 overflow-hidden select-none`}
       >
         {isHistoryOpen ? (
           /* EXPANDED VIEW: Full Chat History with Titles & Delete */
@@ -718,24 +718,12 @@ export default function ChatInterface({
       {/* 2. Main Chat Canvas */}
       <div className="flex-1 flex flex-col min-w-0 h-full">
         {/* Top Header / Scoping Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] bg-[#0c0c12]/90 backdrop-blur-md px-4 sm:px-5 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] dashboard-surface bg-[#0c0c12]/90 backdrop-blur-md px-4 sm:px-5 py-3">
           <div className="flex items-center gap-2.5">
             <div className="grid size-8 place-items-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 shrink-0">
               <Sparkles className="size-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold tracking-tight text-white">{title}</h2>
-                <span className="rounded-full bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 text-[10px] font-medium text-indigo-300">
-                  AI Copilot
-                </span>
-              </div>
-              {!isCompact && (
-                <p className="text-[11px] text-neutral-400">
-                  Grounded in transcripts & Kanban tasks
-                </p>
-              )}
-            </div>
+            <h2 className="text-sm font-semibold tracking-tight text-white">{title}</h2>
           </div>
 
           <div className="flex items-center gap-2">
@@ -746,7 +734,7 @@ export default function ChatInterface({
                 value={selectedMeetingId}
                 onChange={(e) => setSelectedMeetingId(e.target.value)}
                 title="Select meeting scope"
-                className={`h-8 appearance-none truncate rounded-full border border-white/10 bg-[#14141c] pl-7 pr-6 text-xs text-neutral-200 transition-colors hover:border-white/25 focus:border-indigo-500 focus:outline-none ${
+                className={`h-8 appearance-none truncate rounded-full border border-white/10 dashboard-control bg-[#14141c] pl-7 pr-6 text-xs text-neutral-200 transition-colors hover:border-white/25 focus:border-indigo-500 focus:outline-none ${
                   isCompact ? 'max-w-[125px] sm:max-w-[155px]' : 'max-w-[190px] sm:max-w-[240px]'
                 }`}
               >
@@ -828,7 +816,7 @@ export default function ChatInterface({
                 How can I help with your meetings today?
               </h1>
               <p className="text-xs text-neutral-400 max-w-sm mb-8">
-                Query across transcripts, decisions, and action items with grounded citations.
+                Ask about your meetings and tasks.
               </p>
 
               {/* Mid-Screen Input Capsule */}
@@ -838,7 +826,7 @@ export default function ChatInterface({
                     e.preventDefault();
                     handleSend();
                   }}
-                  className="relative flex items-center rounded-full border border-indigo-500/30 bg-[#14141c]/90 px-4 py-2.5 shadow-2xl backdrop-blur-md transition-all focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20"
+                  className="relative flex items-center rounded-full border border-indigo-500/30 dashboard-control bg-[#14141c]/90 px-4 py-2.5 shadow-2xl backdrop-blur-md transition-all focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20"
                 >
                   <span
                     className="mr-2 grid size-7 place-items-center rounded-full bg-white/5 text-neutral-400"
@@ -856,7 +844,7 @@ export default function ChatInterface({
                     placeholder={
                       selectedMeetingId
                         ? `Ask about "${selectedMeetingTitle}"…`
-                        : 'Message Meeting Copilot or type @ to scope…'
+                        : 'Message Meeting Copilot…'
                     }
                     disabled={loading || !workspaceId}
                     className="flex-1 max-h-32 min-h-[38px] resize-none bg-transparent py-2 text-sm text-white placeholder-neutral-500 outline-none disabled:opacity-50"
@@ -867,7 +855,7 @@ export default function ChatInterface({
                     disabled={!input.trim() || loading || !workspaceId}
                     className={`ml-2 grid size-8 shrink-0 place-items-center rounded-full transition-all ${
                       input.trim() && !loading && workspaceId
-                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/25 scale-100 hover:opacity-90'
+                        ? 'bg-gradient-to-r from-indigo-500 to-purple-600 dashboard-on-accent shadow-md shadow-indigo-500/25 scale-100 hover:opacity-90'
                         : 'bg-white/10 text-neutral-500 cursor-not-allowed scale-95'
                     }`}
                     title="Send message"
@@ -883,7 +871,7 @@ export default function ChatInterface({
                       key={i}
                       type="button"
                       onClick={() => handleSend(p.query)}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-[#121218] px-3.5 py-1.5 text-xs text-neutral-300 transition-all hover:border-indigo-500/40 hover:bg-white/[0.04] hover:text-white"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-white/10 dashboard-surface bg-[#121218] px-3.5 py-1.5 text-xs text-neutral-300 transition-all hover:border-indigo-500/40 hover:bg-white/[0.04] hover:text-white"
                     >
                       <span>{p.icon}</span>
                       <span>{p.title}</span>
@@ -917,7 +905,7 @@ export default function ChatInterface({
                       <div
                         className={
                           isUser
-                            ? 'rounded-[22px] rounded-br-sm border border-white/10 bg-[#1e1e28] px-4 py-3 text-sm text-white shadow-sm whitespace-pre-wrap leading-relaxed'
+                            ? 'rounded-[22px] rounded-br-sm border border-white/10 dashboard-surface bg-[#1e1e28] px-4 py-3 text-sm text-white shadow-sm whitespace-pre-wrap leading-relaxed'
                             : 'space-y-2 text-neutral-100 text-sm leading-relaxed'
                         }
                       >
@@ -930,7 +918,7 @@ export default function ChatInterface({
 
                       {/* Supporting Evidence / Citations Accordion */}
                       {hasCitations && (
-                        <div className="rounded-xl border border-white/10 bg-[#0e0e14] overflow-hidden">
+                        <div className="rounded-xl border border-white/10 dashboard-surface bg-[#0e0e14] overflow-hidden">
                           <button
                             type="button"
                             onClick={() => toggleCitations(msg.id)}
@@ -971,7 +959,7 @@ export default function ChatInterface({
                                     {cit.meeting_id && (
                                       <button
                                         type="button"
-                                        onClick={() => navigate(`/meetings/${cit.meeting_id}/review`)}
+                                        onClick={() => navigate(`/meetings/${cit.meeting_id}?tab=overview`)}
                                         className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-medium text-neutral-300 hover:border-white/20 hover:bg-white/10 hover:text-white"
                                       >
                                         <Calendar className="size-3" />
@@ -1050,9 +1038,9 @@ export default function ChatInterface({
                   <div className="grid size-8 shrink-0 place-items-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
                     <Sparkles className="size-4 animate-pulse" />
                   </div>
-                  <div className="flex items-center gap-2.5 rounded-2xl border border-white/10 bg-[#121218] px-4 py-2.5 text-xs text-neutral-400">
+                  <div className="flex items-center gap-2.5 rounded-2xl border border-white/10 dashboard-surface bg-[#121218] px-4 py-2.5 text-xs text-neutral-400">
                     <LoaderCircle className="size-3.5 animate-spin text-indigo-400" />
-                    <span>Analyzing transcripts and verifying citations…</span>
+                    <span>Preparing your answer…</span>
                   </div>
                 </div>
               )}
@@ -1065,14 +1053,14 @@ export default function ChatInterface({
 
       {/* Docked Floating Capsule Input Bar: ONLY rendered when active messages exist */}
       {messages.length > 0 && (
-        <div className="border-t border-white/5 bg-[#09090e]/90 backdrop-blur-md px-4 py-3 sm:px-6">
+        <div className="border-t border-white/5 dashboard-surface bg-[#09090e]/90 backdrop-blur-md px-4 py-3 sm:px-6">
           <div className="max-w-3xl mx-auto">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSend();
               }}
-              className="relative flex items-center rounded-full border border-white/15 bg-[#14141c] px-3.5 py-1.5 shadow-2xl transition-all focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/30"
+              className="relative flex items-center rounded-full border border-white/15 dashboard-control bg-[#14141c] px-3.5 py-1.5 shadow-2xl transition-all focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/30"
             >
               {/* Filter icon pill */}
               <div className="mr-2 flex items-center" title={`Active Scope: ${selectedMeetingTitle}`}>
@@ -1102,7 +1090,7 @@ export default function ChatInterface({
                 disabled={!input.trim() || loading || !workspaceId}
                 className={`ml-2 grid size-8 shrink-0 place-items-center rounded-full transition-all ${
                   input.trim() && !loading && workspaceId
-                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md shadow-indigo-500/25 scale-100 hover:opacity-90'
+                    ? 'bg-gradient-to-r from-indigo-500 to-purple-600 dashboard-on-accent shadow-md shadow-indigo-500/25 scale-100 hover:opacity-90'
                     : 'bg-white/10 text-neutral-500 cursor-not-allowed scale-95'
                 }`}
                 title="Send message"
@@ -1111,9 +1099,6 @@ export default function ChatInterface({
               </button>
             </form>
 
-            <p className="mt-2 text-center text-[11px] text-neutral-500">
-              Answers are grounded directly in your workspace meetings & tasks.
-            </p>
           </div>
         </div>
       )}

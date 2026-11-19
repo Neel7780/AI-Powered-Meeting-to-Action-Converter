@@ -15,6 +15,7 @@ from sqlite_supabase import SQLiteSupabase
 
 import app.core.supabase as supabase_module
 from app.core.config import settings
+from app.core.deps import CurrentUser, require_role
 from app.services.llm.chain import LLMCall
 from app.services.llm.prompt import LLMExtraction, LLMItem
 from main import app
@@ -134,6 +135,60 @@ def test_invites_only_admins_and_store_only_the_token_hash(world):
                       json={"email": "x@example.com", "role": "member"}).status_code == 403
     assert world.post(f"/workspaces/{world.workspace}/invites", world.priya,
                       json={"email": "aman@example.com", "role": "member"}).status_code == 409  # already a member
+
+
+def test_owner_inherits_admin_permissions_and_can_use_workspace_task_routes(world):
+    world.db.table("workspace_members").update({"role": "owner"}).eq(
+        "workspace_id", world.workspace
+    ).eq("user_id", world.priya).execute()
+    owner = CurrentUser(id=uuid.UUID(world.priya), email="priya@example.com")
+    assert require_role(uuid.UUID(world.workspace), {"admin"}, owner) == "owner"
+
+    meeting_id = world.create_meeting()
+    future_meeting_id = world.create_meeting()
+    task_id = str(uuid.uuid4())
+    world.db.table("tasks").insert({
+        "id": task_id,
+        "workspace_id": world.workspace,
+        "meeting_id": meeting_id,
+        "title": "Publish the launch notes",
+        "source_excerpt": "I will publish the launch notes.",
+        "created_by": world.priya,
+    }).execute()
+
+    headers = {"Authorization": f"Bearer {world.priya}"}
+    stats = world.client.get(f"/api/workspaces/{world.workspace}/stats", headers=headers)
+    assert stats.status_code == 200, stats.text
+    assert stats.json() == {"meeting_count": 2, "open_task_count": 1, "member_count": 3}
+
+    updated = world.client.patch(
+        f"/api/workspaces/{world.workspace}/tasks/{task_id}/status",
+        headers=headers,
+        json={"status": "in_progress"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["status"] == "in_progress"
+
+    other_workspace, other_meeting = (str(uuid.uuid4()) for _ in range(2))
+    world.db.table("workspaces").insert({
+        "id": other_workspace, "name": "Separate workspace", "created_by": world.aman,
+    }).execute()
+    world.db.table("meetings").insert({
+        "id": other_meeting, "workspace_id": other_workspace, "title": "Separate meeting",
+        "starts_at": "2026-11-19T09:00:00Z", "organiser_id": world.aman,
+    }).execute()
+
+    foreign_stats = world.client.get(f"/api/workspaces/{other_workspace}/stats", headers=headers)
+    assert foreign_stats.status_code == 404
+
+    rollover_path = f"/workspaces/{world.workspace}/tasks/{task_id}/rollover"
+    foreign_rollover = world.post(rollover_path, world.priya, json={"target_meeting_id": other_meeting})
+    assert foreign_rollover.status_code == 404, foreign_rollover.text
+    assert world.db.rows("tasks", id=task_id)[0]["meeting_id"] == meeting_id
+
+    rollover = world.post(rollover_path, world.priya, json={"target_meeting_id": future_meeting_id})
+    assert rollover.status_code == 200, rollover.text
+    assert world.db.rows("tasks", id=task_id)[0]["meeting_id"] == future_meeting_id
 
 
 def test_full_flow_extract_approve_tasks_emails(world, monkeypatch):

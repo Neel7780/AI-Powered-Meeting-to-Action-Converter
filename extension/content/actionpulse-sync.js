@@ -2,7 +2,7 @@
  * ActionPulse Web App -> Chrome Extension Context Sync
  *
  * Syncs the authenticated user's Supabase JWT access token, active workspace ID,
- * workspace name, and manager role (admin/organiser) into chrome.storage.local
+ * workspace name, and manager role (owner/admin/organiser) into chrome.storage.local
  * so the extension performs real authenticated uploads without dev tokens.
  */
 (function () {
