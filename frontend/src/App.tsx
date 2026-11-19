@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import AcceptInvite from "./pages/AcceptInvite";
 import CalendarCallback from "./pages/CalendarCallback";
 import GitHubCallback from "./pages/GitHubCallback";
+import WorkspaceChatPage from "./pages/WorkspaceChatPage";
 import { useAuth } from "./context/AuthContext";
 
 /** Redirects authenticated users straight to /dashboard; shows landing otherwise. */
@@ -140,11 +141,31 @@ function App() {
           }
         />
 
+        {/* /chat — AI Meeting Copilot embedded in Dashboard layout */}
         <Route
           path="/chat"
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* /workspace-chat — Slack-like Workspace Team Chat */}
+        <Route
+          path="/workspace-chat"
+          element={
+            <ProtectedRoute>
+              <WorkspaceChatPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/workspace-chat/:conversationId"
+          element={
+            <ProtectedRoute>
+              <WorkspaceChatPage />
             </ProtectedRoute>
           }
         />
