@@ -303,9 +303,9 @@ export default function Login() {
         fontFamily: "'Inter', -apple-system, sans-serif",
       }}
     >
-      {/* Top-left brand icon linking to dashboard */}
+      {/* Top-left brand icon linking to landing page */}
       <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10">
-        <Brand to="/dashboard" />
+        <Brand to="/" />
       </div>
 
       {/* WebGL Dot canvas background */}
