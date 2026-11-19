@@ -2,6 +2,8 @@
 
 The extension captures captions shown in Google Meet, Zoom Web or Microsoft Teams Web. It exports a transcript or uploads it to ActionPulse so an owner, admin or organiser can review suggested tasks.
 
+By default the extension uses the [deployed ActionPulse dashboard](https://ai-powered-meeting-to-action-conver.vercel.app) and the [production Render backend](https://ai-powered-meeting-to-action-converter-9k2z.onrender.com). Use **Connection settings** to test against a local backend.
+
 ## Install it
 
 1. Open `chrome://extensions`, `brave://extensions` or `edge://extensions` and turn on **Developer mode**.

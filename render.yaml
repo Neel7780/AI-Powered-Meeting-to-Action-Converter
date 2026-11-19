@@ -5,6 +5,8 @@ services:
     name: actionpulse-backend
     runtime: python
     plan: free
+    branch: main
+    autoDeployTrigger: checksPass
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     # FastAPI is ASGI: Render's default `gunicorn your_application.wsgi` is a placeholder
