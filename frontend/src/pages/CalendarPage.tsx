@@ -17,6 +17,9 @@ import {
   Search,
   X,
   CalendarCheck2,
+  CheckSquare2,
+  Eye,
+  Loader2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useWorkspace, type Workspace } from '../context/WorkspaceContext';
@@ -28,6 +31,7 @@ import {
   getCalendarConnectUrl,
   getUpcomingCalendarEvents,
   type CalendarStatus,
+  type CalendarEventItem,
 } from '../services/calendarApi';
 
 export interface CalendarMeeting {
@@ -36,7 +40,6 @@ export interface CalendarMeeting {
   starts_at: string;
   ends_at?: string | null;
   timezone: string;
-  status: 'scheduled' | 'ready' | 'completed' | 'processing' | string;
   organiser_id?: string;
   conference_url?: string | null;
   workspace_id: string;
@@ -46,10 +49,28 @@ export interface CalendarMeeting {
   tasks_count?: number;
   description?: string | null;
   source_excerpt?: string | null;
+  calendar_event_id?: string | null;
+  calendar_provider?: string | null;
+  is_demo?: boolean;
+}
+
+export interface CalendarTask {
+  id: string;
+  title: string;
+  deadline_utc: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: 'todo' | 'in_progress' | 'blocked' | 'done';
+  workspace_id: string;
+  workspace_name?: string;
+  workspace_color_idx?: number;
+  meeting_id?: string | null;
+  meeting_title?: string | null;
+  source_excerpt?: string | null;
 }
 
 type ViewMode = 'month' | 'week' | 'agenda';
 type TimeFilter = 'all' | 'upcoming' | 'past';
+type ContentFilter = 'all' | 'meetings' | 'tasks';
 
 const WORKSPACE_PALETTES = [
   {
@@ -114,7 +135,21 @@ function getWorkspacePalette(idx: number) {
   return WORKSPACE_PALETTES[idx % WORKSPACE_PALETTES.length];
 }
 
-// Generate realistic dynamic demo meetings relative to right now
+const PRIORITY_BADGES: Record<string, string> = {
+  urgent: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+  high: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  normal: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+  low: 'bg-neutral-500/20 text-neutral-300 border-neutral-500/40',
+};
+
+const STATUS_BADGES: Record<string, string> = {
+  todo: 'bg-neutral-800 text-neutral-300 border-neutral-700',
+  in_progress: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
+  blocked: 'bg-red-500/20 text-red-300 border-red-500/40',
+  done: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+};
+
+// Generate optional demo meetings when testing empty environments
 function generateDemoMeetings(workspaces: Workspace[]): CalendarMeeting[] {
   const now = new Date();
   const ws1 = workspaces[0]?.id || 'ws-team-10';
@@ -131,12 +166,11 @@ function generateDemoMeetings(workspaces: Workspace[]): CalendarMeeting[] {
 
   return [
     {
-      id: 'mtg-sprint-102',
+      id: '00000000-0000-0000-0000-000000000102',
       title: 'Sprint 2 Architecture & AI Staging Review',
-      starts_at: makeDate(-3, 10, 0),
-      ends_at: makeDate(-3, 11, 0),
+      starts_at: makeDate(-2, 10, 0),
+      ends_at: makeDate(-2, 11, 0),
       timezone: 'Asia/Kolkata',
-      status: 'completed',
       conference_url: 'https://meet.google.com/abc-defg-hij',
       workspace_id: ws1,
       workspace_name: ws1Name,
@@ -144,77 +178,50 @@ function generateDemoMeetings(workspaces: Workspace[]): CalendarMeeting[] {
       tasks_count: 4,
       description: 'Review Sprint 2 vertical slice, Supabase RLS security policies, and Gemini Flash-Lite token limits.',
       source_excerpt: 'Bharat will verify transcript parser handles .vtt and .srt subtitle files properly by Friday.',
+      is_demo: true,
     },
     {
-      id: 'mtg-ds-01',
+      id: '00000000-0000-0000-0000-000000000103',
       title: 'Design Sprint Review & Next Steps',
       starts_at: makeDate(-1, 14, 30),
       ends_at: makeDate(-1, 15, 30),
       timezone: 'Asia/Kolkata',
-      status: 'completed',
       conference_url: 'https://meet.google.com/xyz-uvwx-rst',
       workspace_id: ws2,
       workspace_name: ws2Name,
       workspace_color_idx: 1,
-      tasks_count: 5,
+      tasks_count: 3,
       description: 'Design system alignment, high-contrast dark theme verification, and mobile drawer accessibility review.',
       source_excerpt: 'Vikram will finalize the PR for action item auto-tagger and chapter parser before Monday.',
+      is_demo: true,
     },
     {
-      id: 'mtg-sprint-103',
+      id: '00000000-0000-0000-0000-000000000104',
       title: 'Sprint 3 Kickoff & Personal Calendar Sync',
       starts_at: makeDate(0, 16, 0),
       ends_at: makeDate(0, 17, 0),
       timezone: 'Asia/Kolkata',
-      status: 'scheduled',
       conference_url: 'https://meet.google.com/act-puls-s3k',
       workspace_id: ws1,
       workspace_name: ws1Name,
       workspace_color_idx: 0,
       tasks_count: 2,
       description: 'Planning Sprint 3 epics: Multi-workspace personal calendar view, offline PWA caching, and WhatsApp link generator.',
+      is_demo: true,
     },
     {
-      id: 'mtg-security-audit',
+      id: '00000000-0000-0000-0000-000000000105',
       title: 'Zero-Budget Security & Audit Policy Review',
       starts_at: makeDate(2, 11, 0),
       ends_at: makeDate(2, 12, 0),
       timezone: 'Asia/Kolkata',
-      status: 'scheduled',
       conference_url: 'https://meet.google.com/sec-audit-team',
       workspace_id: ws1,
       workspace_name: ws1Name,
       workspace_color_idx: 0,
       tasks_count: 3,
       description: 'Audit audit_logs triggers, verify backend-only task mutation rules, and validate prompt injection XML fences.',
-    },
-    {
-      id: 'mtg-ux-walkthrough',
-      title: 'UX Walkthrough: Mobile Push & Web Notifications',
-      starts_at: makeDate(4, 15, 0),
-      ends_at: makeDate(4, 16, 0),
-      timezone: 'Asia/Kolkata',
-      status: 'scheduled',
-      conference_url: 'https://meet.google.com/ux-mobile-push',
-      workspace_id: ws2,
-      workspace_name: ws2Name,
-      workspace_color_idx: 1,
-      tasks_count: 1,
-      description: 'Review Web Push Notification permission flow and evaluate user experience for deadline reminder pings.',
-    },
-    {
-      id: 'mtg-stakeholder-sync',
-      title: 'Stakeholder Demo & User Feedback Session',
-      starts_at: makeDate(7, 10, 30),
-      ends_at: makeDate(7, 11, 30),
-      timezone: 'Asia/Kolkata',
-      status: 'scheduled',
-      conference_url: 'https://meet.google.com/stk-demo-feed',
-      workspace_id: ws1,
-      workspace_name: ws1Name,
-      workspace_color_idx: 0,
-      tasks_count: 0,
-      description: 'Present the Sprint 3 live release to course instructors and collect feedback on AI meeting extraction accuracy.',
+      is_demo: true,
     },
   ];
 }
@@ -230,6 +237,14 @@ function exportMeetingToIcs(meeting: CalendarMeeting) {
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
   };
 
+  const escapeIcs = (str: string) => {
+    return str
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\r?\n/g, '\\n');
+  };
+
   const icsLines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -241,16 +256,19 @@ function exportMeetingToIcs(meeting: CalendarMeeting) {
     `DTSTAMP:${formatDate(new Date())}`,
     `DTSTART:${formatDate(start)}`,
     `DTEND:${formatDate(end)}`,
-    `SUMMARY:${meeting.title}`,
-    `DESCRIPTION:${(meeting.description || `ActionPulse Meeting for ${meeting.workspace_name || 'Workspace'}`).replace(/\n/g, '\\n')}`,
-    meeting.conference_url ? `LOCATION:${meeting.conference_url}` : 'LOCATION:Virtual Room',
-    meeting.conference_url ? `URL:${meeting.conference_url}` : '',
-    'STATUS:CONFIRMED',
-    'END:VEVENT',
-    'END:VCALENDAR',
+    `SUMMARY:${escapeIcs(meeting.title)}`,
+    `DESCRIPTION:${escapeIcs(meeting.description || `ActionPulse Meeting for ${meeting.workspace_name || 'Workspace'}`)}`,
+    meeting.conference_url ? `LOCATION:${escapeIcs(meeting.conference_url)}` : 'LOCATION:Virtual Room',
   ];
 
-  const blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  if (meeting.conference_url) {
+    icsLines.push(`URL:${meeting.conference_url}`);
+  }
+
+  icsLines.push('STATUS:CONFIRMED', 'END:VEVENT', 'END:VCALENDAR');
+
+  const content = icsLines.filter(Boolean).join('\r\n');
+  const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -263,18 +281,25 @@ function exportMeetingToIcs(meeting: CalendarMeeting) {
 
 export default function CalendarPage() {
   const navigate = useNavigate();
-  const { workspaces, currentWorkspace } = useWorkspace();
+  const { workspaces, currentWorkspace, loading: workspaceLoading } = useWorkspace();
 
   // State
   const [meetings, setMeetings] = useState<CalendarMeeting[]>([]);
+  const [tasks, setTasks] = useState<CalendarTask[]>([]);
+  const [googleEvents, setGoogleEvents] = useState<CalendarEventItem[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
+  const [contentFilter, setContentFilter] = useState<ContentFilter>('all');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [showDemoData, setShowDemoData] = useState(false);
 
-  // Selected meeting for detail modal
+  // Selected item modals
   const [activeMeeting, setActiveMeeting] = useState<CalendarMeeting | null>(null);
+  const [activeTask, setActiveTask] = useState<CalendarTask | null>(null);
+  const [activeGCalEvent, setActiveGCalEvent] = useState<CalendarEventItem | null>(null);
 
   // Scheduling modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -304,30 +329,33 @@ export default function CalendarPage() {
     return map;
   }, [workspaces]);
 
-  // Load meetings across ALL workspaces personal to the user
-  const fetchAllWorkspaceMeetings = useCallback(async () => {
+  // Load actual meetings and tasks across all user's workspaces
+  const fetchAllWorkspaceData = useCallback(async () => {
+    if (workspaceLoading) return;
+    setIsLoading(true);
+
     try {
       const workspaceIds = workspaces.map((w) => w.id);
       let loadedMeetings: CalendarMeeting[] = [];
+      let loadedTasks: CalendarTask[] = [];
 
       if (workspaceIds.length > 0) {
-        // 1. Fetch meetings from Supabase for all user's workspaces
+        // 1. Fetch real meetings from Supabase for all user's workspaces
         const { data: dbMeetings, error: mtgErr } = await supabase
           .from('meetings')
-          .select('id, title, starts_at, timezone, status, organiser_id, conference_url, workspace_id, created_at')
+          .select('id, title, starts_at, timezone, organiser_id, conference_url, workspace_id, calendar_event_id, calendar_provider, created_at')
           .in('workspace_id', workspaceIds)
           .order('starts_at', { ascending: false });
 
-        if (!mtgErr && dbMeetings && dbMeetings.length > 0) {
-          // 2. Fetch tasks counts for these meetings
-          const meetingIds = dbMeetings.map((m) => m.id);
-          const { data: taskData } = await supabase
+        if (!mtgErr && dbMeetings) {
+          // 2. Fetch task counts for these meetings
+          const { data: allTaskCounts } = await supabase
             .from('tasks')
             .select('id, meeting_id')
-            .in('meeting_id', meetingIds);
+            .in('workspace_id', workspaceIds);
 
           const taskCountMap = new Map<string, number>();
-          taskData?.forEach((t) => {
+          allTaskCounts?.forEach((t) => {
             if (t.meeting_id) {
               taskCountMap.set(t.meeting_id, (taskCountMap.get(t.meeting_id) || 0) + 1);
             }
@@ -344,7 +372,6 @@ export default function CalendarPage() {
               starts_at: m.starts_at,
               ends_at: endD.toISOString(),
               timezone: m.timezone || 'Asia/Kolkata',
-              status: m.status || 'scheduled',
               organiser_id: m.organiser_id,
               conference_url: m.conference_url,
               workspace_id: m.workspace_id,
@@ -352,74 +379,103 @@ export default function CalendarPage() {
               workspace_color_idx: wsIdx,
               created_at: m.created_at,
               tasks_count: taskCountMap.get(m.id) || 0,
+              calendar_event_id: m.calendar_event_id,
+              calendar_provider: m.calendar_provider,
+              is_demo: false,
+            };
+          });
+        }
+
+        // 3. Fetch real tasks that have deadlines
+        const { data: dbTasks, error: taskErr } = await supabase
+          .from('tasks')
+          .select('id, title, deadline_utc, priority, status, workspace_id, meeting_id, source_excerpt')
+          .in('workspace_id', workspaceIds)
+          .not('deadline_utc', 'is', null)
+          .order('deadline_utc', { ascending: true });
+
+        if (!taskErr && dbTasks) {
+          const meetingTitleMap = new Map<string, string>();
+          loadedMeetings.forEach((m) => meetingTitleMap.set(m.id, m.title));
+
+          loadedTasks = dbTasks.map((t) => {
+            const wsIdx = workspaceColorMap.get(t.workspace_id) ?? 0;
+            const wsName = workspaceNameMap.get(t.workspace_id) || 'Workspace';
+            return {
+              id: t.id,
+              title: t.title,
+              deadline_utc: t.deadline_utc,
+              priority: (t.priority as any) || 'normal',
+              status: (t.status as any) || 'todo',
+              workspace_id: t.workspace_id,
+              workspace_name: wsName,
+              workspace_color_idx: wsIdx,
+              meeting_id: t.meeting_id,
+              meeting_title: t.meeting_id ? meetingTitleMap.get(t.meeting_id) || null : null,
+              source_excerpt: t.source_excerpt,
             };
           });
         }
       }
 
-      // If no meetings found in database (or demo workspace), merge with rich dynamic demo meetings
-      if (loadedMeetings.length === 0) {
+      // If user enabled Demo Mode (or has absolutely zero items and clicks preview)
+      if (showDemoData && loadedMeetings.length === 0) {
         loadedMeetings = generateDemoMeetings(workspaces);
-      } else {
-        // Also ensure demo meetings are included if user has only 1 or 2 meetings so the calendar is fully demonstrative
-        const demoOnes = generateDemoMeetings(workspaces);
-        const existingIds = new Set(loadedMeetings.map((m) => m.id));
-        demoOnes.forEach((dm) => {
-          if (!existingIds.has(dm.id)) {
-            loadedMeetings.push(dm);
-          }
-        });
       }
 
       setMeetings(loadedMeetings);
+      setTasks(loadedTasks);
     } catch (err) {
-      console.warn('Error loading personal calendar meetings:', err);
-      setMeetings(generateDemoMeetings(workspaces));
+      console.warn('[ActionPulse] Calendar fetch note:', err);
+    } finally {
+      setIsLoading(false);
     }
-  }, [workspaces, workspaceColorMap, workspaceNameMap]);
+  }, [workspaces, workspaceLoading, workspaceColorMap, workspaceNameMap, showDemoData]);
 
   useEffect(() => {
-    fetchAllWorkspaceMeetings();
-  }, [fetchAllWorkspaceMeetings]);
+    fetchAllWorkspaceData();
+  }, [fetchAllWorkspaceData]);
 
-  // Check Google Calendar connection status for the current workspace
+  // Check Google Calendar connection status for the target workspace
+  const activeWorkspaceId = selectedWorkspaceId !== 'all' ? selectedWorkspaceId : currentWorkspace?.id;
   useEffect(() => {
-    if (!currentWorkspace?.id) return;
-    getCalendarStatus(currentWorkspace.id)
+    if (!activeWorkspaceId) return;
+    getCalendarStatus(activeWorkspaceId)
       .then((status) => setCalendarStatus(status))
       .catch(() => setCalendarStatus(null));
-  }, [currentWorkspace?.id]);
+  }, [activeWorkspaceId]);
 
   const handleSyncGoogleCalendar = async () => {
-    if (!currentWorkspace?.id) return;
+    if (!activeWorkspaceId) return;
     setSyncingCalendar(true);
     setCalendarSyncNotice(null);
     try {
       if (!calendarStatus?.connected) {
-        const authUrl = await getCalendarConnectUrl(currentWorkspace.id);
+        sessionStorage.setItem('calendar_return_to', '/calendar');
+        const redirectUri = `${window.location.origin}/calendar/callback`;
+        const authUrl = await getCalendarConnectUrl(activeWorkspaceId, redirectUri);
         window.location.href = authUrl;
         return;
       }
-      const data = await getUpcomingCalendarEvents(currentWorkspace.id, 30);
+      const data = await getUpcomingCalendarEvents(activeWorkspaceId, 30);
+      setGoogleEvents(data.events || []);
       setCalendarSyncNotice(`Synced ${data.events.length} Google Calendar event(s) successfully.`);
-      await fetchAllWorkspaceMeetings();
+      await fetchAllWorkspaceData();
     } catch (err: any) {
       setCalendarSyncNotice(
-        err?.message || 'Google Calendar sync failed. Connect your account to enable automatic sync.'
+        err?.message || 'Google Calendar sync failed. Reconnect your account to refresh permissions.'
       );
     } finally {
       setSyncingCalendar(false);
     }
   };
 
-  // Filtered meetings based on:
-  // 1. Workspace selection ('all' vs specific ID)
-  // 2. Time filter ('all' vs 'upcoming' vs 'past')
-  // 3. Search query
+  // Filtered meetings
   const filteredMeetings = useMemo(() => {
     const now = new Date().getTime();
     return meetings.filter((meeting) => {
-      // Workspace filter
+      if (contentFilter === 'tasks') return false;
+
       if (selectedWorkspaceId !== 'all' && meeting.workspace_id !== selectedWorkspaceId) {
         return false;
       }
@@ -427,11 +483,9 @@ export default function CalendarPage() {
       const meetingTime = new Date(meeting.starts_at).getTime();
       const isPast = meetingTime < now;
 
-      // Time filter
       if (timeFilter === 'upcoming' && isPast) return false;
       if (timeFilter === 'past' && !isPast) return false;
 
-      // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchTitle = meeting.title.toLowerCase().includes(q);
@@ -442,24 +496,66 @@ export default function CalendarPage() {
 
       return true;
     });
-  }, [meetings, selectedWorkspaceId, timeFilter, searchQuery]);
+  }, [meetings, selectedWorkspaceId, timeFilter, contentFilter, searchQuery]);
+
+  // Filtered tasks
+  const filteredTasks = useMemo(() => {
+    const now = new Date().getTime();
+    return tasks.filter((task) => {
+      if (contentFilter === 'meetings') return false;
+
+      if (selectedWorkspaceId !== 'all' && task.workspace_id !== selectedWorkspaceId) {
+        return false;
+      }
+
+      const deadlineTime = new Date(task.deadline_utc).getTime();
+      const isPast = deadlineTime < now;
+
+      if (timeFilter === 'upcoming' && isPast) return false;
+      if (timeFilter === 'past' && !isPast) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = task.title.toLowerCase().includes(q);
+        const matchWs = (task.workspace_name || '').toLowerCase().includes(q);
+        if (!matchTitle && !matchWs) return false;
+      }
+
+      return true;
+    });
+  }, [tasks, selectedWorkspaceId, timeFilter, contentFilter, searchQuery]);
+
+  // Filtered Google Events (only show if not imported yet)
+  const unimportedGCalEvents = useMemo(() => {
+    return googleEvents.filter((ev) => !ev.already_imported);
+  }, [googleEvents]);
 
   // Counts for tabs
   const upcomingCount = useMemo(() => {
     const now = new Date().getTime();
-    return meetings.filter((m) => {
+    const mtgs = meetings.filter((m) => {
       const matchWs = selectedWorkspaceId === 'all' || m.workspace_id === selectedWorkspaceId;
       return matchWs && new Date(m.starts_at).getTime() >= now;
     }).length;
-  }, [meetings, selectedWorkspaceId]);
+    const tsks = tasks.filter((t) => {
+      const matchWs = selectedWorkspaceId === 'all' || t.workspace_id === selectedWorkspaceId;
+      return matchWs && new Date(t.deadline_utc).getTime() >= now;
+    }).length;
+    return mtgs + tsks;
+  }, [meetings, tasks, selectedWorkspaceId]);
 
   const pastCount = useMemo(() => {
     const now = new Date().getTime();
-    return meetings.filter((m) => {
+    const mtgs = meetings.filter((m) => {
       const matchWs = selectedWorkspaceId === 'all' || m.workspace_id === selectedWorkspaceId;
       return matchWs && new Date(m.starts_at).getTime() < now;
     }).length;
-  }, [meetings, selectedWorkspaceId]);
+    const tsks = tasks.filter((t) => {
+      const matchWs = selectedWorkspaceId === 'all' || t.workspace_id === selectedWorkspaceId;
+      return matchWs && new Date(t.deadline_utc).getTime() < now;
+    }).length;
+    return mtgs + tsks;
+  }, [meetings, tasks, selectedWorkspaceId]);
 
   // Calendar Date Navigation
   const handlePrev = () => {
@@ -503,12 +599,12 @@ export default function CalendarPage() {
     return currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }, [currentDate]);
 
-  // Week range label
+  // Week range label (Monday to Sunday)
   const weekRangeLabel = useMemo(() => {
     const start = new Date(currentDate);
-    const day = start.getDay();
-    const diff = start.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-    start.setDate(diff);
+    const rawDay = start.getDay();
+    const day = (rawDay + 6) % 7; // Monday = 0
+    start.setDate(start.getDate() - day);
 
     const end = new Date(start);
     end.setDate(end.getDate() + 6);
@@ -518,12 +614,13 @@ export default function CalendarPage() {
     return `${startStr} – ${endStr}`;
   }, [currentDate]);
 
-  // Days in month calculation for Month view
+  // Days in month calculation for Month view (Monday - Sunday consistently)
   const monthGridDays = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
-    const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
+    const rawDay = new Date(year, month, 1).getDay();
+    const firstDayIndex = (rawDay + 6) % 7; // Monday = 0, Sunday = 6
     const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
     const prevMonthDays = new Date(year, month, 0).getDate();
 
@@ -543,18 +640,17 @@ export default function CalendarPage() {
       cells.push({ date: dateObj, isCurrentMonth: true, dateKey });
     }
 
-    // Trailing days from next month to complete standard 35 or 42 grid
+    // Trailing days from next month to complete standard grid (35 or 42 cells)
     const remaining = (7 - (cells.length % 7)) % 7;
     for (let i = 1; i <= remaining; i++) {
       const d = new Date(year, month + 1, i);
       const dateKey = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
       cells.push({ date: d, isCurrentMonth: false, dateKey });
     }
-
     return cells;
   }, [currentDate]);
 
-  // Map meetings by dateKey ('YYYY-M-D') for fast lookup in Month view
+  // Map meetings by dateKey ('YYYY-M-D')
   const meetingsByDateKey = useMemo(() => {
     const map = new Map<string, CalendarMeeting[]>();
     filteredMeetings.forEach((m) => {
@@ -566,12 +662,36 @@ export default function CalendarPage() {
     return map;
   }, [filteredMeetings]);
 
+  // Map tasks by dateKey ('YYYY-M-D')
+  const tasksByDateKey = useMemo(() => {
+    const map = new Map<string, CalendarTask[]>();
+    filteredTasks.forEach((t) => {
+      const d = new Date(t.deadline_utc);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    });
+    return map;
+  }, [filteredTasks]);
+
+  // Map Google Events by dateKey ('YYYY-M-D')
+  const gcalEventsByDateKey = useMemo(() => {
+    const map = new Map<string, CalendarEventItem[]>();
+    unimportedGCalEvents.forEach((ev) => {
+      const d = new Date(ev.starts_at);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(ev);
+    });
+    return map;
+  }, [unimportedGCalEvents]);
+
   // Week view days (Monday to Sunday)
   const weekDays = useMemo(() => {
     const start = new Date(currentDate);
-    const day = start.getDay();
-    const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-    start.setDate(diff);
+    const rawDay = start.getDay();
+    const day = (rawDay + 6) % 7; // Monday = 0
+    start.setDate(start.getDate() - day);
 
     const days: { date: Date; dateKey: string; isToday: boolean }[] = [];
     const today = new Date();
@@ -627,6 +747,8 @@ export default function CalendarPage() {
     return `In ${diffDays} days`;
   };
 
+  const totalItemCount = filteredMeetings.length + filteredTasks.length;
+
   return (
     <div className="min-h-screen bg-neutral-950 p-4 sm:p-6 lg:p-8 text-white space-y-6">
       {/* 1. Header & Title Banner */}
@@ -639,18 +761,31 @@ export default function CalendarPage() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
                 Personal Calendar
+                {isLoading && <Loader2 className="size-4 animate-spin text-cyan-400" />}
                 <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-normal">
                   All Workspaces
                 </span>
               </h1>
               <p className="text-sm text-neutral-400 mt-0.5">
-                Unified scheduled sessions, video conference calls, and extracted action items across all your teams
+                Unified scheduled sessions, video conference calls, and action items with deadlines across your teams
               </p>
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Demo toggle if user wants to see sample presentation data */}
+          {meetings.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setShowDemoData((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-300 hover:bg-amber-500/20 transition"
+            >
+              <Eye className="size-3.5" />
+              {showDemoData ? 'Hide Sample Demo' : 'Preview Demo Data'}
+            </button>
+          )}
+
           {/* Google Calendar Sync button */}
           <button
             type="button"
@@ -710,13 +845,15 @@ export default function CalendarPage() {
                 : 'text-neutral-400 hover:text-white hover:bg-white/5 border border-transparent'
             }`}
           >
-            All Workspaces ({meetings.length})
+            All Workspaces ({meetings.length + tasks.length})
           </button>
 
           {workspaces.map((ws, idx) => {
             const palette = getWorkspacePalette(idx);
             const isSelected = selectedWorkspaceId === ws.id;
-            const count = meetings.filter((m) => m.workspace_id === ws.id).length;
+            const count =
+              meetings.filter((m) => m.workspace_id === ws.id).length +
+              tasks.filter((t) => t.workspace_id === ws.id).length;
             return (
               <button
                 key={ws.id}
@@ -743,7 +880,7 @@ export default function CalendarPage() {
             <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
             <input
               type="text"
-              placeholder="Search meetings..."
+              placeholder="Search meetings & tasks..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-44 sm:w-56 rounded-lg border border-white/10 bg-neutral-900/80 pl-8 pr-3 py-1.5 text-xs text-white placeholder-neutral-400 focus:border-cyan-500 focus:outline-none"
@@ -791,46 +928,76 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* 3. Time Filter Tabs & Calendar Navigation */}
+      {/* 3. Filters & Date Navigation */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {/* Time Filter Pills: All / Upcoming / Past */}
-        <div className="inline-flex items-center gap-1.5 border-b border-white/10 pb-1 sm:pb-0 sm:border-b-0">
-          <button
-            type="button"
-            onClick={() => setTimeFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-              timeFilter === 'all'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            All Meetings ({meetings.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setTimeFilter('upcoming')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-              timeFilter === 'upcoming'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Upcoming ({upcomingCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setTimeFilter('past')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-              timeFilter === 'past'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-neutral-400 hover:text-white'
-            }`}
-          >
-            Past Sessions ({pastCount})
-          </button>
+        {/* Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Time Filter: All / Upcoming / Past */}
+          <div className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-neutral-900/60 p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setTimeFilter('all')}
+              className={`px-2.5 py-1 rounded-md font-medium transition ${
+                timeFilter === 'all' ? 'bg-cyan-500/20 text-cyan-300 font-semibold' : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              All ({totalItemCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTimeFilter('upcoming')}
+              className={`px-2.5 py-1 rounded-md font-medium transition ${
+                timeFilter === 'upcoming' ? 'bg-cyan-500/20 text-cyan-300 font-semibold' : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              Upcoming ({upcomingCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setTimeFilter('past')}
+              className={`px-2.5 py-1 rounded-md font-medium transition ${
+                timeFilter === 'past' ? 'bg-cyan-500/20 text-cyan-300 font-semibold' : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              Past ({pastCount})
+            </button>
+          </div>
+
+          {/* Content Type Filter: All / Meetings / Tasks */}
+          <div className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-neutral-900/60 p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setContentFilter('all')}
+              className={`px-2.5 py-1 rounded-md font-medium transition ${
+                contentFilter === 'all' ? 'bg-white/15 text-white' : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              All Types
+            </button>
+            <button
+              type="button"
+              onClick={() => setContentFilter('meetings')}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition ${
+                contentFilter === 'meetings' ? 'bg-cyan-500/20 text-cyan-300' : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <Video className="size-3 text-cyan-400" />
+              Meetings ({filteredMeetings.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setContentFilter('tasks')}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition ${
+                contentFilter === 'tasks' ? 'bg-amber-500/20 text-amber-300' : 'text-neutral-400 hover:text-white'
+              }`}
+            >
+              <CheckSquare2 className="size-3 text-amber-400" />
+              Tasks Due ({filteredTasks.length})
+            </button>
+          </div>
         </div>
 
-        {/* Date Navigator (< Prev, Today, Next >) */}
+        {/* Date Navigator */}
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -848,7 +1015,7 @@ export default function CalendarPage() {
             >
               <ChevronLeft className="size-4" />
             </button>
-            <span className="px-3 text-xs font-semibold text-white min-w-[130px] text-center">
+            <span className="px-3 text-xs font-medium text-neutral-200">
               {viewMode === 'week' ? weekRangeLabel : monthYearLabel}
             </span>
             <button
@@ -864,24 +1031,29 @@ export default function CalendarPage() {
       </div>
 
       {/* 4. CALENDAR VIEWS */}
+
+      {/* Month View (Monday - Sunday) */}
       {viewMode === 'month' && (
         <div className="rounded-2xl border border-white/10 bg-neutral-900/50 shadow-xl overflow-hidden backdrop-blur-md">
-          {/* Day Headers (Sun - Sat) */}
+          {/* Day Headers (Mon - Sun) */}
           <div className="grid grid-cols-7 border-b border-white/10 bg-white/[0.03] text-center text-xs font-semibold text-neutral-400 py-3">
-            <span>SUN</span>
             <span>MON</span>
             <span>TUE</span>
             <span>WED</span>
             <span>THU</span>
             <span>FRI</span>
             <span>SAT</span>
+            <span>SUN</span>
           </div>
 
           {/* Month Day Cells Grid */}
           <div className="grid grid-cols-7 auto-rows-fr divide-x divide-y divide-white/[0.06]">
             {monthGridDays.map((cell, idx) => {
               const dayMeetings = meetingsByDateKey.get(cell.dateKey) || [];
+              const dayTasks = tasksByDateKey.get(cell.dateKey) || [];
+              const dayGCal = gcalEventsByDateKey.get(cell.dateKey) || [];
               const isToday = cell.dateKey === todayKey;
+              const totalDayItems = dayMeetings.length + dayTasks.length + dayGCal.length;
 
               return (
                 <div
@@ -899,25 +1071,28 @@ export default function CalendarPage() {
                           ? 'bg-cyan-500 text-black font-bold shadow-md shadow-cyan-500/20'
                           : cell.isCurrentMonth
                           ? 'text-neutral-300'
-                          : 'text-neutral-400'
+                          : 'text-neutral-500'
                       }`}
                     >
                       {cell.date.getDate()}
                     </span>
-                    {dayMeetings.length > 0 && (
+                    {totalDayItems > 0 && (
                       <span className="text-[10px] font-medium text-neutral-400 group-hover:text-cyan-400 transition">
-                        {dayMeetings.length} mtg{dayMeetings.length > 1 ? 's' : ''}
+                        {dayMeetings.length > 0 && `${dayMeetings.length} mtg${dayMeetings.length > 1 ? 's' : ''}`}
+                        {dayMeetings.length > 0 && dayTasks.length > 0 && ' • '}
+                        {dayTasks.length > 0 && `${dayTasks.length} task${dayTasks.length > 1 ? 's' : ''}`}
                       </span>
                     )}
                   </div>
 
-                  {/* Meeting Chips */}
+                  {/* Day Content Chips */}
                   <div className="flex-1 flex flex-col gap-1 overflow-y-auto max-h-[85px] scrollbar-none">
-                    {dayMeetings.slice(0, 3).map((meeting) => {
+                    {/* Meeting Chips */}
+                    {dayMeetings.slice(0, 2).map((meeting) => {
                       const palette = getWorkspacePalette(meeting.workspace_color_idx ?? 0);
                       return (
                         <div
-                          key={meeting.id}
+                          key={`mtg-${meeting.id}`}
                           onClick={(e) => {
                             e.stopPropagation();
                             setActiveMeeting(meeting);
@@ -939,10 +1114,54 @@ export default function CalendarPage() {
                       );
                     })}
 
-                    {dayMeetings.length > 3 && (
-                      <div className="text-[10px] text-neutral-400 font-medium pl-1">
-                        +{dayMeetings.length - 3} more
-                      </div>
+                    {/* Task Deadline Chips */}
+                    {dayTasks.slice(0, 2).map((task) => {
+                      return (
+                        <div
+                          key={`task-${task.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveTask(task);
+                          }}
+                          className="flex items-center justify-between gap-1 rounded-md px-1.5 py-0.5 text-[10px] bg-amber-500/10 border border-amber-500/25 text-amber-200 hover:border-amber-400 transition"
+                          title={`Action item deadline: ${task.title}`}
+                        >
+                          <div className="flex items-center gap-1 min-w-0">
+                            <CheckSquare2 className="size-2.5 text-amber-400 shrink-0" />
+                            <span className="truncate font-medium">{task.title}</span>
+                          </div>
+                          <span className={`text-[8px] uppercase px-1 rounded ${PRIORITY_BADGES[task.priority] || ''}`}>
+                            {task.priority}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                    {/* Synced Google Calendar Events (Unimported) */}
+                    {dayGCal.slice(0, 1).map((ev) => {
+                      return (
+                        <div
+                          key={`gcal-${ev.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveGCalEvent(ev);
+                          }}
+                          className="flex items-center justify-between gap-1 rounded-md px-1.5 py-0.5 text-[10px] bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 hover:border-indigo-400 transition"
+                          title={`Google Calendar: ${ev.title}`}
+                        >
+                          <div className="flex items-center gap-1 min-w-0">
+                            <CalendarIcon className="size-2.5 text-indigo-400 shrink-0" />
+                            <span className="truncate font-medium">{ev.title}</span>
+                          </div>
+                          <span className="text-[9px] text-indigo-300 font-semibold">GCal</span>
+                        </div>
+                      );
+                    })}
+
+                    {totalDayItems > 3 && (
+                      <span className="text-[9px] text-neutral-400 px-1">
+                        +{totalDayItems - 3} more
+                      </span>
                     )}
                   </div>
                 </div>
@@ -958,11 +1177,13 @@ export default function CalendarPage() {
           <div className="grid grid-cols-7 divide-x divide-white/[0.08]">
             {weekDays.map((col, idx) => {
               const dayMeetings = meetingsByDateKey.get(col.dateKey) || [];
+              const dayTasks = tasksByDateKey.get(col.dateKey) || [];
+              const dayGCal = gcalEventsByDateKey.get(col.dateKey) || [];
               const dayName = col.date.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
               const dayNum = col.date.getDate();
 
               return (
-                <div key={idx} className="flex flex-col min-h-[500px]">
+                <div key={idx} className="flex flex-col min-h-[520px]">
                   {/* Column Header */}
                   <div
                     className={`p-3 text-center border-b border-white/10 ${
@@ -982,59 +1203,108 @@ export default function CalendarPage() {
                   {/* Day Content */}
                   <div
                     onClick={() => handleDateCellClick(col.date)}
-                    className="flex-1 p-2 space-y-2.5 bg-neutral-950/40 hover:bg-white/[0.02] transition cursor-pointer"
+                    className="flex-1 p-2 space-y-2 bg-neutral-950/40 hover:bg-white/[0.02] transition cursor-pointer overflow-y-auto"
                   >
-                    {dayMeetings.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-center p-3 text-[11px] text-neutral-400">
-                        No meetings
+                    {dayMeetings.length === 0 && dayTasks.length === 0 && dayGCal.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-center p-3 text-[11px] text-neutral-500">
+                        No events
                       </div>
                     ) : (
-                      dayMeetings.map((meeting) => {
-                        const palette = getWorkspacePalette(meeting.workspace_color_idx ?? 0);
-                        return (
+                      <>
+                        {/* Meetings */}
+                        {dayMeetings.map((meeting) => {
+                          const palette = getWorkspacePalette(meeting.workspace_color_idx ?? 0);
+                          return (
+                            <div
+                              key={`week-mtg-${meeting.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMeeting(meeting);
+                              }}
+                              className={`rounded-xl p-2.5 border transition shadow-sm cursor-pointer ${palette.bg} ${palette.border} hover:border-white/40`}
+                            >
+                              <div className="flex items-center justify-between gap-1 text-[11px] mb-1">
+                                <span className="font-semibold text-cyan-300">
+                                  {formatTime(meeting.starts_at)}
+                                </span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${palette.badge}`}>
+                                  {meeting.workspace_name}
+                                </span>
+                              </div>
+
+                              <h4 className="text-xs font-semibold text-white line-clamp-2">
+                                {meeting.title}
+                              </h4>
+
+                              {meeting.tasks_count !== undefined && meeting.tasks_count > 0 && (
+                                <div className="mt-2 flex items-center gap-1 text-[10px] text-neutral-400">
+                                  <ListTodo className="size-3 text-emerald-400" />
+                                  <span>{meeting.tasks_count} action items</span>
+                                </div>
+                              )}
+
+                              {meeting.conference_url && (
+                                <a
+                                  href={meeting.conference_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="mt-2 inline-flex items-center gap-1.5 w-full justify-center text-[10px] font-medium bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 border border-cyan-500/30 rounded-md py-1 transition"
+                                >
+                                  <Video className="size-3" />
+                                  Join Call
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {/* Tasks Due */}
+                        {dayTasks.map((task) => (
                           <div
-                            key={meeting.id}
+                            key={`week-task-${task.id}`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              setActiveMeeting(meeting);
+                              setActiveTask(task);
                             }}
-                            className={`rounded-xl p-2.5 border transition shadow-sm cursor-pointer ${palette.bg} ${palette.border} hover:border-white/40`}
+                            className="rounded-lg p-2 border border-amber-500/30 bg-amber-950/20 text-neutral-200 hover:border-amber-400 transition"
                           >
-                            <div className="flex items-center justify-between gap-1 text-[11px] mb-1">
-                              <span className="font-semibold text-cyan-300">
-                                {formatTime(meeting.starts_at)}
+                            <div className="flex items-center justify-between gap-1 text-[10px] mb-1">
+                              <span className="font-semibold text-amber-300 flex items-center gap-1">
+                                <CheckSquare2 className="size-3 text-amber-400" /> Action Item
                               </span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${palette.badge}`}>
-                                {meeting.workspace_name}
+                              <span className={`text-[9px] uppercase px-1 rounded ${PRIORITY_BADGES[task.priority] || ''}`}>
+                                {task.priority}
                               </span>
                             </div>
-
-                            <h4 className="text-xs font-semibold text-white line-clamp-2">
-                              {meeting.title}
-                            </h4>
-
-                            {meeting.tasks_count !== undefined && meeting.tasks_count > 0 && (
-                              <div className="mt-2 flex items-center gap-1 text-[10px] text-neutral-400">
-                                <ListTodo className="size-3 text-emerald-400" />
-                                <span>{meeting.tasks_count} action items</span>
-                              </div>
-                            )}
-
-                            {meeting.conference_url && (
-                              <a
-                                href={meeting.conference_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="mt-2.5 inline-flex items-center gap-1.5 w-full justify-center text-[10px] font-medium bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 border border-cyan-500/30 rounded-md py-1 transition"
-                              >
-                                <Video className="size-3" />
-                                Join Call
-                              </a>
-                            )}
+                            <h5 className="text-[11px] font-medium text-white line-clamp-2">
+                              {task.title}
+                            </h5>
                           </div>
-                        );
-                      })
+                        ))}
+
+                        {/* Google Calendar Events */}
+                        {dayGCal.map((ev) => (
+                          <div
+                            key={`week-gcal-${ev.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveGCalEvent(ev);
+                            }}
+                            className="rounded-lg p-2 border border-indigo-500/30 bg-indigo-950/20 text-neutral-200 hover:border-indigo-400 transition"
+                          >
+                            <div className="flex items-center justify-between gap-1 text-[10px] mb-1 text-indigo-300 font-semibold">
+                              <span className="flex items-center gap-1">
+                                <CalendarIcon className="size-3" /> Google Calendar
+                              </span>
+                              <span>{formatTime(ev.starts_at)}</span>
+                            </div>
+                            <h5 className="text-[11px] font-medium text-white line-clamp-2">
+                              {ev.title}
+                            </h5>
+                          </div>
+                        ))}
+                      </>
                     )}
                   </div>
                 </div>
@@ -1047,26 +1317,35 @@ export default function CalendarPage() {
       {/* Agenda / Schedule Timeline View */}
       {viewMode === 'agenda' && (
         <div className="space-y-4">
-          {filteredMeetings.length === 0 ? (
+          {totalItemCount === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-neutral-900/40 p-12 text-center">
               <CalendarIcon className="size-10 text-neutral-400 mx-auto mb-3" />
-              <h3 className="text-base font-semibold text-white">No scheduled meetings match your filters</h3>
+              <h3 className="text-base font-semibold text-white">No scheduled meetings or tasks found</h3>
               <p className="text-xs text-neutral-400 mt-1 max-w-md mx-auto">
-                Try selecting &ldquo;All Workspaces&rdquo; or change the time filter to view upcoming or past sessions.
+                Schedule a meeting, sync your Google Calendar, or approve action items in the review gate to view them here.
               </p>
-              <Button
-                onClick={() => {
-                  setSelectedWorkspaceId('all');
-                  setTimeFilter('all');
-                  setSearchQuery('');
-                }}
-                className="mt-4 text-xs bg-white/10 hover:bg-white/15 text-white"
-              >
-                Reset Filters
-              </Button>
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <Button
+                  onClick={() => {
+                    setCreateInitialDate(undefined);
+                    setShowCreateModal(true);
+                  }}
+                  className="text-xs bg-cyan-600 hover:bg-cyan-500 text-white"
+                >
+                  <Plus className="size-3.5 mr-1" /> Schedule Meeting
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleSyncGoogleCalendar}
+                  className="text-xs border-white/15 text-neutral-300 hover:bg-white/5"
+                >
+                  <RefreshCw className="size-3.5 mr-1" /> Sync Google Calendar
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="grid gap-3.5 sm:grid-cols-1 lg:grid-cols-2">
+              {/* Meetings in Agenda */}
               {filteredMeetings.map((meeting) => {
                 const palette = getWorkspacePalette(meeting.workspace_color_idx ?? 0);
                 const startD = new Date(meeting.starts_at);
@@ -1075,7 +1354,7 @@ export default function CalendarPage() {
 
                 return (
                   <div
-                    key={meeting.id}
+                    key={`agenda-mtg-${meeting.id}`}
                     onClick={() => setActiveMeeting(meeting)}
                     className="group relative rounded-2xl border border-white/10 bg-neutral-900/60 p-5 shadow-lg transition hover:border-white/20 hover:bg-neutral-900 cursor-pointer flex flex-col justify-between"
                   >
@@ -1128,7 +1407,6 @@ export default function CalendarPage() {
                         )}
                       </div>
 
-                      {/* Description if present */}
                       {meeting.description && (
                         <p className="mt-2.5 text-xs text-neutral-400 line-clamp-2">
                           {meeting.description}
@@ -1159,14 +1437,14 @@ export default function CalendarPage() {
                             exportMeetingToIcs(meeting);
                           }}
                           className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-neutral-300 hover:bg-white/10 hover:text-white transition"
-                          title="Export .ics file for Google / Apple / Outlook Calendar"
+                          title="Export .ics file"
                         >
                           <Download className="size-3" />
                           .ics
                         </button>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      {!meeting.is_demo && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1178,7 +1456,77 @@ export default function CalendarPage() {
                           <span>Review Gate</span>
                           <ArrowRight className="size-3" />
                         </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Tasks in Agenda */}
+              {filteredTasks.map((task) => {
+                const palette = getWorkspacePalette(task.workspace_color_idx ?? 0);
+                const deadlineD = new Date(task.deadline_utc);
+                const isPast = deadlineD.getTime() < new Date().getTime();
+
+                return (
+                  <div
+                    key={`agenda-task-${task.id}`}
+                    onClick={() => setActiveTask(task)}
+                    className="group relative rounded-2xl border border-amber-500/20 bg-neutral-900/60 p-5 shadow-lg transition hover:border-amber-500/40 hover:bg-neutral-900 cursor-pointer flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${palette.badge}`}>
+                          <span className={`size-1.5 rounded-full ${palette.dot}`} />
+                          {task.workspace_name}
+                        </span>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${PRIORITY_BADGES[task.priority] || ''}`}>
+                            {task.priority}
+                          </span>
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded border ${STATUS_BADGES[task.status] || ''}`}>
+                            {task.status.replace('_', ' ')}
+                          </span>
+                        </div>
                       </div>
+
+                      <div className="flex items-start gap-2">
+                        <CheckSquare2 className="size-4 text-amber-400 mt-0.5 shrink-0" />
+                        <h3 className="text-base font-semibold text-white group-hover:text-amber-300 transition">
+                          {task.title}
+                        </h3>
+                      </div>
+
+                      <div className="mt-3 flex items-center gap-2 text-xs text-neutral-400">
+                        <Clock className="size-3.5 text-amber-400" />
+                        <span className={isPast ? 'text-rose-400 font-medium' : 'text-neutral-300'}>
+                          Due: {deadlineD.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at {formatTime(task.deadline_utc)}
+                        </span>
+                      </div>
+
+                      {task.source_excerpt && (
+                        <p className="mt-2.5 text-xs text-neutral-400 italic bg-white/[0.02] p-2.5 rounded-lg border border-white/5 line-clamp-2">
+                          &ldquo;{task.source_excerpt}&rdquo;
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-white/[0.08] flex items-center justify-between text-xs">
+                      <span className="text-neutral-400">
+                        {task.meeting_title ? `From: ${task.meeting_title}` : 'Confirmed Board Task'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate('/kanban');
+                        }}
+                        className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 font-medium transition"
+                      >
+                        <span>Open Kanban</span>
+                        <ArrowRight className="size-3" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -1188,7 +1536,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* 5. MEETING DETAILS MODAL / DRAWER */}
+      {/* 5. MEETING DETAILS MODAL */}
       {activeMeeting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
           <div className="relative w-full max-w-xl rounded-2xl border border-white/15 bg-neutral-900 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
@@ -1208,6 +1556,11 @@ export default function CalendarPage() {
                   <span className="text-xs text-neutral-400">
                     {getRelativeBadge(activeMeeting.starts_at)}
                   </span>
+                  {activeMeeting.calendar_provider && (
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30">
+                      Synced from {activeMeeting.calendar_provider}
+                    </span>
+                  )}
                 </div>
                 <h2 className="text-xl font-bold text-white">{activeMeeting.title}</h2>
               </div>
@@ -1313,20 +1666,182 @@ export default function CalendarPage() {
                 Draft 1-Click Follow-Up
               </Button>
 
-              <Button
-                onClick={() => {
-                  navigate(`/meetings/${activeMeeting.id}/review`);
-                }}
-                className="text-xs bg-cyan-600 hover:bg-cyan-500 text-white"
+              {!activeMeeting.is_demo && (
+                <Button
+                  onClick={() => {
+                    navigate(`/meetings/${activeMeeting.id}/review`);
+                  }}
+                  className="text-xs bg-cyan-600 hover:bg-cyan-500 text-white"
+                >
+                  Open Review Gate <ArrowRight className="size-3.5 ml-1.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. TASK DETAILS MODAL */}
+      {activeTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-lg rounded-2xl border border-white/15 bg-neutral-900 p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    <CheckSquare2 className="size-3" /> Action Item
+                  </span>
+                  <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${PRIORITY_BADGES[activeTask.priority]}`}>
+                    {activeTask.priority}
+                  </span>
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded border ${STATUS_BADGES[activeTask.status]}`}>
+                    {activeTask.status.replace('_', ' ')}
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold text-white">{activeTask.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTask(null)}
+                className="rounded-lg p-1 text-neutral-400 hover:bg-white/10 hover:text-white transition"
               >
-                Open Review Gate <ArrowRight className="size-3.5 ml-1.5" />
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 text-xs space-y-2">
+              <div className="flex items-center justify-between text-neutral-300">
+                <span className="text-neutral-400">Due Date:</span>
+                <span className="font-semibold text-white">
+                  {new Date(activeTask.deadline_utc).toLocaleString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-neutral-300">
+                <span className="text-neutral-400">Workspace:</span>
+                <span>{activeTask.workspace_name}</span>
+              </div>
+              {activeTask.meeting_title && (
+                <div className="flex items-center justify-between text-neutral-300">
+                  <span className="text-neutral-400">Linked Meeting:</span>
+                  <span className="truncate max-w-[200px]">{activeTask.meeting_title}</span>
+                </div>
+              )}
+            </div>
+
+            {activeTask.source_excerpt && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs">
+                <span className="text-[11px] font-semibold text-amber-300 block mb-1">
+                  Source Transcript Excerpt:
+                </span>
+                <p className="text-neutral-200 italic">
+                  &ldquo;{activeTask.source_excerpt}&rdquo;
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveTask(null)}
+                className="text-xs border-white/15 text-neutral-300"
+              >
+                Close
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setActiveTask(null);
+                  navigate('/kanban');
+                }}
+                className="text-xs bg-amber-600 hover:bg-amber-500 text-white gap-1.5"
+              >
+                View on Kanban Board <ArrowRight className="size-3.5" />
               </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 6. CREATE MEETING MODAL */}
+      {/* 7. GCAL EVENT DETAIL & IMPORT MODAL */}
+      {activeGCalEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md rounded-2xl border border-indigo-500/30 bg-neutral-900 p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 mb-2">
+                  <CalendarIcon className="size-3" /> Google Calendar Event
+                </span>
+                <h3 className="text-lg font-bold text-white">{activeGCalEvent.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveGCalEvent(null)}
+                className="rounded-lg p-1 text-neutral-400 hover:bg-white/10 hover:text-white transition"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs space-y-2">
+              <div className="flex items-center justify-between text-neutral-300">
+                <span className="text-neutral-400">Scheduled Time:</span>
+                <span>{new Date(activeGCalEvent.starts_at).toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-neutral-300">
+                <span className="text-neutral-400">Attendees:</span>
+                <span>{activeGCalEvent.attendees.length} participants</span>
+              </div>
+              {activeGCalEvent.conference_url && (
+                <div className="flex items-center justify-between text-neutral-300">
+                  <span className="text-neutral-400">Video Link:</span>
+                  <a
+                    href={activeGCalEvent.conference_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-cyan-400 hover:underline truncate max-w-[200px]"
+                  >
+                    {activeGCalEvent.conference_url}
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              {activeGCalEvent.conference_url && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => window.open(activeGCalEvent.conference_url!, '_blank')}
+                  className="text-xs border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 gap-1.5"
+                >
+                  <Video className="size-3.5" /> Join Call
+                </Button>
+              )}
+              <Button
+                size="sm"
+                onClick={() => {
+                  const ev = activeGCalEvent;
+                  setActiveGCalEvent(null);
+                  handleDateCellClick(new Date(ev.starts_at));
+                }}
+                className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white gap-1.5"
+              >
+                <Plus className="size-3.5" /> Schedule in ActionPulse
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. CREATE MEETING MODAL */}
       {showCreateModal && currentWorkspace && (
         <CreateMeetingModal
           isOpen={showCreateModal}
@@ -1335,12 +1850,12 @@ export default function CalendarPage() {
           initialDate={createInitialDate}
           onMeetingCreated={() => {
             setShowCreateModal(false);
-            fetchAllWorkspaceMeetings();
+            fetchAllWorkspaceData();
           }}
         />
       )}
 
-      {/* 7. FOLLOW-UP MODAL */}
+      {/* 9. FOLLOW-UP MODAL */}
       {showFollowUpModal && followUpMeeting && (
         <FollowUpModal
           isOpen={showFollowUpModal}

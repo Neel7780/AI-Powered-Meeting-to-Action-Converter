@@ -97,7 +97,8 @@ def test_create_meeting_success():
             assert resp.status_code == 201
             data = resp.json()
             assert data["title"] == "Sprint 1 Kickoff"
-            assert data["status"] == "draft"
+            assert "status" not in data
+            assert meetings_mock.insert.call_args.args[0]["status"] == "draft"
             assert data["ai_processing"] is True
     finally:
         app.dependency_overrides.pop(get_current_user, None)
@@ -293,7 +294,7 @@ def test_submit_transcript_conflict_on_ready_status():
                 data={"text": "Priya: Hello"}
             )
             assert resp.status_code == 409
-            assert "draft" in resp.json()["detail"].lower()
+            assert "before processing starts" in resp.json()["detail"]
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

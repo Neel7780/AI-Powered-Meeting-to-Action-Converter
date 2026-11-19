@@ -9,7 +9,7 @@ Endpoints:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -127,7 +127,8 @@ async def oauth_callback(
         logger.warning(f"Failed to fetch user email from Google: {exc}")
         account_email = user.email
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
     client = get_supabase_client()
     upsert_payload = {
         "user_id": str(user.id),
@@ -136,7 +137,7 @@ async def oauth_callback(
         "account_email": account_email,
         "encrypted_refresh_token": encrypted_refresh_token,
         "access_token": access_token,
-        "token_expires_at": (datetime.now(timezone.utc)).isoformat(),
+        "token_expires_at": (now + timedelta(seconds=expires_in)).isoformat(),
         "sync_enabled": True,
         "last_synced_at": now_iso,
         "updated_at": now_iso,
@@ -251,6 +252,14 @@ async def get_upcoming_events(
         events = await fetch_calendar_events(conn_row, workspace_id, days_ahead)
     except Exception as exc:
         logger.error(f"Failed to fetch calendar events: {exc}")
+        if "refresh" in str(exc).lower() or "reconnect" in str(exc).lower():
+            try:
+                client.table("calendar_connections").update({
+                    "sync_enabled": False,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }).eq("id", conn_row["id"]).execute()
+            except Exception as db_exc:
+                logger.warning(f"Failed to disable sync on invalid token: {db_exc}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Error communicating with Google Calendar: {exc}",

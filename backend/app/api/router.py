@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api import (
     analytics,
     audio,
+    auth,
     calendar,
     chat,
     extraction,
@@ -23,6 +24,7 @@ api_router = APIRouter()
 
 # Core service endpoints
 api_router.include_router(health.router, tags=["Health"])
+api_router.include_router(auth.router, tags=["Auth"])
 
 # Sprint 1 Vertical Slice routers
 api_router.include_router(workspaces.router, prefix="/workspaces", tags=["Workspaces"])

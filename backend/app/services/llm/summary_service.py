@@ -47,6 +47,7 @@ class LLMChapter(BaseModel):
     key_points: list[str] = Field(default_factory=list)
     start_seconds: int
     duration_seconds: int
+    end_seconds: int = 0
     speakers: list[str] = Field(default_factory=list)
 
 
@@ -55,6 +56,7 @@ class LLMSummaryAndChapters(BaseModel):
     key_discussion_points: list[LLMDiscussionPoint] = Field(default_factory=list)
     outcomes: list[str] = Field(default_factory=list)
     next_steps: list[str] = Field(default_factory=list)
+    takeaways: list[str] = Field(default_factory=list)
     chapters: list[LLMChapter] = Field(default_factory=list)
 
 
@@ -211,6 +213,7 @@ def generate_meeting_summary(
             decisions=[],
             outcomes=[],
             next_steps=[],
+            takeaways=[],
             speaker_insights=[],
             generated_at=datetime.now(timezone.utc).isoformat(),
             model_used="none",
@@ -245,6 +248,10 @@ def generate_meeting_summary(
         llm_result = _try_llm_summary_and_chapters(title, str(starts_at), canonical_text)
 
     if llm_result:
+        takeaways = llm_result.takeaways or [
+            *(llm_result.outcomes or []),
+            *(llm_result.next_steps or []),
+        ][:5]
         return MeetingSummaryResponse(
             meeting_id=meeting_id,
             overview=llm_result.overview,
@@ -260,6 +267,7 @@ def generate_meeting_summary(
             decisions=decisions_items,
             outcomes=llm_result.outcomes,
             next_steps=llm_result.next_steps,
+            takeaways=takeaways,
             speaker_insights=speaker_insights,
             generated_at=datetime.now(timezone.utc).isoformat(),
             model_used=settings.BEDROCK_MODEL_ID,
@@ -302,6 +310,13 @@ def generate_meeting_summary(
         if it.get("task")
     ]
 
+    takeaways = [
+        *(outcomes or []),
+        *(next_steps[:3] if next_steps else []),
+    ]
+    if not takeaways:
+        takeaways = [f"Reviewed meeting discussion spanning {len(segments)} segments."]
+
     overview = (
         f"Meeting '{title}' conducted with {len(unique_speakers)} participant(s). "
         f"Discussion spanned {len(segments)} transcript segments with {len(action_items)} action item(s) "
@@ -315,6 +330,7 @@ def generate_meeting_summary(
         decisions=decisions_items,
         outcomes=outcomes,
         next_steps=next_steps,
+        takeaways=takeaways,
         speaker_insights=speaker_insights,
         generated_at=meeting.get("updated_at") or meeting.get("created_at") or datetime.now(timezone.utc).isoformat(),
         model_used="deterministic-grounded",
@@ -360,7 +376,8 @@ def generate_meeting_chapters(
         for idx, chap in enumerate(llm_result.chapters):
             start_s = chap.start_seconds
             dur_s = max(30, chap.duration_seconds)
-            end_s = start_s + dur_s
+            end_s = chap.end_seconds if chap.end_seconds > start_s else (start_s + dur_s)
+            end_ts = _format_timestamp(end_s)
 
             # Find matching action items and decisions in this time block
             act_ids = [it_id for (t_s, it_id, it_type) in items_with_time if start_s <= t_s <= end_s and it_type == "action"]
@@ -372,9 +389,12 @@ def generate_meeting_chapters(
                     title=chap.title,
                     timestamp=_format_timestamp(start_s),
                     start_seconds=start_s,
+                    end_seconds=end_s,
+                    end_timestamp=end_ts,
                     duration_seconds=dur_s,
                     duration_str=_format_duration_str(dur_s),
                     summary=chap.summary,
+                    description=chap.summary,
                     speakers=chap.speakers,
                     key_points=chap.key_points,
                     action_item_count=len(act_ids),
@@ -405,7 +425,11 @@ def generate_meeting_chapters(
 
         start_s = int((first_seg.get("start_ms") or 0) / 1000)
         last_s = int((last_seg.get("end_ms") or (last_seg.get("start_ms") or 0) + 15000) / 1000)
+        if last_s <= start_s:
+            last_s = start_s + 30
         dur_s = max(30, last_s - start_s)
+        end_s = last_s
+        end_ts = _format_timestamp(end_s)
 
         chunk_speakers = list(dict.fromkeys(s.get("speaker_name", "Speaker") for s in chunk if s.get("speaker_name")))
 
@@ -426,9 +450,12 @@ def generate_meeting_chapters(
                 title=chap_title,
                 timestamp=_format_timestamp(start_s),
                 start_seconds=start_s,
+                end_seconds=end_s,
+                end_timestamp=end_ts,
                 duration_seconds=dur_s,
                 duration_str=_format_duration_str(dur_s),
                 summary=summary_text,
+                description=summary_text,
                 speakers=chunk_speakers,
                 key_points=key_pts,
                 action_item_count=len(act_ids),

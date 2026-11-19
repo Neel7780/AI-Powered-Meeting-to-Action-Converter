@@ -194,4 +194,3 @@ def update_member_role(
         user_id=str(member_id),
         role=payload.role
     )
-

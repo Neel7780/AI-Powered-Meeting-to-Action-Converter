@@ -13,16 +13,20 @@ export default function FloatingChatWidget({ workspaceId }: FloatingChatWidgetPr
 
   return (
     <div className="fixed bottom-6 right-6 z-50">
-      {isOpen ? (
-        <div className="w-[92vw] sm:w-[460px] h-[580px] max-h-[84vh] rounded-2xl border border-white/15 bg-[#07070a]/95 backdrop-blur-2xl shadow-2xl overflow-hidden flex flex-col transition-all">
-          <ChatInterface
-            workspaceId={workspaceId}
-            isCompact={true}
-            onClose={() => setIsOpen(false)}
-            title="Meeting Copilot"
-          />
-        </div>
-      ) : (
+      <div
+        className={`w-[92vw] sm:w-[460px] h-[580px] max-h-[84vh] rounded-2xl border border-white/15 bg-[#07070a]/95 backdrop-blur-2xl shadow-2xl overflow-hidden flex flex-col transition-all duration-200 ${
+          isOpen ? 'scale-100 opacity-100 pointer-events-auto' : 'hidden pointer-events-none'
+        }`}
+      >
+        <ChatInterface
+          workspaceId={workspaceId}
+          isCompact={true}
+          onClose={() => setIsOpen(false)}
+          title="Meeting Copilot"
+        />
+      </div>
+
+      {!isOpen && (
         <button
           type="button"
           onClick={() => setIsOpen(true)}

@@ -161,4 +161,3 @@ def test_update_member_role_admin_cannot_demote_admin():
         assert "owner" in response.json()["detail"].lower()
 
     app.dependency_overrides.clear()
-

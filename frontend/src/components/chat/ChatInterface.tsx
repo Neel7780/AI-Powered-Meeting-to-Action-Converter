@@ -107,9 +107,9 @@ function FormattedContent({ content }: { content: string }) {
   );
 }
 
-/** Render bold, code snippets, and status tags */
+/** Render bold, code snippets, status tags, and italics */
 function renderInline(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
+  const parts = text.split(/(\*\*.*?\*\*|\*[^*\n]+?\*|`.*?`)/g);
 
   return parts.map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) {
@@ -136,6 +136,13 @@ function renderInline(text: string): React.ReactNode {
         <strong key={index} className="font-semibold text-white">
           {boldText}
         </strong>
+      );
+    }
+    if (part.startsWith('*') && part.endsWith('*') && !part.startsWith('**')) {
+      return (
+        <em key={index} className="italic text-neutral-300">
+          {part.slice(1, -1)}
+        </em>
       );
     }
     if (part.startsWith('`') && part.endsWith('`')) {
@@ -169,16 +176,24 @@ export default function ChatInterface({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load available meetings for the scoping selector
+  // Load available meetings for the scoping selector and reset workspace state
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
+
+    // Reset meeting scope, messages, and citations when workspace changes
+    setSelectedMeetingId('');
+    setMessages([]);
+    setExpandedCitations({});
 
     getWorkspaceChatMeetings(workspaceId)
       .then((data) => {
         if (!cancelled) setMeetings(data);
       })
-      .catch((err) => console.error('Failed to load chat meetings:', err));
+      .catch((err) => {
+        console.error('Failed to load chat meetings:', err);
+        if (!cancelled) setMeetings([]);
+      });
 
     return () => {
       cancelled = true;
@@ -206,11 +221,13 @@ export default function ChatInterface({
     setLoading(true);
 
     try {
-      // Build history of previous turns (excluding initial greeting)
-      const historyTurns = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      // Build history of previous turns (excluding initial greeting and error notices)
+      const historyTurns = messages
+        .filter((m) => !m.id.startsWith('err-') && !m.content.startsWith('⚠️'))
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+        }));
 
       const res = await sendChatMessage({
         workspace_id: workspaceId,

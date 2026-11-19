@@ -1,4 +1,5 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 
 import ActionPulseLanding from "./components/landing/ActionPulseLanding";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
@@ -11,14 +12,44 @@ import CalendarCallback from "./pages/CalendarCallback";
 import GitHubCallback from "./pages/GitHubCallback";
 import SpeakerMapping from "./pages/SpeakerMapping";
 import WorkspaceChatPage from "./pages/WorkspaceChatPage";
+import { useAuth } from "./context/AuthContext";
+
+/** Redirects authenticated users straight to /dashboard; shows landing otherwise. */
+function RootRoute() {
+  const { user } = useAuth();
+  if (user) return <Navigate to="/dashboard" replace />;
+  return <ActionPulseLanding />;
+}
+
+/**
+ * Listens for auth recovery parameters (#access_token=...&type=recovery or ?flow=reset)
+ * across any incoming route and seamlessly directs users to /reset-password.
+ */
+function AuthRecoveryListener() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    const pathname = window.location.pathname || "";
+    if (
+      pathname !== "/reset-password" &&
+      (hash.includes("type=recovery") || search.includes("type=recovery") || search.includes("flow=reset"))
+    ) {
+      navigate(`/reset-password${search}${hash}`, { replace: true });
+    }
+  }, [navigate]);
+  return null;
+}
 
 function App() {
   return (
     <BrowserRouter>
+      <AuthRecoveryListener />
       <Routes>
-        <Route path="/" element={<ActionPulseLanding />} />
+        <Route path="/" element={<RootRoute />} />
 
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/create-meeting" element={<Navigate to="/meetings" replace />} />
         <Route path="/meeting-review" element={<MeetingReview />} />

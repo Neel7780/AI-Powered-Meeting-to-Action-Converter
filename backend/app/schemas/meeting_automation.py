@@ -117,7 +117,6 @@ class AutomatedMeetingFeedItem(BaseModel):
     provider: str
     starts_at: datetime
     timezone: str
-    status: str
     conference_url: Optional[str] = None
     has_transcript: bool = False
     task_count: int = 0

@@ -126,7 +126,7 @@ def upload_audio(
     if meeting.get("status") not in ("draft", "failed"):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"Audio can only be uploaded in 'draft' or 'failed' status (current: '{meeting.get('status')}')",
+            "A recording can be uploaded before processing starts or after a failed attempt.",
         )
     if not diarization.is_configured():
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Diarization worker is not configured")
