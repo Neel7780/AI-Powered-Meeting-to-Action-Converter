@@ -720,19 +720,48 @@ html {
 
 .hover-whitish {
   color: #888888;
-  transition: color 0.2s ease, text-shadow 0.2s ease;
+  transition: color 0.15s ease;
 }
 .hover-whitish:hover {
   color: #ffffff !important;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.45);
 }
 
 .hover-whitish-link {
-  color: #ededed;
-  transition: color 0.2s ease, text-shadow 0.2s ease;
+  color: #ffffff;
+  transition: color 0.15s ease;
 }
 .hover-whitish-link:hover {
   color: #ffffff !important;
-  text-decoration: underline;
-  text-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+  text-decoration: underline !important;
+}
+
+/* Auth input field styling - exact pitch black, override browser autofill blue */
+.auth-input {
+  background-color: #000000 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+  border: 1px solid #333333 !important;
+}
+
+.auth-input:focus {
+  border-color: #555555 !important;
+  outline: none !important;
+}
+
+.auth-input:-webkit-autofill,
+.auth-input:-webkit-autofill:hover,
+.auth-input:-webkit-autofill:focus,
+.auth-input:-webkit-autofill:active,
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #000000 inset !important;
+  box-shadow: 0 0 0 1000px #000000 inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  color: #ffffff !important;
+  caret-color: #ffffff !important;
+  background-color: #000000 !important;
+  background: #000000 !important;
+  transition: background-color 5000s ease-in-out 0s;
 }

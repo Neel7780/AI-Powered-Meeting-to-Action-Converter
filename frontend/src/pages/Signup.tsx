@@ -60,8 +60,9 @@ export default function Signup() {
     padding: "0.65rem 0.85rem",
     borderRadius: 6,
     border: "1px solid #333",
-    background: "#000",
-    color: "#fff",
+    background: "#000000",
+    backgroundColor: "#000000",
+    color: "#ffffff",
     fontSize: "0.875rem",
     outline: "none",
     boxSizing: "border-box",
@@ -169,6 +170,7 @@ export default function Signup() {
               <label htmlFor="signup-name" style={labelStyle}>Full Name</label>
               <input
                 id="signup-name"
+                className="auth-input"
                 style={inputStyle}
                 type="text"
                 placeholder="Alex Morgan"
@@ -184,6 +186,7 @@ export default function Signup() {
               <label htmlFor="signup-email" style={labelStyle}>Work Email</label>
               <input
                 id="signup-email"
+                className="auth-input"
                 style={inputStyle}
                 type="email"
                 placeholder="name@work-email.com"
@@ -200,6 +203,7 @@ export default function Signup() {
               <div style={{ position: "relative", width: "100%" }}>
                 <input
                   id="signup-password"
+                  className="auth-input"
                   style={{ ...inputStyle, paddingRight: "2.5rem" }}
                   type={showPassword ? "text" : "password"}
                   placeholder="At least 8 characters"
