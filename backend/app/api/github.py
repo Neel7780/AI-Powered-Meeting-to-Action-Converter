@@ -11,7 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, Response
 from app.core.config import settings
 from app.core.deps import ADMIN_ROLES, DEV_USER_ID, WORKSPACE_ROLES, CurrentUser, get_current_user, require_role
 from app.core.supabase import get_supabase_client
-from app.schemas.github import GitHubAccessUpdate, GitHubInstallCallback, GitHubMappingUpdate, GitHubOAuthCallback
+from app.schemas.github import (
+    GitHubAccessUpdate,
+    GitHubExistingConnection,
+    GitHubInstallCallback,
+    GitHubMappingUpdate,
+    GitHubOAuthCallback,
+)
 from app.services import github
 
 
@@ -46,6 +52,26 @@ def connect(workspace_id: UUID, user: CurrentUser = Depends(integration_user)):
     return {"url": url}
 
 
+@router.post("/workspaces/{workspace_id}/github/discover")
+def discover(workspace_id: UUID, user: CurrentUser = Depends(integration_user)):
+    require_role(workspace_id, ADMIN_ROLES, user)
+    github.require_configured()
+    # A null installation ID identifies account discovery in the OAuth callback.
+    state = github.new_state(workspace_id, user.id, "oauth")
+    return {"url": github.authorization_url(state, choose_account=True)}
+
+
+@router.post("/workspaces/{workspace_id}/github/connect-existing")
+def connect_existing(workspace_id: UUID, payload: GitHubExistingConnection,
+                     user: CurrentUser = Depends(integration_user)):
+    require_role(workspace_id, ADMIN_ROLES, user)
+    github.require_configured()
+    # An installation ID is only a candidate. The existing OAuth callback verifies
+    # the user's current GitHub access before creating any workspace connection.
+    state = github.new_state(workspace_id, user.id, "oauth", payload.installation_id)
+    return {"url": github.authorization_url(state)}
+
+
 @router.post("/github/install-callback")
 def install_callback(payload: GitHubInstallCallback, user: CurrentUser = Depends(integration_user)):
     github.require_configured()
@@ -59,6 +85,10 @@ def install_callback(payload: GitHubInstallCallback, user: CurrentUser = Depends
 async def oauth_callback(payload: GitHubOAuthCallback, user: CurrentUser = Depends(integration_user)):
     github.require_configured()
     state = github.consume_state(payload.state, user.id, "oauth")
+    if state["installation_id"] is None:
+        choices = await github.discover_installations(payload.code, payload.state)
+        require_role(UUID(state["workspace_id"]), ADMIN_ROLES, user)
+        return {"workspace_id": state["workspace_id"], **choices}
     installation, repos = await github.verify_installer(state["installation_id"], payload.code, payload.state)
     # The transaction rechecks admin membership after all network waits.
     github.rpc("github_complete_connection", p_workspace_id=state["workspace_id"], p_actor_id=str(user.id),

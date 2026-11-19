@@ -36,6 +36,15 @@ begin
   update public.github_installation_states set expires_at = now() - interval '1 second';
   assert public.github_consume_state(repeat('b', 64), admin_a, 'install') is null, 'Expired state accepted';
 
+  -- Account discovery authorizes before choosing an installation.
+  perform public.github_begin_state(b, admin_b, repeat('c', 64), 'oauth', null);
+  assert public.github_consume_state(repeat('c', 64), admin_a, 'oauth') is null, 'Wrong user consumed discovery state';
+  assert public.github_consume_state(repeat('c', 64), admin_b, 'install') is null, 'Setup callback consumed discovery state';
+  assert public.github_consume_state(repeat('c', 64), admin_b, 'oauth') @> jsonb_build_object(
+    'workspace_id', b, 'phase', 'oauth', 'installation_id', null
+  ), 'Discovery state did not preserve the selected workspace';
+  assert public.github_consume_state(repeat('c', 64), admin_b, 'oauth') is null, 'Discovery state was replayable';
+
   perform public.github_complete_connection(a, admin_a, installation, repos);
   perform public.github_complete_connection(b, admin_b, installation, repos);
   perform public.github_manage_repository(a, admin_a, 501, true);
