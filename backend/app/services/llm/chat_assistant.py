@@ -11,8 +11,10 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.core.deps import CurrentUser, filter_visible_meetings
 from app.core.supabase import get_supabase_client
 from app.schemas.chat import ChatCitation, ChatMessage, ChatResponse
+from app.services.llm.consent import meeting_ai_allowed
 from app.services.llm.bedrock import create_structured_model, llm_is_configured
 
 logger = logging.getLogger(__name__)
@@ -57,141 +59,6 @@ STRICT GROUNDING RULES:
 """
 
 
-def _get_demo_meeting_data(
-    workspace_id: UUID, meeting_id: UUID | None
-) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
-    """Rich fallback meeting fixtures for zero-setup developer testing."""
-    m1_id = "11111111-1111-1111-1111-111111111111"
-    m2_id = "22222222-2222-2222-2222-222222222222"
-
-    meetings = [
-        {
-            "id": m1_id,
-            "title": "Sprint 1 Architecture & Action Item Sync",
-            "starts_at": "2026-10-24T10:00:00Z",
-            "timezone": "Asia/Kolkata",
-            "organiser_id": "00000000-0000-0000-0000-000000000001",
-            "visibility": "workspace",
-            "status": "ready",
-            "lifecycle": "active",
-            "participants": [{"external_name": "Neel Khatri"}, {"external_name": "Bharat Odedara"}, {"external_name": "Madhav Chauhan"}]
-        },
-        {
-            "id": m2_id,
-            "title": "Product Roadmap & AI Extraction Review",
-            "starts_at": "2026-10-22T14:30:00Z",
-            "timezone": "Asia/Kolkata",
-            "organiser_id": "00000000-0000-0000-0000-000000000001",
-            "visibility": "workspace",
-            "status": "ready",
-            "lifecycle": "active",
-            "participants": [{"external_name": "Neel Khatri"}, {"external_name": "Krishna Parmar"}]
-        }
-    ]
-
-    if meeting_id:
-        meetings = [m for m in meetings if m["id"] == str(meeting_id)] or meetings[:1]
-
-    tasks = [
-        {
-            "id": "t1111111-1111-1111-1111-111111111111",
-            "meeting_id": m1_id,
-            "title": "Configure Brevo SMTP credentials and API keys in Render",
-            "description": "Set up Brevo HTTPS API key for zero-cost email delivery on Render free tier.",
-            "deadline_utc": "2026-10-30T18:00:00Z",
-            "priority": "high",
-            "status": "todo",
-            "source_excerpt": "Bharat will set up Brevo SMTP API keys on Render by Friday.",
-            "external_owner_label": None,
-            "assignees": ["Bharat Odedara"],
-            "created_at": "2026-10-24T11:00:00Z"
-        },
-        {
-            "id": "t2222222-2222-2222-2222-222222222222",
-            "meeting_id": m1_id,
-            "title": "Implement meeting chatbot frontend interface and widget",
-            "description": "Build dark themed chat page and floating assistant copilot widget.",
-            "deadline_utc": "2026-10-28T18:00:00Z",
-            "priority": "urgent",
-            "status": "in_progress",
-            "source_excerpt": "Neel will lead the meeting chatbot interface matching the dark theme.",
-            "external_owner_label": None,
-            "assignees": ["Neel Khatri"],
-            "created_at": "2026-10-24T11:05:00Z"
-        },
-        {
-            "id": "t3333333-3333-3333-3333-333333333333",
-            "meeting_id": m2_id,
-            "title": "Verify transcript parsers for .vtt and .docx uploads",
-            "description": "Ensure transcript parsing handles timestamps and cue IDs properly.",
-            "deadline_utc": "2026-10-23T18:00:00Z",
-            "priority": "normal",
-            "status": "done",
-            "source_excerpt": "Krishna confirmed the parsers handle cue IDs and docx tables.",
-            "external_owner_label": None,
-            "assignees": ["Krishna Parmar"],
-            "created_at": "2026-10-22T15:00:00Z"
-        },
-        {
-            "id": "t4444444-4444-4444-4444-444444444444",
-            "meeting_id": m1_id,
-            "title": "Resolve Supabase database connection and DNS lookup",
-            "description": "Investigate DNS resolution failures on the database host.",
-            "deadline_utc": "2026-10-29T18:00:00Z",
-            "priority": "high",
-            "status": "blocked",
-            "source_excerpt": "Madhav reported DNS resolution failures on the database host.",
-            "external_owner_label": None,
-            "assignees": ["Madhav Chauhan"],
-            "created_at": "2026-10-24T11:10:00Z"
-        }
-    ]
-
-    extracted_items = [
-        {
-            "id": "d1111111-1111-1111-1111-111111111111",
-            "meeting_id": m1_id,
-            "type": "decision",
-            "task": "Deploy backend on Render free tier using standard uvicorn worker",
-            "owner_name": None,
-            "deadline_raw": None,
-            "deadline_utc": None,
-            "priority": "normal",
-            "source_excerpt": "We all agreed on deploying the FastAPI service to Render using standard uvicorn worker.",
-            "review_status": "approved",
-            "uncertainty_flag": False
-        },
-        {
-            "id": "d2222222-2222-2222-2222-222222222222",
-            "meeting_id": m1_id,
-            "type": "decision",
-            "task": "Maintain zero-budget constraints: only free Gemini Flash-Lite and free tier email",
-            "owner_name": None,
-            "deadline_raw": None,
-            "deadline_utc": None,
-            "priority": "normal",
-            "source_excerpt": "The team confirmed zero-budget constraint: only free Gemini flash-lite and free tier email.",
-            "review_status": "approved",
-            "uncertainty_flag": False
-        }
-    ]
-
-    transcripts = [
-        {
-            "id": "tr111111-1111-1111-1111-111111111111",
-            "meeting_id": m1_id,
-            "canonical_text": "[Neel]: Welcome team. In this sync we need to finalize the Sprint 1 vertical slice. Bharat, can you configure the Brevo SMTP credentials by Friday? [Bharat]: Yes, I will set up Brevo SMTP API keys on Render by Friday. [Madhav]: What about the chatbot? [Neel]: Neel will lead the meeting chatbot interface matching the dark theme. We all agreed on deploying the FastAPI service to Render using standard uvicorn worker. The team confirmed zero-budget constraint: only free Gemini flash-lite and free tier email. Madhav reported DNS resolution failures on the database host."
-        },
-        {
-            "id": "tr222222-2222-2222-2222-222222222222",
-            "meeting_id": m2_id,
-            "canonical_text": "[Krishna]: All parser unit tests are passing. Krishna confirmed the parsers handle cue IDs and docx tables. We are ready for extraction integration."
-        }
-    ]
-
-    return meetings, tasks, extracted_items, transcripts
-
-
 def _load_workspace_meeting_data(
     db: Any,
     workspace_id: UUID,
@@ -206,7 +73,7 @@ def _load_workspace_meeting_data(
         # 1. Fetch meetings
         meetings_query = (
             db.table("meetings")
-            .select("id, title, starts_at, timezone, organiser_id, visibility, status, lifecycle")
+            .select("id, title, starts_at, timezone, organiser_id, visibility, status, lifecycle, ai_processing")
             .eq("workspace_id", str_workspace_id)
             .neq("lifecycle", "deleted")
         )
@@ -235,19 +102,13 @@ def _load_workspace_meeting_data(
         else:
             participants_by_meeting = {}
 
-        for m in raw_meetings:
-            if m.get("visibility") == "private":
-                is_organiser = str(m.get("organiser_id")) == str_user_id
-                is_participant = any(
-                    str(p.get("user_id")) == str_user_id for p in participants_by_meeting.get(m["id"], [])
-                )
-                if not (is_organiser or is_participant):
-                    continue
+        for m in filter_visible_meetings(db, raw_meetings, CurrentUser(id=user_id, email="")):
+            m["ai_processing"] = meeting_ai_allowed(db, m)
             m["participants"] = participants_by_meeting.get(m["id"], [])
             accessible_meetings.append(m)
 
         if not accessible_meetings:
-            return _get_demo_meeting_data(workspace_id, meeting_id)
+            return [], [], [], []
 
         accessible_ids = [m["id"] for m in accessible_meetings]
 
@@ -316,8 +177,8 @@ def _load_workspace_meeting_data(
 
         return accessible_meetings, raw_tasks, extracted_items, raw_transcripts
     except Exception as exc:
-        logger.info("Database query fallback in _load_workspace_meeting_data: %s", exc)
-        return _get_demo_meeting_data(workspace_id, meeting_id)
+        logger.error("Unable to load workspace context: %s", exc)
+        raise
 
 
 def _build_context_xml(
@@ -327,6 +188,17 @@ def _build_context_xml(
     transcripts: list[dict]
 ) -> str:
     """Format accessible meeting records into delimited XML for strict grounding."""
+    import html
+    # Escape untrusted values before inserting them into the context delimiters.
+    def escape(value):
+        if isinstance(value, str):
+            return html.escape(value, quote=True)
+        if isinstance(value, list):
+            return [escape(v) for v in value]
+        if isinstance(value, dict):
+            return {k: escape(v) for k, v in value.items()}
+        return value
+    meetings, tasks, extracted_items, transcripts = map(escape, (meetings, tasks, extracted_items, transcripts))
     lines: list[str] = ["<workspace_meetings_data>"]
 
     items_by_meeting: dict[str, list[dict]] = {}
@@ -527,7 +399,7 @@ def answer_workspace_chat(
             meeting_context_count=0
         )
 
-    if not llm_is_configured():
+    if not llm_is_configured() or any(not m.get("ai_processing", False) for m in meetings):
         return _build_fallback_answer(query, meetings, tasks, extracted_items)
 
     context_xml = _build_context_xml(meetings, tasks, extracted_items, transcripts)
@@ -564,8 +436,8 @@ def answer_workspace_chat(
         try:
             db.table("llm_runs").insert([{
                 "meeting_id": str(meetings[0]["id"]) if meetings else None,
-                "provider": "bedrock",
-                "model_version": settings.BEDROCK_MODEL_ID,
+                "provider": result.get("provider", "bedrock"),
+                "model_version": result.get("model_version", settings.BEDROCK_MODEL_ID),
                 "input_tokens": usage.get("input_tokens"),
                 "output_tokens": usage.get("output_tokens"),
                 "latency_ms": latency_ms,

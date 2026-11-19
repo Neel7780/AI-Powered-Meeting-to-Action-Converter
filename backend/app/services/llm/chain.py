@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
-from app.services.llm.bedrock import create_structured_model
+from app.services.llm.bedrock import create_structured_model, bedrock_is_configured
+from app.core.config import settings
 from app.services.llm.prompt import PROMPT, LLMExtraction
 
 
@@ -19,6 +20,8 @@ class LLMCall:
     latency_ms: int
     payload_hash: str
     error_code: str | None = None
+    provider: str = "bedrock"
+    model_version: str | None = None
 
 
 def _structured_model():
@@ -42,6 +45,8 @@ def extract(prompt_inputs: dict) -> tuple[LLMExtraction | None, list[LLMCall]]:
     for _ in range(2):  # first try + one repair
         started = time.monotonic()
         call = LLMCall(None, None, 0, _payload_hash(messages))
+        call.provider = "bedrock" if bedrock_is_configured() else "gemini"
+        call.model_version = settings.BEDROCK_MODEL_ID if call.provider == "bedrock" else settings.GEMINI_MODEL
         calls.append(call)
         try:
             out = model.invoke(messages)
@@ -51,6 +56,8 @@ def extract(prompt_inputs: dict) -> tuple[LLMExtraction | None, list[LLMCall]]:
             return None, calls
         call.latency_ms = int((time.monotonic() - started) * 1000)
 
+        call.provider = out.get("provider", call.provider)
+        call.model_version = out.get("model_version", call.model_version)
         raw: AIMessage | None = out.get("raw")
         usage = getattr(raw, "usage_metadata", None) or {}
         call.input_tokens = usage.get("input_tokens")

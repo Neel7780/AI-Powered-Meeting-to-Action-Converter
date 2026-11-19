@@ -28,7 +28,7 @@ def test_bedrock_chat_usage_fallback_and_provider_allowlist(monkeypatch, allowed
     }
     with patch("app.services.llm.chat_assistant.get_supabase_client", return_value=db), \
          patch("app.services.llm.chat_assistant._load_workspace_meeting_data", return_value=(
-             [{"id": str(uuid4()), "title": "Sprint sync"}], [], [], [],
+             [{"id": str(uuid4()), "title": "Sprint sync", "ai_processing": True}], [], [], [],
          )), \
          patch("app.services.llm.chat_assistant._build_context_xml", return_value="<workspace_meetings_data />"), \
          patch("app.services.llm.chat_assistant.create_structured_model", return_value=model) as factory, \
@@ -236,6 +236,7 @@ def test_list_chat_meetings():
     meetings_mock.execute.return_value = MagicMock(data=[{
         "id": str(meeting_id),
         "title": "Sprint 1 Retrospective",
+        "workspace_id": str(workspace_id),
         "starts_at": "2026-10-22T14:00:00Z",
         "status": "ready"
     }])

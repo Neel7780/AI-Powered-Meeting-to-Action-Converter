@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
   X,
@@ -250,10 +250,13 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
     setTimeout(() => setToast(null), 3500);
   };
 
+  const generation = useRef(0);
   const handleGenerate = async (
     targetId: string = selectedTargetId,
     targetTone: FollowUpTone = tone
   ) => {
+    const request = ++generation.current;
+    setSubject(''); setMarkdownBody(''); setHtmlBody(''); setRecipientEmails([]); setWhatsappUrl('');
     try {
       setLoading(true);
       const targetUser = participants.find(p => p.user_id === targetId || p.name === targetId);
@@ -265,6 +268,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
         tone: targetTone
       });
 
+      if (request !== generation.current) return;
       // Sanitize subject if any raw python tokens leaked
       let cleanSubject = draft.subject || '';
       if (cleanSubject.includes("'text':")) {
@@ -290,9 +294,9 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
       }
     } catch (err) {
       console.error('Failed to generate draft follow-up:', err);
-      showToast('Error generating follow-up draft', 'error');
+      if (request === generation.current) showToast('Error generating follow-up draft', 'error');
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
   };
 
@@ -300,6 +304,7 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
     if (isOpen) {
       handleGenerate('all', 'executive');
     }
+    return () => { generation.current++; };
   }, [isOpen, meetingId]);
 
   if (!isOpen) return null;
@@ -341,10 +346,8 @@ export const FollowUpModal: React.FC<FollowUpModalProps> = ({
         content_markdown: markdownBody,
         content_html: htmlBody
       });
-      showToast(res.message || `Dispatched to ${res.recipients_count} recipients`, 'success');
-      setTimeout(() => {
-        onClose();
-      }, 1500);
+      showToast(res.failed_recipients?.length ? `${res.recipients_count} accepted; failed: ${res.failed_recipients.join(', ')}` : res.message || `Accepted for ${res.recipients_count} recipients`, res.failed_recipients?.length ? 'error' : 'success');
+      if (!res.failed_recipients?.length) setTimeout(onClose, 1500);
     } catch (err: any) {
       console.error('Send follow-up failed:', err);
       showToast(err.message || 'Failed to dispatch email', 'error');

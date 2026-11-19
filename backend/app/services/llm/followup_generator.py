@@ -6,6 +6,7 @@ multi-channel follow-up drafts using Amazon Bedrock (with deterministic fallback
 
 import html
 import logging
+import json
 import urllib.parse
 from typing import Any, List, Optional
 from uuid import UUID
@@ -19,6 +20,7 @@ from app.schemas.followup import (
     FollowUpParticipant,
     FollowUpTone,
 )
+from app.services.llm.consent import meeting_ai_allowed
 from app.services.llm.bedrock import create_chat_model, llm_is_configured
 
 logger = logging.getLogger(__name__)
@@ -48,68 +50,14 @@ SUBJECT: [Clear, compelling subject line]
 """
 
 
-def _get_demo_meeting_data(meeting_id: UUID | str) -> dict[str, Any]:
-    """Rich demo fixture for developer testing and offline validation."""
-    return {
-        "id": str(meeting_id),
-        "title": "Sprint 2 Architecture & AI Staging Review",
-        "starts_at": "2026-10-24T10:00:00Z",
-        "timezone": "Asia/Kolkata",
-        "organiser_name": "Madhav Chauhan",
-        "ai_processing": True,
-        "participants": [
-            {"user_id": "00000000-0000-0000-0000-000000000001", "name": "Arnav Pandita", "email": "arnav.pandita@workspace.io", "is_organiser": False},
-            {"user_id": "00000000-0000-0000-0000-000000000002", "name": "Bharat Odedara", "email": "bharat.odedara@workspace.io", "is_organiser": False},
-            {"user_id": "00000000-0000-0000-0000-000000000003", "name": "Yuvraj Katara", "email": "yuvraj.katara@workspace.io", "is_organiser": False},
-            {"user_id": "00000000-0000-0000-0000-000000000004", "name": "Madhav Chauhan", "email": "madhav.chauhan@workspace.io", "is_organiser": True},
-            {"user_id": "00000000-0000-0000-0000-000000000005", "name": "Harshil Patel", "email": "harshil.patel@workspace.io", "is_organiser": False},
-        ],
-        "decisions": [
-            {"text": "Confirmed zero-budget architecture using FastAPI, Supabase free tier, and Gemini 3.1 Flash-Lite.", "speaker": "Madhav Chauhan"},
-            {"text": "All candidate action items require human organizer approval before publishing to Kanban.", "speaker": "Yuvraj Katara"},
-            {"text": "WhatsApp sharing will use zero-cost wa.me prefilled URL links instead of paid Business API.", "speaker": "Harshil Patel"}
-        ],
-        "tasks": [
-            {
-                "id": "t-1",
-                "title": "Build 1-Click WhatsApp share link generator",
-                "owner_id": "00000000-0000-0000-0000-000000000005",
-                "owner_name": "Harshil Patel",
-                "deadline": "2026-11-02",
-                "priority": "high",
-                "quote": "Harshil will complete the wa.me URL generator component by Monday."
-            },
-            {
-                "id": "t-2",
-                "title": "Configure Brevo free SMTP and email delivery fallback",
-                "owner_id": "00000000-0000-0000-0000-000000000002",
-                "owner_name": "Bharat Odedara",
-                "deadline": "2026-11-03",
-                "priority": "urgent",
-                "quote": "Bharat will wire up Brevo HTTPS API to bypass Render outbound SMTP blocks."
-            },
-            {
-                "id": "t-3",
-                "title": "Implement RLS database policies for workspace invites",
-                "owner_id": "00000000-0000-0000-0000-000000000001",
-                "owner_name": "Arnav Pandita",
-                "deadline": "2026-11-04",
-                "priority": "normal",
-                "quote": "Arnav will write the migration for workspace_invites with RLS enforcement."
-            }
-        ],
-        "transcript_summary": "The team reviewed the Sprint 2 deliverables, aligning on the staging review gate, email delivery constraints on Render, and Kanban task flow."
-    }
-
-
 def _load_meeting_context(meeting_id: UUID | str) -> dict[str, Any]:
-    """Fetch meeting data from Supabase, falling back to demo fixtures if not yet persisted."""
+    """Fetch persisted meeting records; propagate missing data and query failures."""
     m_id_str = str(meeting_id)
     try:
         supabase = get_supabase_client()
         m_resp = supabase.table("meetings").select("*").eq("id", m_id_str).execute()
         if not m_resp.data:
-            return _get_demo_meeting_data(meeting_id)
+            raise ValueError("Meeting not found")
 
         meeting = m_resp.data[0]
         workspace_id = meeting.get("workspace_id")
@@ -181,15 +129,15 @@ def _load_meeting_context(meeting_id: UUID | str) -> dict[str, Any]:
             "starts_at": meeting.get("starts_at") or "",
             "timezone": meeting.get("timezone") or "Asia/Kolkata",
             "organiser_name": profiles_map.get(meeting.get("organiser_id"), {}).get("display_name", "Organiser"),
-            "ai_processing": meeting.get("ai_processing", True),
-            "participants": participants or _get_demo_meeting_data(meeting_id)["participants"],
-            "decisions": decisions or _get_demo_meeting_data(meeting_id)["decisions"],
-            "tasks": tasks or _get_demo_meeting_data(meeting_id)["tasks"],
-            "transcript_summary": tr_text[:1200] if tr_text else _get_demo_meeting_data(meeting_id)["transcript_summary"]
+            "ai_processing": meeting_ai_allowed(supabase, meeting),
+            "participants": participants,
+            "decisions": decisions,
+            "tasks": tasks,
+            "transcript_summary": tr_text[:1200]
         }
     except Exception as exc:
-        logger.warning("Falling back to demo fixtures for meeting context %s: %s", meeting_id, exc)
-        return _get_demo_meeting_data(meeting_id)
+        logger.error("Unable to load meeting context %s: %s", meeting_id, exc)
+        raise
 
 
 
@@ -230,14 +178,14 @@ def _build_deterministic_followup(
 
     if tone == FollowUpTone.EXECUTIVE:
         lines.append("### 🎯 Executive Summary")
-        lines.append(f"The team convened for *{title}* to review milestones, align on Sprint deliverables, and eliminate active workflow blockers.\n")
+        lines.append(f"Follow-up for *{title}*, based on recorded decisions and approved tasks.\n")
 
         lines.append("### 📌 Key Decisions & Consensus")
         if decisions:
             for d in decisions:
                 lines.append(f"- **Decision:** {d.get('text')}")
         else:
-            lines.append("- Confirmed current sprint timeline and architecture deliverables.")
+            lines.append("No approved decisions recorded.")
         lines.append("")
 
         lines.append("### 🚀 Critical Action Items")
@@ -272,7 +220,7 @@ def _build_deterministic_followup(
         lines.append("")
         lines.append("💬 Please react with 👍 to confirm your deliverables or drop any blockers below!")
 
-    lines.append("\n---\n*Generated via ActionPulse Meeting Copilot.*")
+    lines.append("\n---\n*Generated from recorded decisions and confirmed tasks; no AI model was used.*")
     return subject, "\n".join(lines)
 
 
@@ -327,7 +275,7 @@ def _render_email_html(
     <tr>
       <td style="padding: 32px;">
         <div style="margin-bottom: 24px;">
-          <span style="display: inline-block; background-color: #e0e7ff; color: #3730a3; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 9999px; text-transform: uppercase;">1-Click AI Follow-Up</span>
+          <span style="display: inline-block; background-color: #e0e7ff; color: #3730a3; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 9999px; text-transform: uppercase;">Meeting Follow-Up</span>
         </div>
         {body_markup}
         <div style="margin: 32px 0 16px 0; text-align: center;">
@@ -433,6 +381,9 @@ def generate_meeting_followup(
             effective_name = p.get("name")
             break
 
+    if target_user_id and target_participant is None:
+        raise ValueError("Target member is not a participant in this meeting")
+
     # Participants list for UI recipient selection
     task_counts = {}
     for t in ctx.get("tasks", []):
@@ -494,7 +445,7 @@ Tone: {tone.value}
 Target Recipient: {effective_name or 'All Attendees (Team Summary)'}
 Meeting Context:
 <meeting_data>
-{meeting_payload}
+{html.escape(json.dumps(meeting_payload, default=str))}
 </meeting_data>
 
 Draft the follow-up according to the requested tone and recipient guidelines.

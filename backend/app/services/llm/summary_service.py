@@ -14,9 +14,8 @@ from typing import Literal
 from uuid import UUID
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
-from app.core.config import settings
 from app.schemas.meetings import (
     MeetingChaptersResponse,
     MeetingChapterItem,
@@ -51,6 +50,7 @@ class LLMChapter(BaseModel):
 
 
 class LLMSummaryAndChapters(BaseModel):
+    _model_used: str = PrivateAttr(default="")
     overview: str
     key_discussion_points: list[LLMDiscussionPoint] = Field(default_factory=list)
     outcomes: list[str] = Field(default_factory=list)
@@ -170,7 +170,7 @@ def _try_llm_summary_and_chapters(
     try:
         from langchain_core.prompts import ChatPromptTemplate
 
-        structured_model = create_structured_model(LLMSummaryAndChapters)
+        structured_model = create_structured_model(LLMSummaryAndChapters, include_raw=True)
         prompt_tmpl = ChatPromptTemplate.from_messages([
             ("system", SUMMARY_SYSTEM_PROMPT),
             ("human", SUMMARY_HUMAN_PROMPT),
@@ -182,8 +182,10 @@ def _try_llm_summary_and_chapters(
             transcript=strip_transcript_tags(canonical_transcript[:12000]),  # Safe token budget
         )
 
-        result = structured_model.invoke(messages)
+        output = structured_model.invoke(messages)
+        result = output.get("parsed") if isinstance(output, dict) else None
         if isinstance(result, LLMSummaryAndChapters):
+            result._model_used = output.get("model_version", "unreported")
             return result
         return None
     except Exception as exc:
@@ -241,7 +243,7 @@ def generate_meeting_summary(
 
     # 3. Try AI generation if processing is enabled
     llm_result = None
-    if meeting.get("ai_processing", True) and canonical_text.strip():
+    if meeting.get("ai_processing", False) and canonical_text.strip():
         llm_result = _try_llm_summary_and_chapters(title, str(starts_at), canonical_text)
 
     if llm_result:
@@ -262,7 +264,7 @@ def generate_meeting_summary(
             next_steps=llm_result.next_steps,
             speaker_insights=speaker_insights,
             generated_at=datetime.now(timezone.utc).isoformat(),
-            model_used=settings.BEDROCK_MODEL_ID,
+            model_used=llm_result._model_used or "unreported",
         )
 
     # 4. Deterministic Fallback based strictly on real segments and extracted items
@@ -352,7 +354,7 @@ def generate_meeting_chapters(
         canonical_text = "\n".join(f"{s.get('speaker_name', 'Speaker')}: {s.get('text', '')}" for s in segments)
 
     llm_result = None
-    if meeting.get("ai_processing", True) and canonical_text.strip():
+    if meeting.get("ai_processing", False) and canonical_text.strip():
         llm_result = _try_llm_summary_and_chapters(title, str(meeting.get("starts_at", "")), canonical_text)
 
     if llm_result and llm_result.chapters:

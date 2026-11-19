@@ -310,6 +310,23 @@ def test_task_status_requires_assignment_and_private_meeting_visibility(world):
     assert response.status_code == 404
 
 
+def test_revoked_consent_blocks_all_model_entry_points(world,monkeypatch):
+    m = world.create_meeting()
+    world.paste(m)
+    world.db.table("consents").update({"status":"revoked","revoked_at":"2026-11-13T12:00:00+00:00"}).eq("meeting_id",m).execute()
+    def forbidden(*args,**kwargs):
+        pytest.fail("A model was called without consent")
+    monkeypatch.setattr("app.services.llm.summary_service._try_llm_summary_and_chapters",forbidden)
+    monkeypatch.setattr("app.services.llm.followup_generator.create_chat_model",forbidden)
+    monkeypatch.setattr("app.services.llm.chat_assistant.create_structured_model",forbidden)
+    for endpoint in ("summary","chapters"):
+        response = world.client.get(f"/api/meetings/{m}/{endpoint}",headers={"Authorization":f"Bearer {world.priya}"})
+        assert response.status_code == 200
+    assert world.post(f"/meetings/{m}/draft-followup",world.priya,json={"tone":"executive"}).status_code == 200
+    assert world.post("/chat/message",world.priya,json={"workspace_id":world.workspace,"query":"What tasks are pending?"}).status_code == 200
+    assert world.post(f"/meetings/{m}/extract",world.priya).status_code == 409
+
+
 def test_development_tokens_are_rejected(world):
     response = world.client.get(f"/api/workspaces/{world.workspace}/analytics",headers={"Authorization":"Bearer dev-token-actionpulse"})
     assert response.status_code == 401

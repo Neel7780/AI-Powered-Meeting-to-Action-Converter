@@ -30,7 +30,7 @@ Fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, the Bedrock settings, and t
 AWS_BEARER_TOKEN_BEDROCK=your-bedrock-api-key
 AWS_REGION=us-east-1
 BEDROCK_MODEL_ID=amazon.nova-lite-v1:0
-LLM_PROVIDER_ALLOWLIST=bedrock,gemini
+LLM_PROVIDER_ALLOWLIST=bedrock
 GEMINI_API_KEY=your-gemini-api-key
 GEMINI_MODEL=gemini-3.1-flash-lite
 ```
@@ -38,7 +38,7 @@ GEMINI_MODEL=gemini-3.1-flash-lite
 Generate the key in the Amazon Bedrock console under **API keys**. It is a bearer
 API key, not an AWS access-key/secret-key pair. Keep it in `backend/.env` locally
 and the backend's environment settings on Render; never put it in frontend variables.
-Gemini is called only when Bedrock fails and Gemini is allow-listed and configured.
+The existing Gemini fallback is opt-in: add `gemini` to `LLM_PROVIDER_ALLOWLIST` only if you intend to use it. It is called only when configured and allowed.
 Keep both keys in backend environment settings; never put them in frontend variables.
 
 Bedrock is the primary provider. All AI features share its `ChatBedrockConverse` client in

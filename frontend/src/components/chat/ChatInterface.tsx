@@ -162,6 +162,7 @@ export default function ChatInterface({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [meetingLoadError, setMeetingLoadError] = useState<string | null>(null);
   const [meetings, setMeetings] = useState<MeetingOption[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState<string>('');
   const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({});
@@ -178,7 +179,7 @@ export default function ChatInterface({
       .then((data) => {
         if (!cancelled) setMeetings(data);
       })
-      .catch((err) => console.error('Failed to load chat meetings:', err));
+      .catch((err) => { if (!cancelled) setMeetingLoadError(err instanceof Error ? err.message : 'Unable to load meeting choices.'); });
 
     return () => {
       cancelled = true;
@@ -273,6 +274,7 @@ export default function ChatInterface({
 
   return (
     <div className={`flex flex-col h-full bg-[#050508] text-white ${isCompact ? '' : 'rounded-xl border border-white/10'}`}>
+      {meetingLoadError && <p role="alert" className="p-3 text-sm text-amber-300">{meetingLoadError}</p>}
       {/* Top Header / Scoping Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#08080c] px-4 py-3">
         <div className="flex items-center gap-2.5">

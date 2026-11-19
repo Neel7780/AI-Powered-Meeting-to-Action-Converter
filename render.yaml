@@ -35,7 +35,7 @@ services:
       - key: BEDROCK_MODEL_ID
         value: amazon.nova-lite-v1:0
       - key: LLM_PROVIDER_ALLOWLIST
-        value: bedrock,gemini
+        value: bedrock
       - key: SMTP_USER
         sync: false
       - key: SMTP_PASS

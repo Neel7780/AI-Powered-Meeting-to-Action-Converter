@@ -251,7 +251,8 @@ def test_unconfigured_bedrock_does_not_delete_items_or_queue_work(kwargs):
 
 def _runner_tables():
     return {
-        "meetings": _table([{"id": "m1", "workspace_id": "w1", "title": "Sprint sync",
+        "consents": _table([{"id": "c1"}]),
+        "meetings": _table([{"ai_processing": True, "id": "m1", "workspace_id": "w1", "title": "Sprint sync",
                              "starts_at": STARTS.isoformat(), "timezone": TZ}]),
         "transcripts": _table([{"id": "t1", "canonical_text": SAMPLE}]),
         "transcript_segments": _table(SEGMENTS),

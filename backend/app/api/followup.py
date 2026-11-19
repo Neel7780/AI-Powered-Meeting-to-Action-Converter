@@ -100,8 +100,8 @@ def send_followup(
         )
 
     return SendFollowUpResponse(
-        success=True,
+        success=not failed,
         recipients_count=sent_count,
-        message=f"Follow-up successfully delivered to {sent_count} recipient(s).",
+        message=f"Email transport accepted {sent_count} recipient(s); {len(failed)} failed.",
         failed_recipients=failed
     )

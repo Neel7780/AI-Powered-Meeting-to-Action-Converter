@@ -70,15 +70,15 @@ def create_structured_model(schema: type[BaseModel], temperature: float = 0, inc
     """Apply structured output before composing provider fallbacks."""
     models = []
     if bedrock_is_configured():
-        models.append(_structured(_create_bedrock_model(temperature), schema, include_raw))
+        models.append(_structured(_create_bedrock_model(temperature), schema, include_raw, "bedrock", settings.BEDROCK_MODEL_ID))
     if gemini_is_configured():
-        models.append(_structured(_create_gemini_model(temperature), schema, include_raw))
+        models.append(_structured(_create_gemini_model(temperature), schema, include_raw, "gemini", settings.GEMINI_MODEL))
     if not models:
         raise ValueError("An allowed LLM provider must be configured")
     return models[0].with_fallbacks(models[1:]) if len(models) > 1 else models[0]
 
 
-def _structured(model, schema: type[BaseModel], include_raw: bool):
+def _structured(model, schema: type[BaseModel], include_raw: bool, provider: str, model_id: str):
     structured = model.with_structured_output(schema, include_raw=include_raw)
     if not include_raw:
         return structured
@@ -86,6 +86,6 @@ def _structured(model, schema: type[BaseModel], include_raw: bool):
     def require_parsed(result):
         if result.get("parsed") is None:
             raise ValueError("Structured response did not match the required schema")
-        return result
+        return {**result, "provider": provider, "model_version": model_id}
 
     return structured | RunnableLambda(require_parsed)

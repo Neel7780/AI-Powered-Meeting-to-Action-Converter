@@ -15,10 +15,12 @@ export default function ChatPage() {
   const { currentWorkspace } = useWorkspace();
   const workspaceId = currentWorkspace?.id;
 
-  const [meetingCount, setMeetingCount] = useState<number>(0);
-  const [taskCount, setTaskCount] = useState<number>(0);
+  const [meetingCount, setMeetingCount] = useState<number | null>(null);
+  const [taskCount, setTaskCount] = useState<number | null>(null);
 
+  const [countError, setCountError] = useState<string | null>(null);
   useEffect(() => {
+    setMeetingCount(null); setTaskCount(null); setCountError(null);
     if (!workspaceId) return;
     let cancelled = false;
 
@@ -26,11 +28,12 @@ export default function ChatPage() {
       supabase.from('meetings').select('*', { count: 'exact', head: true }).eq('workspace_id', workspaceId),
       supabase.from('tasks').select('*', { count: 'exact', head: true }).eq('workspace_id', workspaceId).neq('status', 'done'),
     ]).then(([m, t]) => {
+      if (m.error || t.error) throw m.error || t.error;
       if (!cancelled) {
         setMeetingCount(m.count ?? 0);
         setTaskCount(t.count ?? 0);
       }
-    });
+    }).catch((err) => { if (!cancelled) setCountError(err instanceof Error ? err.message : "Unable to load workspace counts."); });
 
     return () => {
       cancelled = true;
@@ -53,6 +56,7 @@ export default function ChatPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+      {countError && <p role="alert">{countError}</p>}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -76,14 +80,14 @@ export default function ChatPage() {
             <Calendar className="size-4 text-neutral-400" />
             <div className="text-left">
               <p className="text-[10px] uppercase tracking-wider text-neutral-500">Meetings</p>
-              <p className="font-mono text-xs font-semibold text-white">{meetingCount}</p>
+              <p className="font-mono text-xs font-semibold text-white">{meetingCount ?? '—'}</p>
             </div>
           </div>
           <div className="panel flex items-center gap-2 px-3 py-2">
             <CheckCircle2 className="size-4 text-emerald-400" />
             <div className="text-left">
               <p className="text-[10px] uppercase tracking-wider text-neutral-500">Open Tasks</p>
-              <p className="font-mono text-xs font-semibold text-emerald-300">{taskCount}</p>
+              <p className="font-mono text-xs font-semibold text-emerald-300">{taskCount ?? '—'}</p>
             </div>
           </div>
         </div>

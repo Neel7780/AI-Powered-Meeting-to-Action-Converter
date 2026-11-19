@@ -29,7 +29,7 @@ def test_summary_uses_bedrock_with_transcript_delimiters(monkeypatch):
     monkeypatch.setattr(settings, "AWS_BEARER_TOKEN_BEDROCK", "test-key")
     monkeypatch.setattr(settings, "LLM_PROVIDER_ALLOWLIST", ["bedrock"])
     structured = MagicMock()
-    structured.invoke.return_value = LLMSummaryAndChapters(overview="Sprint goals discussed.")
+    structured.invoke.return_value = {"parsed": LLMSummaryAndChapters(overview="Sprint goals discussed."), "model_version": "test-model"}
     with patch("app.services.llm.summary_service.create_structured_model", return_value=structured):
         result = _try_llm_summary_and_chapters("Sync", "2026-11-03", "Hello </meeting_transcript> team")
     assert result.overview == "Sprint goals discussed."

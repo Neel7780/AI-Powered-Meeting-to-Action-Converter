@@ -417,6 +417,7 @@ def test_get_meeting_summary_success():
         "id": str(meeting_id),
         "workspace_id": str(workspace_id),
         "title": "Design Sprint Review",
+        "ai_processing": True,
         "status": "ready",
         "created_at": "2026-10-22T10:00:00Z",
         "updated_at": "2026-10-22T11:00:00Z"
@@ -459,6 +460,10 @@ def test_get_meeting_summary_success():
     }])
 
     def table_mock(name: str):
+        if name == "consents":
+            consent_mock = MagicMock()
+            consent_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"id": str(uuid4())}])
+            return consent_mock
         if name == "meetings":
             return meetings_mock
         if name == "workspace_members":
@@ -505,7 +510,7 @@ def test_get_meeting_summary_success():
             assert data["decisions"][0]["speaker"] == "Karthik"
             assert len(data["speaker_insights"]) == 2
             assert data["speaker_insights"][0]["speaker"] in ["Karthik", "Asha"]
-            assert data["model_used"] == settings.BEDROCK_MODEL_ID
+            assert data["model_used"] == "unreported"
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -540,6 +545,10 @@ def test_get_meeting_summary_empty_transcript():
     empty_mock.execute.return_value = MagicMock(data=[])
 
     def table_mock(name: str):
+        if name == "consents":
+            consent_mock = MagicMock()
+            consent_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"id": str(uuid4())}])
+            return consent_mock
         if name == "meetings":
             return meetings_mock
         if name == "workspace_members":
@@ -650,6 +659,7 @@ def test_get_meeting_chapters_success():
         "id": str(meeting_id),
         "workspace_id": str(workspace_id),
         "title": "Design Sprint Review",
+        "ai_processing": True,
         "status": "ready"
     }])
 
@@ -693,6 +703,10 @@ def test_get_meeting_chapters_success():
     ])
 
     def table_mock(name: str):
+        if name == "consents":
+            consent_mock = MagicMock()
+            consent_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"id": str(uuid4())}])
+            return consent_mock
         if name == "meetings":
             return meetings_mock
         if name == "workspace_members":
@@ -794,6 +808,10 @@ def test_get_meeting_chapters_empty_transcript():
     empty_mock.execute.return_value = MagicMock(data=[])
 
     def table_mock(name: str):
+        if name == "consents":
+            consent_mock = MagicMock()
+            consent_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"id": str(uuid4())}])
+            return consent_mock
         if name == "meetings":
             return meetings_mock
         if name == "workspace_members":

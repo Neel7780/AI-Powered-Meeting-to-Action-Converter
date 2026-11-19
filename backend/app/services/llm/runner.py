@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from app.core.config import settings
 from app.core.supabase import get_supabase_client
 from app.services.llm.chain import extract
+from app.services.llm.consent import meeting_ai_allowed
 from app.services.llm.prompt import build_roster, strip_transcript_tags
 from app.services.llm.validate import validate_items
 
@@ -30,6 +31,8 @@ def run_extraction(meeting_id: UUID | str) -> None:
     try:
         db = get_supabase_client()
         meeting = db.table("meetings").select("*").eq("id", mid).execute().data[0]
+        if not meeting_ai_allowed(db, meeting):
+            raise ValueError("AI processing is disabled or consent was revoked")
         transcript = db.table("transcripts").select("id, canonical_text").eq("meeting_id", mid).execute().data[0]
         segments = (
             db.table("transcript_segments")
@@ -58,8 +61,8 @@ def run_extraction(meeting_id: UUID | str) -> None:
         db.table("llm_runs").insert([
             {
                 "meeting_id": mid,
-                "provider": "bedrock",
-                "model_version": settings.BEDROCK_MODEL_ID,
+                "provider": c.provider,
+                "model_version": c.model_version or settings.BEDROCK_MODEL_ID,
                 "input_tokens": c.input_tokens,
                 "output_tokens": c.output_tokens,
                 "latency_ms": c.latency_ms,
@@ -93,8 +96,8 @@ def run_extraction(meeting_id: UUID | str) -> None:
                 row_copy = {k: v for k, v in r.items() if k != "depends_on_index"}
                 row_copy.update({
                     "meeting_id": mid,
-                    "provider": "bedrock",
-                    "model_version": settings.BEDROCK_MODEL_ID,
+                    "provider": calls[-1].provider,
+                    "model_version": calls[-1].model_version or settings.BEDROCK_MODEL_ID,
                 })
                 insert_rows.append(row_copy)
 

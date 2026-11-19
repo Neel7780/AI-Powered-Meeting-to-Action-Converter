@@ -33,6 +33,7 @@ from app.schemas.meetings import (
     SummaryDiscussionPointItem,
     TranscriptUploadResponse,
 )
+from app.services.llm.consent import meeting_ai_allowed
 from app.services.llm.summary_service import (
     generate_meeting_chapters,
     generate_meeting_summary,
@@ -406,6 +407,8 @@ def get_meeting_summary(
     )
     extracted_items = items_resp.data or []
 
+    meeting = {**meeting, "ai_processing": meeting_ai_allowed(client, meeting)}
+
     # 4. Generate grounded summary (LLM with deterministic fallback)
     return generate_meeting_summary(
         meeting=meeting,
@@ -461,6 +464,8 @@ def get_meeting_chapters(
         .execute()
     )
     extracted_items = items_resp.data or []
+
+    meeting = {**meeting, "ai_processing": meeting_ai_allowed(client, meeting)}
 
     # 4. Generate grounded chapters
     return generate_meeting_chapters(

@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage
 
 from app.api.followup import draft_followup, send_followup
 from app.core.config import settings
-from app.core.deps import CurrentUser, DEV_USER_ID
+from app.core.deps import CurrentUser
 from app.schemas.followup import (
     DraftFollowUpRequest,
     FollowUpTone,
@@ -25,7 +25,7 @@ def configured_bedrock(monkeypatch):
 def test_draft_followup_team_wide_success():
     """Admin or organiser can generate a team-wide follow-up draft."""
     meeting_id = uuid4()
-    mock_user = CurrentUser(id=DEV_USER_ID, email="admin@actionpulse.app")
+    mock_user = CurrentUser(id=uuid4(), email="admin@actionpulse.app")
 
     meeting_record = {
         "id": str(meeting_id),
@@ -40,7 +40,10 @@ def test_draft_followup_team_wide_success():
     )
 
     with patch("app.api.followup.require_meeting_role", return_value=meeting_record), \
-         patch("app.services.llm.followup_generator.get_supabase_client", side_effect=RuntimeError("offline")), \
+         patch("app.services.llm.followup_generator._load_meeting_context", return_value={
+             "title": meeting_record["title"], "ai_processing": True, "tasks": [], "decisions": [],
+             "participants": [{"user_id": str(locals().get("target_user_id", uuid4())), "name": "Bharat Odedara", "email": "bharat@example.com"}]
+         }), \
          patch("app.services.llm.followup_generator.create_chat_model", return_value=mock_llm):
         res = draft_followup(
             meeting_id=meeting_id,
@@ -61,7 +64,7 @@ def test_draft_followup_personalized_member_success():
     """Generating personalized 1-to-1 follow-up targets specific member."""
     meeting_id = uuid4()
     target_user_id = uuid4()
-    mock_user = CurrentUser(id=DEV_USER_ID, email="admin@actionpulse.app")
+    mock_user = CurrentUser(id=uuid4(), email="admin@actionpulse.app")
 
     meeting_record = {
         "id": str(meeting_id),
@@ -76,7 +79,10 @@ def test_draft_followup_personalized_member_success():
     )
 
     with patch("app.api.followup.require_meeting_role", return_value=meeting_record), \
-         patch("app.services.llm.followup_generator.get_supabase_client", side_effect=RuntimeError("offline")), \
+         patch("app.services.llm.followup_generator._load_meeting_context", return_value={
+             "title": meeting_record["title"], "ai_processing": True, "tasks": [], "decisions": [],
+             "participants": [{"user_id": str(locals().get("target_user_id", uuid4())), "name": "Bharat Odedara", "email": "bharat@example.com"}]
+         }), \
          patch("app.services.llm.followup_generator.create_chat_model", return_value=mock_llm):
         res = draft_followup(
             meeting_id=meeting_id,
@@ -96,7 +102,7 @@ def test_draft_followup_personalized_member_success():
 def test_draft_followup_chat_tone():
     """Chat tone produces Slack/WhatsApp formatted message with emojis and bullets."""
     meeting_id = uuid4()
-    mock_user = CurrentUser(id=DEV_USER_ID, email="admin@actionpulse.app")
+    mock_user = CurrentUser(id=uuid4(), email="admin@actionpulse.app")
 
     meeting_record = {
         "id": str(meeting_id),
@@ -111,7 +117,10 @@ def test_draft_followup_chat_tone():
     )
 
     with patch("app.api.followup.require_meeting_role", return_value=meeting_record), \
-         patch("app.services.llm.followup_generator.get_supabase_client", side_effect=RuntimeError("offline")), \
+         patch("app.services.llm.followup_generator._load_meeting_context", return_value={
+             "title": meeting_record["title"], "ai_processing": True, "tasks": [], "decisions": [],
+             "participants": [{"user_id": str(locals().get("target_user_id", uuid4())), "name": "Bharat Odedara", "email": "bharat@example.com"}]
+         }), \
          patch("app.services.llm.followup_generator.create_chat_model", return_value=mock_llm):
         res = draft_followup(
             meeting_id=meeting_id,
@@ -126,7 +135,7 @@ def test_draft_followup_chat_tone():
 def test_send_followup_success():
     """Dispatching email calls zero-budget email service."""
     meeting_id = uuid4()
-    mock_user = CurrentUser(id=DEV_USER_ID, email="admin@actionpulse.app")
+    mock_user = CurrentUser(id=uuid4(), email="admin@actionpulse.app")
 
     meeting_record = {
         "id": str(meeting_id),
@@ -149,3 +158,13 @@ def test_send_followup_success():
         )
         assert res.success is True
         assert res.recipients_count == 2
+
+
+def test_partial_email_acceptance_is_not_complete_success():
+    with patch("app.api.followup.require_meeting_role"), patch("app.api.followup.send_meeting_followup", return_value=(1,["failed@example.com"])):
+        result = send_followup(uuid4(), SendFollowUpRequest(
+            recipient_emails=["ok@example.com","failed@example.com"], subject="Follow-up", content_markdown="Recorded tasks"),
+            CurrentUser(id=uuid4(),email="admin@example.com"))
+    assert result.success is False
+    assert result.recipients_count == 1 and result.failed_recipients == ["failed@example.com"]
+    assert "accepted" in result.message and "delivered" not in result.message
