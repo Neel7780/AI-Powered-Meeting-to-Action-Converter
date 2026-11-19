@@ -288,6 +288,8 @@ async function syncFromOpenActionPulseTabs(settings) {
     const patterns = [
       "http://localhost:5173/*",
       "http://127.0.0.1:5173/*",
+      "http://localhost:5174/*",
+      "http://127.0.0.1:5174/*",
       "https://*.vercel.app/*",
     ];
     if (settings.appUrl && /^https?:\/\//i.test(settings.appUrl)) {
@@ -448,37 +450,51 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log("[ActionPulse] Service worker initialized.");
 });
 
+// Session mutations read, modify, and write the same stored transcript.
+const SESSION_MUTATIONS = new Set([
+  "MEETING_STARTED", "MEETING_ENDED", "CAPTION_CUE", "CLEAR_BUFFER", "UPLOAD_TO_BACKEND",
+]);
+let pendingSessionUpdate = Promise.resolve();
+
+function queueSessionUpdate(update) {
+  const pending = pendingSessionUpdate.then(update);
+  pendingSessionUpdate = pending.catch(() => {});
+  return pending;
+}
+
 // Watch tab closures to finalize and auto-upload
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
-  if (store.meetingTabId === tabId && store.session && store.session.isRecording) {
-    const session = store.session;
-    const settings = store.settings || DEFAULT_SETTINGS;
-    session.isRecording = false;
-    session.isCompleted = true;
-    session.endTime = new Date().toISOString();
-    if (session.startTime) {
-      session.durationSeconds = Math.max(0, Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000));
-    }
-
-    if (session.cues && session.cues.length > 0 && !session.uploaded) {
-      try {
-        const uploadRes = await performBackendUpload(session, settings);
-        session.uploaded = true;
-        session.uploadResult = uploadRes;
-        session.reviewUrl = uploadRes.reviewUrl;
-        console.log("[ActionPulse] Auto-uploaded on tab close. Review URL:", uploadRes.reviewUrl);
-      } catch (err) {
-        console.warn("[ActionPulse] Auto-upload on tab close failed (cues preserved in local storage):", err);
+chrome.tabs.onRemoved.addListener((tabId) => {
+  queueSessionUpdate(async () => {
+    const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
+    if (store.meetingTabId === tabId && store.session && store.session.isRecording) {
+      const session = store.session;
+      const settings = sanitizeSettings(store.settings);
+      session.isRecording = false;
+      session.isCompleted = true;
+      session.endTime = new Date().toISOString();
+      if (session.startTime) {
+        session.durationSeconds = Math.max(0, Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000));
       }
-    }
 
-    await chrome.storage.local.set({ session, meetingTabId: null });
-  }
+      if (session.cues && session.cues.length > 0 && !session.uploaded && settings.autoUploadOnEnd !== false) {
+        try {
+          const uploadRes = await performBackendUpload(session, settings);
+          session.uploaded = true;
+          session.uploadResult = uploadRes;
+          session.reviewUrl = uploadRes.reviewUrl;
+          console.log("[ActionPulse] Auto-uploaded on tab close. Review URL:", uploadRes.reviewUrl);
+        } catch (err) {
+          console.warn("[ActionPulse] Auto-upload on tab close failed (cues preserved in local storage):", err);
+        }
+      }
+
+      await chrome.storage.local.set({ session, meetingTabId: null });
+    }
+  }).catch((error) => console.warn("[ActionPulse] Could not finish capture:", error));
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  (async () => {
+  const handle = async () => {
     const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
     let session = store.session || createIdleSession();
     let settings = sanitizeSettings(store.settings);
@@ -608,6 +624,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "UPLOAD_TO_BACKEND": {
+        if (session.uploaded && session.uploadResult) {
+          sendResponse(session.uploadResult);
+          break;
+        }
         try {
           const uploadRes = await performBackendUpload(session, settings);
           session.uploaded = true;
@@ -641,7 +661,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       default:
         sendResponse({ error: "Unknown message type: " + message.type });
     }
-  })();
+  };
+
+  const handled = SESSION_MUTATIONS.has(message.type) ? queueSessionUpdate(handle) : handle();
+  handled.catch((error) => {
+    console.error("[ActionPulse] Extension request failed:", error);
+    sendResponse({ success: false, error: error.message || "Extension request failed." });
+  });
 
   return true;
 });

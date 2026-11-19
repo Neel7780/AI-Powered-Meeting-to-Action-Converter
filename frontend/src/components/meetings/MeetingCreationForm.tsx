@@ -170,9 +170,9 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
         <p className="mt-1 text-sm text-neutral-400">{created.title}</p>
       </div></div>
       <ol className="space-y-4 text-sm text-neutral-300 list-decimal pl-5">
-        <li>Open your call in the browser and turn on closed captions.</li>
-        <li>Use the ActionPulse browser extension to capture the conversation. Stay signed in to this workspace.</li>
-        <li>Upload the captured captions from the extension when the call ends. Actions will appear here for your review.</li>
+        <li>Install and pin the ActionPulse extension. Keep this workspace open in the same browser.</li>
+        <li>Open the call and turn on captions. Open the extension to check that the caption count is increasing.</li>
+        <li>After the call, use the extension to open the review. If upload did not start, choose Upload &amp; Generate AI Tasks.</li>
       </ol>
       <p className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-neutral-400">The extension is required for live capture. You can also upload an exported transcript to this meeting afterward.</p>
       <div className="flex flex-wrap gap-3">
@@ -224,7 +224,7 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
         {source === 'live' ? (
           <div className="space-y-3">
             <div><label htmlFor="meeting-link" className="field-label">Meeting link</label><input id="meeting-link" type="url" className="field" required disabled={!!created} value={conferenceUrl} onChange={(e) => setConferenceUrl(e.target.value)} placeholder="Paste a Google Meet, Zoom or Teams link" /></div>
-            <p className="text-xs leading-5 text-neutral-400">Save the meeting, then open your call. The ActionPulse browser extension captures live captions; you'll review the suggested tasks afterward.</p>
+            <p className="text-xs leading-5 text-neutral-400">Install the ActionPulse browser extension before joining. It starts capturing when you turn on captions in the call.</p>
           </div>
         ) : source === 'in_person' ? (
           <div className="space-y-3">

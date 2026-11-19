@@ -30,6 +30,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   const appUrlInput = document.getElementById("appUrlInput");
   const saveSettingsBtn = document.getElementById("saveSettingsBtn");
 
+  const editedSettings = new Set();
+  [workspaceIdInput, apiUrlInput, appUrlInput].forEach((input) => {
+    input.addEventListener("input", () => editedSettings.add(input));
+  });
+
   let activeSession = null;
   let timerInterval = null;
 
@@ -107,9 +112,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       const settings = response.settings;
 
       if (settings) {
-        if (workspaceIdInput) workspaceIdInput.value = settings.workspaceId || "";
-        if (apiUrlInput) apiUrlInput.value = settings.apiUrl || "http://localhost:8000";
-        if (appUrlInput) appUrlInput.value = settings.appUrl || "http://localhost:5173";
+        if (!editedSettings.has(workspaceIdInput)) workspaceIdInput.value = settings.workspaceId || "";
+        if (!editedSettings.has(apiUrlInput)) apiUrlInput.value = settings.apiUrl || "http://localhost:8000";
+        if (!editedSettings.has(appUrlInput)) appUrlInput.value = settings.appUrl || "http://localhost:5173";
 
         const role = String(settings.managerRole || "").toLowerCase();
         const isSignedIn = Boolean(settings.hasAccessToken);
@@ -367,7 +372,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       apiUrl: apiUrlInput.value.trim(),
       appUrl: appUrlInput.value.trim(),
     };
-    chrome.runtime.sendMessage({ type: "UPDATE_SETTINGS", data: settings }, () => {
+    chrome.runtime.sendMessage({ type: "UPDATE_SETTINGS", data: settings }, (response) => {
+      if (chrome.runtime.lastError || response?.status !== "settings_updated") {
+        saveSettingsBtn.innerText = "Could not save";
+        return;
+      }
+      editedSettings.clear();
       saveSettingsBtn.innerText = "Saved ✓";
       setTimeout(() => {
         saveSettingsBtn.innerText = "Save Configuration";

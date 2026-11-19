@@ -1,65 +1,19 @@
-# ActionPulse - Browser Extension (Meeting Captions to Action AI)
+# ActionPulse browser extension
 
-A Manifest V3 Chrome Extension built specifically for **ActionPulse** to automate meeting transcripts directly from closed captions and parse them into actionable tasks for manager review.
+The extension captures captions shown in Google Meet, Zoom Web or Microsoft Teams Web. It exports a transcript or uploads it to ActionPulse so an owner, admin or organiser can review suggested tasks.
 
----
+## Install it
 
-## ⚡ Supported Platforms
-- **Google Meet** (`meet.google.com`)
-- **Zoom Web Client** (`*.zoom.us`)
-- **Microsoft Teams Web** (`teams.microsoft.com`, `teams.live.com`)
+1. Open `chrome://extensions`, `brave://extensions` or `edge://extensions` and turn on **Developer mode**.
+2. Click **Load unpacked** and choose this `extension/` directory. Select the folder containing `manifest.json`.
+3. Pin **ActionPulse** from the browser's Extensions menu. If you already loaded it, click **Reload** on its extension card, then refresh any open ActionPulse or meeting tabs.
 
----
+## Test a live meeting
 
-## 🚀 Key Features
+1. Sign in to ActionPulse and select the workspace in the same browser profile. Leave that tab open.
+2. For the local preview at `http://localhost:5174` with the production backend, expand **Manager Sync & Server Settings** in the extension popup. Set **Backend API URL** to `https://ai-powered-meeting-to-action-converter-9k2z.onrender.com` and **Website URL** to `http://localhost:5174`, then click **Save Configuration**. For a locally running backend, keep `http://localhost:8000`.
+3. In **Meetings → New meeting → Live meeting**, paste the link for the call you'll join and save the meeting with its actual start time. Let participants know their captions will be processed.
+4. Join the call in the browser and turn on captions using the call controls. There is no separate start button in ActionPulse. Speak a few sentences and pause briefly. The extension should report a growing caption count and show the spoken text under **Live Transcript Stream**.
+5. Use **Save Backup (.VTT)** to check the text and speaker names before leaving. The extension normally uploads when the call ends. If it hasn't, choose **Upload & Generate AI Tasks**. Open the review link. Confirm the transcript attached to the original meeting and the suggested tasks quote the right lines.
 
-1. **Automatic Live Closed Caption Capture:**
-   - Detects when the manager turns on Closed Captions (CC) in Meet, Zoom, or Teams.
-   - Dynamically captures speaker names, spoken sentences, and timestamps using a non-intrusive `MutationObserver`.
-   - Streaming text deduplication prevents duplicate transcript fragments.
-
-2. **Manager-Only Ingestion & Sync:**
-   - Designed exclusively for managers/organisers.
-   - Syncs directly with target workspace (default: `00000000-0000-0000-0000-000000000002`).
-   - Authenticated with workspace role validation.
-
-3. **1-Click Upload & AI Task Generation:**
-   - At the end of the meeting, 1 click on **"Upload & Generate AI Tasks"** uploads the transcript to the FastAPI backend (`/api/meetings/automation/extension-upload`).
-   - The backend creates the meeting, stores full transcripts & millisecond segments in Supabase, and triggers AI extraction into `extracted_items` (`needs_review`).
-   - Generates a 1-click link to open the **Manager Review Gate** (`/meetings/{meeting_id}/review`) on the ActionPulse website.
-
-4. **Guaranteed Local Backup (`.VTT` / `.TXT`):**
-   - In case of network downtime, server unavailability, or offline meetings, click **"Save Backup (.VTT)"** or **"Save (.TXT)"** to download the transcript file directly to your computer.
-
-5. **ActionPulse Native Dark Theme:**
-   - Deep obsidian background (`#060608`), surface elevations (`#0e0e14`), and vibrant indigo accents (`#6366f1`) matching the ActionPulse web application.
-
----
-
-## 📦 How to Install in Chrome / Edge / Brave
-
-1. Open your browser and go to `chrome://extensions/` (or `edge://extensions/`).
-2. Turn **ON** the **"Developer mode"** toggle in the top-right corner.
-3. Click the **"Load unpacked"** button in the top-left corner.
-4. Select the `extension/` directory inside this repository:
-   ```
-   AI-Powered-Meeting-to-Action-Converter/extension/
-   ```
-5. The **ActionPulse** extension icon will now appear in your browser toolbar! Pin it for quick access.
-
----
-
-## 🎯 How to Use During a Meeting
-
-1. Join any **Google Meet**, **Zoom**, or **Microsoft Teams** meeting in your browser.
-2. Turn on **Closed Captions (CC)**:
-   - **Google Meet:** Click the `CC` icon in the bottom bar (or press `c`).
-   - **Zoom Web:** Click `Show Captions` in the controls bar.
-   - **Teams Web:** Click `... More` -> `Language and speech` -> `Turn on live captions`.
-3. Notice the subtle green badge: `ActionPulse: Recording Captions`.
-4. Click the ActionPulse extension icon in your toolbar to see the live transcript feed, cue count, and meeting timer.
-5. At the end of the meeting:
-   - Click **"Upload & Generate AI Tasks"**.
-   - Click the green **"Open Manager Review Gate ↗"** button to review, edit, approve, or reject extracted tasks and assign them to team members!
-   - (Optional) Click **"Save Backup (.VTT)"** to keep a local copy on your disk.
-
+If the call shows captions but the extension count stays at zero, check that the browser allows the extension to run on that site and reload the call tab. If upload fails, save the VTT and add it to the saved meeting using **Add transcript**.
