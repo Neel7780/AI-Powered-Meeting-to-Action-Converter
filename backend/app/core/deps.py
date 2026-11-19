@@ -17,7 +17,6 @@ from app.core.supabase import get_supabase_client
 security = HTTPBearer(auto_error=True)
 
 ORGANISER_ROLES: set[str] = {"admin", "organiser"}
-DEV_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 class CurrentUser(BaseModel):

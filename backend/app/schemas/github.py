@@ -7,10 +7,13 @@ GitHubAction = Literal[
 ]
 
 
-class GitHubInstallCallback(BaseModel):
+class GitHubExistingConnection(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    state: str = Field(min_length=43, max_length=128)
     installation_id: int = Field(gt=0, le=2**53 - 1)
+
+
+class GitHubInstallCallback(GitHubExistingConnection):
+    state: str = Field(min_length=43, max_length=128)
 
 
 class GitHubOAuthCallback(BaseModel):

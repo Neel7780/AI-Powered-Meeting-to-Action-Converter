@@ -4,6 +4,23 @@ GitHub is an external integration. Google/email sign-in and existing Supabase au
 Workspace Settings → GitHub connects accounts and organizations, maps multiple repositories and installations,
 and manages member access. Members see only repositories shared with them.
 
+## Connect a GitHub account
+
+1. In the target workspace, click **Connect GitHub** and choose your GitHub account on GitHub. The backend
+   requests the account picker, including when the browser already has an active GitHub session.
+2. Back in ActionPulse, check the displayed GitHub username and select an existing installation. The list comes
+   from GitHub for the authorizing account, so a new ActionPulse user can reuse an installation if GitHub allows it.
+   Use **Switch GitHub account** to choose another login, or **Install GitHub App** for a new installation.
+3. When you select an installation, ActionPulse starts a fresh authorization for that installation and verifies
+   GitHub repository administrator access before linking it to the workspace. Then connect the repositories
+   you want and assign member permissions in ActionPulse.
+
+The discovery callback returns account names and installation IDs. It saves no workspace links or tokens.
+The same installation can serve multiple workspaces, each with its own repository connections and member grants.
+After changing selected repositories on GitHub, run **Connect GitHub** again to verify newly added repositories.
+Discovery uses an OAuth state with a null installation ID, supported by the existing state table and RPCs.
+The flow reuses the existing GitHub App callback and setup URLs.
+
 ## Manual GitHub configuration
 
 Register a **GitHub App**, not an OAuth App or personal access token. Use a separate App for local development.
@@ -72,8 +89,15 @@ normal reviewed migration workflow. This creates six backend-only tables:
 - `github_installation_states`: SHA-256 state hashes, initiator, workspace, phase and ten-minute expiry.
 - `github_webhook_deliveries`: successfully processed delivery IDs and body hashes.
 
+Apply `supabase/migrations/20261117094527_github_workspace_owner_roles.sql` after the existing migration chain
+to support deployed `owner`/`member` workspaces. It updates the shared `github_assert_admin` guard used by
+all GitHub connection, mapping, grant, disconnect and manual sync RPCs. The name remains unchanged so existing
+callers use the corrected check. The guard accepts `owner` and legacy `admin`, comparing `role::text` so it
+works with either text-backed deployed roles or the original enum. It does not change role values or memberships.
+Deploy this migration before the matching backend changes; deploying FastAPI alone leaves SQL mutations blocked.
+
 RLS is enabled and browser roles have no table privileges or RPC execution. FastAPI uses the existing service-role
-client and current-user dependency. Transactional RPCs recheck and lock admin membership before writes, and
+client and current-user dependency. Transactional RPCs recheck and lock owner/admin membership before writes, and
 serialize installation changes. Expired state is cleaned up when a new connection starts. Audit events reuse
 `audit.audit_log`, including workspace ID, initiating member, repository ID, permission changes and lifecycle status.
 Webhook audit events use a null actor. Do not expose these RPCs to browser roles. See
@@ -81,7 +105,10 @@ Webhook audit events use a null actor. Do not expose these RPCs to browser roles
 
 ## Access and lifecycle behavior
 
-- Every member, including admins, starts with **No Access** to repository operations. Admins can manage settings.
+- Workspace `owner` manages GitHub settings; `member` sees only repositories explicitly shared with them.
+  Legacy `admin` retains management access; legacy `organiser` has member-level GitHub access.
+- Everyone, including owners/admins, starts with **No Access** to repository operations. Management access does
+  not bypass repository grants. GitHub repository `admin: true` verification is separate from the workspace role.
 - **Read Only** and **Read & Write** are permission ceilings. Advanced denials can only reduce them; GitHub App
   permissions and the implemented-action registry apply as additional ceilings.
 - The only implemented workspace operation is reading repository details. Issue reads/writes, comments, branches
@@ -130,8 +157,9 @@ Organization approval and SAML policies may require approval or an active organi
    production service-role credentials.
 4. Sign in through a real Google/email account, create/select a workspace, and open Workspace Settings. The
    existing one-click demo identity is explicitly rejected by the GitHub API, even in development.
-5. Connect as a workspace admin with GitHub admin access to a selected repository. Verify both redirects, map
-   the repository, grant a member Read Only, and confirm the member sees only that repository.
+5. Connect as a workspace owner (or legacy admin) with GitHub admin access to a selected repository. Try the account
+   picker with a different ActionPulse login and the same GitHub account. Verify that the existing installation can
+   be selected without reinstalling, map the repository, and confirm a member sees it only after a grant.
 6. Revoke the member, remove a repository from the GitHub installation, suspend/uninstall the App, and replay a
    webhook delivery. Verify grants disappear and a second workspace sharing the installation stays isolated.
 
@@ -154,6 +182,26 @@ Fixtures are rolled back. The test needs a database owner capable of seeding `au
 database. The local implementation was also checked with embedded PostgreSQL/PGlite against the canonical
 workspace/member/audit table definitions, without connecting to a hosted Supabase project. A real configured
 GitHub App smoke test and hosted migration deployment remain manual checks.
+
+The owner-role regression also exercises the actual membership lookup in FastAPI tests: owner/legacy-admin
+management, denied member/organiser/unknown/non-member mutations, explicit repository grants, and role
+revocation during settings reads. A focused SQL fixture applies the actual owner-role migration to a minimal
+text-backed owner/member schema and checks legacy compatibility, cross-workspace denial, demotion, and RPC
+grants. Run it on a separate **empty disposable PostgreSQL database**, not your application/test schema:
+
+```sh
+psql "$EMPTY_GITHUB_ROLE_TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f backend/tests/github_owner_roles.sql
+```
+
+The fixture deliberately refuses an existing `workspace_members` table. SQL execution and a live owner connection
+remain separate checks when PostgreSQL or hosted-project access is unavailable locally.
+
+Owner-role fix validation (17 November 2026): all 75 GitHub backend tests passed, targeted backend/frontend
+lint passed, and the production frontend build passed. Tests used the documented sandbox selector-polling
+workaround in the test process only. `psql`/PostgreSQL and the Supabase CLI were unavailable, and the npm
+registry could not resolve; the timestamped migration was authored locally. The owner-role SQL fixture has
+not been executed and the migration has not been applied to the hosted project. Hosted Supabase access was
+denied during investigation, so deployment and the live connection smoke test remain pending.
 
 Frontend checks: `npm run build`, targeted frontend lint, and browser checks of settings with disposable local
 fixtures. Existing repository-wide lint findings and the large frontend bundle are outside this integration's scope.

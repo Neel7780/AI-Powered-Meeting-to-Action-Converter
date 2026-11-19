@@ -9,9 +9,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, Response
 
 from app.core.config import settings
-from app.core.deps import DEV_USER_ID, CurrentUser, get_current_user, require_role
+from app.core.deps import CurrentUser, get_current_user, require_role
 from app.core.supabase import get_supabase_client
-from app.schemas.github import GitHubAccessUpdate, GitHubInstallCallback, GitHubMappingUpdate, GitHubOAuthCallback
+from app.schemas.github import (
+    GitHubAccessUpdate,
+    GitHubExistingConnection,
+    GitHubInstallCallback,
+    GitHubMappingUpdate,
+    GitHubOAuthCallback,
+)
 from app.services import github
 
 
@@ -22,11 +28,13 @@ def private_response(response: Response):
 router = APIRouter(dependencies=[Depends(private_response)])
 GitHubID = Annotated[int, Path(gt=0, le=2**53 - 1)]
 
+# Deployed workspaces use owner/member. Keep the original migration's admin
+# and organiser roles compatible without changing authorization for other features.
+GITHUB_MANAGER_ROLES = {"owner", "admin"}
+GITHUB_MEMBER_ROLES = GITHUB_MANAGER_ROLES | {"organiser", "member"}
+
 
 def integration_user(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    # The app's development sign-in shortcut must never reach real external credentials.
-    if user.id == DEV_USER_ID:
-        raise HTTPException(403, "Sign in with a real account to manage GitHub connections.")
     return user
 
 
@@ -39,11 +47,31 @@ def installation_link(workspace_id: UUID, installation_id: int):
 
 @router.post("/workspaces/{workspace_id}/github/connect")
 def connect(workspace_id: UUID, user: CurrentUser = Depends(integration_user)):
-    require_role(workspace_id, {"admin"}, user)
+    require_role(workspace_id, GITHUB_MANAGER_ROLES, user)
     github.require_configured()
     state = github.new_state(workspace_id, user.id)
     url = f"https://github.com/apps/{settings.GITHUB_APP_SLUG}/installations/new?" + urlencode({"state": state})
     return {"url": url}
+
+
+@router.post("/workspaces/{workspace_id}/github/discover")
+def discover(workspace_id: UUID, user: CurrentUser = Depends(integration_user)):
+    require_role(workspace_id, GITHUB_MANAGER_ROLES, user)
+    github.require_configured()
+    # A null installation ID identifies account discovery in the OAuth callback.
+    state = github.new_state(workspace_id, user.id, "oauth")
+    return {"url": github.authorization_url(state, choose_account=True)}
+
+
+@router.post("/workspaces/{workspace_id}/github/connect-existing")
+def connect_existing(workspace_id: UUID, payload: GitHubExistingConnection,
+                     user: CurrentUser = Depends(integration_user)):
+    require_role(workspace_id, GITHUB_MANAGER_ROLES, user)
+    github.require_configured()
+    # An installation ID is only a candidate. The existing OAuth callback verifies
+    # the user's current GitHub access before creating any workspace connection.
+    state = github.new_state(workspace_id, user.id, "oauth", payload.installation_id)
+    return {"url": github.authorization_url(state)}
 
 
 @router.post("/github/install-callback")
@@ -59,6 +87,10 @@ def install_callback(payload: GitHubInstallCallback, user: CurrentUser = Depends
 async def oauth_callback(payload: GitHubOAuthCallback, user: CurrentUser = Depends(integration_user)):
     github.require_configured()
     state = github.consume_state(payload.state, user.id, "oauth")
+    if state["installation_id"] is None:
+        choices = await github.discover_installations(payload.code, payload.state)
+        require_role(UUID(state["workspace_id"]), GITHUB_MANAGER_ROLES, user)
+        return {"workspace_id": state["workspace_id"], **choices}
     installation, repos = await github.verify_installer(state["installation_id"], payload.code, payload.state)
     # The transaction rechecks admin membership after all network waits.
     github.rpc("github_complete_connection", p_workspace_id=state["workspace_id"], p_actor_id=str(user.id),
@@ -68,7 +100,7 @@ async def oauth_callback(payload: GitHubOAuthCallback, user: CurrentUser = Depen
 
 @router.get("/workspaces/{workspace_id}/github")
 def get_settings(workspace_id: UUID, user: CurrentUser = Depends(integration_user)):
-    role = require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    role = require_role(workspace_id, GITHUB_MEMBER_ROLES, user)
     db = get_supabase_client()
     links = github.database_rows(db.table("github_workspace_installations")
                                  .select("installation_id,github_installations(*)")
@@ -77,11 +109,11 @@ def get_settings(workspace_id: UUID, user: CurrentUser = Depends(integration_use
                                  .order("full_name").order("repository_id"))
     grant_query = (db.table("github_repository_permissions").select("repository_id,user_id,level,denied_actions")
                    .eq("workspace_id", str(workspace_id)).order("repository_id").order("user_id"))
-    if role != "admin":
+    if role not in GITHUB_MANAGER_ROLES:
         grant_query = grant_query.eq("user_id", str(user.id))
     grants = github.database_rows(grant_query)
     installations = [link["github_installations"] for link in links]
-    if role != "admin":
+    if role not in GITHUB_MANAGER_ROLES:
         grants = [g for g in grants if g["user_id"] == str(user.id)]
         by_installation = {i["id"]: i for i in installations}
         by_repo = {g["repository_id"]: g for g in grants}
@@ -92,7 +124,7 @@ def get_settings(workspace_id: UUID, user: CurrentUser = Depends(integration_use
                                            by_installation[r["installation_id"]]["permissions"])]
         visible_ids = {r["installation_id"] for r in repos}
         installations = [i for i in installations if i["id"] in visible_ids]
-        require_role(workspace_id, {"admin", "organiser", "member"}, user)
+        require_role(workspace_id, GITHUB_MEMBER_ROLES, user)
         return {"configured": github.configured(), "can_manage": False, "installations": installations,
                 "repositories": repos, "grants": grants, "members": [],
                 "actions": [{"id": name, **policy} for name, policy in github.ACTIONS.items()]}
@@ -104,7 +136,7 @@ def get_settings(workspace_id: UUID, user: CurrentUser = Depends(integration_use
                                              .in_("id", [m["user_id"] for m in members[offset:offset + 100]])
                                              .order("id")))
     by_id = {p["id"]: p for p in profiles}
-    require_role(workspace_id, {"admin"}, user)
+    require_role(workspace_id, GITHUB_MANAGER_ROLES, user)
     return {
         "configured": github.configured(), "can_manage": True, "installations": installations,
         "repositories": repos, "grants": grants,
@@ -117,7 +149,7 @@ def get_settings(workspace_id: UUID, user: CurrentUser = Depends(integration_use
 @router.patch("/workspaces/{workspace_id}/github/repositories/{repository_id}")
 async def map_repository(workspace_id: UUID, repository_id: GitHubID, payload: GitHubMappingUpdate,
                          user: CurrentUser = Depends(integration_user)):
-    require_role(workspace_id, {"admin"}, user)
+    require_role(workspace_id, GITHUB_MANAGER_ROLES, user)
     if payload.connected:
         rows = (get_supabase_client().table("github_repositories").select("installation_id")
                 .eq("workspace_id", str(workspace_id)).eq("repository_id", repository_id).execute().data)
@@ -133,7 +165,7 @@ async def map_repository(workspace_id: UUID, repository_id: GitHubID, payload: G
 @router.put("/workspaces/{workspace_id}/github/repositories/{repository_id}/members/{member_id}")
 def set_access(workspace_id: UUID, repository_id: GitHubID, member_id: UUID, payload: GitHubAccessUpdate,
                user: CurrentUser = Depends(integration_user)):
-    require_role(workspace_id, {"admin"}, user)
+    require_role(workspace_id, GITHUB_MANAGER_ROLES, user)
     github.rpc("github_set_access", p_workspace_id=str(workspace_id), p_actor_id=str(user.id),
                p_repository_id=repository_id, p_user_id=str(member_id), p_level=payload.level,
                p_denied_actions=sorted(set(payload.denied_actions)))
@@ -142,7 +174,7 @@ def set_access(workspace_id: UUID, repository_id: GitHubID, member_id: UUID, pay
 
 @router.delete("/workspaces/{workspace_id}/github/installations/{installation_id}")
 def disconnect(workspace_id: UUID, installation_id: GitHubID, user: CurrentUser = Depends(integration_user)):
-    require_role(workspace_id, {"admin"}, user)
+    require_role(workspace_id, GITHUB_MANAGER_ROLES, user)
     github.rpc("github_disconnect_installation", p_workspace_id=str(workspace_id), p_actor_id=str(user.id),
                p_installation_id=installation_id)
     return {"success": True}
@@ -150,7 +182,7 @@ def disconnect(workspace_id: UUID, installation_id: GitHubID, user: CurrentUser 
 
 @router.post("/workspaces/{workspace_id}/github/installations/{installation_id}/sync")
 async def sync(workspace_id: UUID, installation_id: GitHubID, user: CurrentUser = Depends(integration_user)):
-    require_role(workspace_id, {"admin"}, user)
+    require_role(workspace_id, GITHUB_MANAGER_ROLES, user)
     installation_link(workspace_id, installation_id)
     installation, repos = await github.snapshot(installation_id)
     github.rpc("github_sync_installation", p_workspace_id=str(workspace_id), p_actor_id=str(user.id),
@@ -161,7 +193,7 @@ async def sync(workspace_id: UUID, installation_id: GitHubID, user: CurrentUser 
 @router.get("/workspaces/{workspace_id}/github/repositories/{repository_id}/details")
 async def repository_details(workspace_id: UUID, repository_id: GitHubID,
                              user: CurrentUser = Depends(integration_user)):
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, GITHUB_MEMBER_ROLES, user)
     context = github.authorize_repository(workspace_id, user.id, repository_id)
     token = await github.installation_token(context["installation_id"], repository_id)
     fresh = github.authorize_repository(workspace_id, user.id, repository_id)
