@@ -16,16 +16,16 @@ Our project uses free-tier services and approved AWS credits for Amazon Bedrock.
 | :--- | :--- | :--- |
 | **Frontend** | React 18+ (Vite SPA, PWA) or Next.js | Hosted on Vercel Hobby / Cloudflare Pages. Client-side code uses `@supabase/supabase-js` with the **Anon Key** (`VITE_SUPABASE_ANON_KEY`) only. |
 | **Backend** | Python 3.11+ / FastAPI | Hosted on Render Free web service. Ephemeral disk. Backend code uses the Supabase **Service-Role Key** for privileged mutations. |
-| **Database & Auth** | Supabase Postgres (Mumbai region) | Database tables, Row-Level Security (RLS) policies, and triggers are defined in [`schema.sql`](schema.sql). |
+| **Database & Auth** | Supabase Postgres (Mumbai region) | Database tables, Row-Level Security (RLS) policies, and triggers are defined in the ordered SQL files in [`supabase/migrations`](supabase/migrations). |
 | **LLM Provider** | Amazon Bedrock (AWS credits) | Use `langchain-aws` / `ChatBedrockConverse` with the backend-only `AWS_BEARER_TOKEN_BEDROCK`. Configure `AWS_REGION` and `BEDROCK_MODEL_ID` (default: `amazon.nova-lite-v1:0`). Credits are account-specific; do not assume usage is free. **DO NOT import OpenAI or Anthropic SDKs.** |
 | **Email** | SMTP (Gmail App Password / Brevo free) | Standard Python `smtplib` / email client. **DO NOT import Resend or SendGrid.** |
 | **WhatsApp** | `wa.me` URL Link + Web Push (PWA) | Zero-cost 1-tap WhatsApp sharing link. **DO NOT use paid WhatsApp Business API.** |
 
 ---
 
-## 2. Database & Schema Rules (Source of Truth: `schema.sql`)
+## 2. Database & Schema Rules (Source of Truth: `supabase/migrations/`)
 
-Always align your code with the canonical [`schema.sql`](schema.sql):
+Always align your code with the ordered SQL files in [`supabase/migrations`](supabase/migrations):
 
 1. **Table Names (Exact Matches Required):**
    - User Profiles: `profiles` (references `auth.users(id)`). Do NOT create or query a custom `users` table.

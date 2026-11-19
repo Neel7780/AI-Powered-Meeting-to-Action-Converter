@@ -12,12 +12,29 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.core.deps import CurrentUser, get_current_user, require_role
+from app.core.deps import CurrentUser, get_current_user, require_role, require_meeting_role
 from app.core.supabase import get_supabase_client
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def require_task_access(workspace_id: UUID, task_id: UUID, user: CurrentUser, *, manager_only: bool = False):
+    role = require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    db = get_supabase_client()
+    rows = (db.table("tasks").select("*").eq("id", str(task_id))
+            .eq("workspace_id", str(workspace_id)).execute().data or [])
+    if not rows:
+        raise HTTPException(404, "Task not found in this workspace")
+    if rows[0].get("meeting_id"):
+        require_meeting_role(UUID(str(rows[0]["meeting_id"])), {"admin", "organiser", "member"}, user)
+    if role not in {"admin", "organiser"}:
+        assigned = (db.table("task_assignees").select("user_id").eq("task_id", str(task_id))
+                    .eq("user_id", str(user.id)).execute().data)
+        if manager_only or not assigned:
+            raise HTTPException(403, "Only task assignees or workspace organisers/admins can manage this task")
+    return rows[0]
 
 
 class TaskDependencyUpdateRequest(BaseModel):
@@ -40,7 +57,7 @@ class TaskDependencyUpdateResponse(BaseModel):
     "/{workspace_id}/tasks/{task_id}/dependency",
     response_model=TaskDependencyUpdateResponse,
     status_code=status.HTTP_200_OK,
-    summary="Update task prerequisite dependency and execution mode with cycle prevention"
+    summary="Update task prerequisite dependency with cycle prevention"
 )
 def update_task_dependency(
     workspace_id: UUID,
@@ -55,7 +72,7 @@ def update_task_dependency(
     - If blocked_by is set to a task not yet 'done', marks this task as 'blocked'.
     - If blocked_by is cleared (or the prerequisite is already 'done'), restores to 'todo' if previously blocked.
     """
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_task_access(workspace_id, task_id, user)
     client = get_supabase_client()
 
     # 1. Fetch target task
@@ -117,7 +134,7 @@ def update_task_dependency(
             if curr_blocked in visited:
                 break
             visited.add(curr_blocked)
-            next_t = client.table("tasks").select("blocked_by").eq("id", curr_blocked).execute()
+            next_t = client.table("tasks").select("blocked_by").eq("id", curr_blocked).eq("workspace_id", str(workspace_id)).execute()
             curr_blocked = next_t.data[0].get("blocked_by") if next_t.data else None
 
         # Automatic status resolution
@@ -139,7 +156,9 @@ def update_task_dependency(
     }
 
     if payload.execution_type == "agent":
-        update_payload["external_owner_label"] = "AI Agent"
+        raise HTTPException(422, "Automatic task execution is unavailable")
+    if target_task.get("external_owner_label") == "AI Agent":
+        update_payload["external_owner_label"] = None
 
     try:
         updated_resp = client.table("tasks").update(update_payload).eq("id", str(task_id)).execute()
@@ -174,8 +193,6 @@ class TaskStatusUpdateResponse(BaseModel):
     status: str
     completed_at: str | None = None
     updated_at: str
-    unblocked_tasks_count: int = 0
-    reblocked_tasks_count: int = 0
 
 
 @router.patch(
@@ -197,7 +214,7 @@ def update_task_status(
     - If status is 'done', any downstream task blocked_by this task is unblocked to 'todo'.
     - If status moves back from 'done', any downstream task is re-blocked.
     """
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_task_access(workspace_id, task_id, user)
     client = get_supabase_client()
 
     target_resp = (
@@ -213,14 +230,13 @@ def update_task_status(
             detail="Task not found in this workspace",
         )
     target_task = target_resp.data[0]
-    previous_status = target_task.get("status", "todo")
     new_status = payload.status
 
     # Prerequisite verification: If new status is not 'blocked', prerequisite must be done
     if new_status in ("todo", "in_progress", "done") and target_task.get("blocked_by"):
         prereq_id = target_task.get("blocked_by")
-        prereq_resp = client.table("tasks").select("status").eq("id", str(prereq_id)).execute()
-        if prereq_resp.data and prereq_resp.data[0].get("status") != "done":
+        prereq_resp = client.table("tasks").select("status").eq("id", str(prereq_id)).eq("workspace_id", str(workspace_id)).execute()
+        if not prereq_resp.data or prereq_resp.data[0].get("status") != "done":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot advance task: prerequisite is not completed yet",
@@ -246,47 +262,13 @@ def update_task_status(
             detail=f"Failed to update task status: {exc}",
         ) from exc
 
-    unblocked_count = 0
-    reblocked_count = 0
-
-    # Auto-unblock downstream tasks if completed
-    if new_status == "done":
-        try:
-            unblock_resp = (
-                client.table("tasks")
-                .update({"status": "todo", "updated_at": now_iso})
-                .eq("workspace_id", str(workspace_id))
-                .eq("blocked_by", str(task_id))
-                .eq("status", "blocked")
-                .execute()
-            )
-            unblocked_count = len(unblock_resp.data) if unblock_resp.data else 0
-        except Exception as exc:
-            logger.warning("Downstream unblock warning: %s", exc)
-
-    # Re-block downstream tasks if previously done task was moved back
-    elif previous_status == "done" and new_status != "done":
-        try:
-            reblock_resp = (
-                client.table("tasks")
-                .update({"status": "blocked", "updated_at": now_iso})
-                .eq("workspace_id", str(workspace_id))
-                .eq("blocked_by", str(task_id))
-                .neq("status", "blocked")
-                .execute()
-            )
-            reblocked_count = len(reblock_resp.data) if reblock_resp.data else 0
-        except Exception as exc:
-            logger.warning("Downstream reblock warning: %s", exc)
-
+    # Dependency cascading commits inside the database status-update transaction.
     return TaskStatusUpdateResponse(
         id=task_id,
         workspace_id=workspace_id,
         status=new_status,
         completed_at=completed_at,
         updated_at=now_iso,
-        unblocked_tasks_count=unblocked_count,
-        reblocked_tasks_count=reblocked_count,
     )
 
 
@@ -368,7 +350,7 @@ def get_task_communications(
     user: CurrentUser = Depends(get_current_user),
 ) -> list[TaskCommunicationItem]:
     """Retrieve full conversation thread regarding prerequisites for a specific task."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_task_access(workspace_id, task_id, user)
     client = get_supabase_client()
 
     # Validate task belongs to workspace
@@ -402,7 +384,7 @@ def get_task_communications(
         rows = c_data if isinstance(c_data, list) else []
     except Exception as exc:
         logger.error("Failed to query task_communications: %s", exc)
-        return []
+        raise HTTPException(503, "Unable to load task communications") from exc
 
     if not rows:
         return []
@@ -482,7 +464,7 @@ def create_prerequisite_inquiry(
     user: CurrentUser = Depends(get_current_user),
 ) -> TaskCommunicationItem:
     """Submit an inquiry from the task assignee to the task creator/manager regarding prerequisites."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_task_access(workspace_id, task_id, user)
     client = get_supabase_client()
 
     # 1. Fetch task details (including creator / manager)
@@ -520,6 +502,9 @@ def create_prerequisite_inquiry(
             detail="No workspace admin or task creator found to receive this inquiry",
         )
 
+    manager_membership = client.table("workspace_members").select("role").eq("workspace_id", str(workspace_id)).eq("user_id", str(manager_id)).execute()
+    if not manager_membership.data or manager_membership.data[0]["role"] not in {"admin", "organiser"}:
+        raise HTTPException(409, "The task manager is no longer an organiser in this workspace")
     now_iso = datetime.now(UTC).isoformat()
     comm_payload = {
         "task_id": str(task_id),
@@ -607,7 +592,7 @@ def create_prerequisite_reply(
     user: CurrentUser = Depends(get_current_user),
 ) -> TaskCommunicationItem:
     """Submit a reply from the manager to the task assignee, with optional prerequisite linking."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_task_access(workspace_id, task_id, user, manager_only=True)
     client = get_supabase_client()
 
     # 1. Fetch task
@@ -632,6 +617,7 @@ def create_prerequisite_reply(
         client.table("task_communications")
         .select("sender_id")
         .eq("task_id", str(task_id))
+        .eq("workspace_id", str(workspace_id))
         .eq("message_type", "inquiry")
         .order("created_at", desc=True)
         .limit(1)
@@ -653,6 +639,10 @@ def create_prerequisite_reply(
         else:
             # Fall back to user or creator
             recipient_id = str(user.id)
+
+    membership = client.table("workspace_members").select("user_id").eq("workspace_id", str(workspace_id)).eq("user_id", recipient_id).execute()
+    if not membership.data:
+        raise HTTPException(409, "Inquiry sender is no longer a member of this workspace")
 
     # 3. If manager specified a prerequisite task to link, validate and link it
     prereq_title: str | None = None
@@ -678,30 +668,7 @@ def create_prerequisite_reply(
         prereq_row = p_resp.data[0]
         prereq_title = prereq_row.get("title")
 
-        # Circular dependency validation
-        if prereq_row.get("blocked_by") == str(task_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Circular dependency: prerequisite task already depends on this task",
-            )
-
-        # Update task's blocked_by and status
-        now_ts = datetime.now(UTC).isoformat()
-        new_status = task_record.get("status", "todo")
-        if new_status != "done":
-            if prereq_row.get("status") != "done":
-                new_status = "blocked"
-            elif new_status == "blocked":
-                new_status = "todo"
-
-        try:
-            client.table("tasks").update({
-                "blocked_by": str(prereq_id),
-                "status": new_status,
-                "updated_at": now_ts,
-            }).eq("id", str(task_id)).execute()
-        except Exception as update_err:
-            logger.error("Failed to link prerequisite on reply: %s", update_err)
+        update_task_dependency(workspace_id, task_id, TaskDependencyUpdateRequest(blocked_by=prereq_id), user)
 
     # 4. Insert communication record
     status_val = "resolved" if payload.mark_as_resolved else "answered"
@@ -736,7 +703,7 @@ def create_prerequisite_reply(
         client.table("task_communications").update({
             "status": status_val,
             "updated_at": now_iso,
-        }).eq("task_id", str(task_id)).eq("status", "open").execute()
+        }).eq("task_id", str(task_id)).eq("workspace_id", str(workspace_id)).eq("status", "open").execute()
     except Exception as upd_comm_exc:
         logger.warning("Could not update open inquiry statuses: %s", upd_comm_exc)
 
@@ -802,40 +769,17 @@ def resolve_prerequisite_inquiry(
     user: CurrentUser = Depends(get_current_user),
 ) -> TaskCommunicationItem:
     """Mark a prerequisite communication or entire task thread as resolved."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_task_access(workspace_id, task_id, user)
     client = get_supabase_client()
 
+    rows = (client.table("task_communications").select("*").eq("id", str(inquiry_id))
+            .eq("workspace_id", str(workspace_id)).eq("task_id", str(task_id)).execute().data or [])
+    if not rows:
+        raise HTTPException(404, "Communication record not found for this task")
+    row = rows[0]
     now_iso = datetime.now(UTC).isoformat()
-    try:
-        # Mark all communications on this task as resolved
-        client.table("task_communications").update({
-            "status": "resolved",
-            "updated_at": now_iso,
-        }).eq("task_id", str(task_id)).execute()
-
-        comm_resp = (
-            client.table("task_communications")
-            .select(
-                "id, task_id, workspace_id, sender_id, recipient_id, message_type, "
-                "content, suggested_prerequisite_task_id, status, created_at, updated_at"
-            )
-            .eq("id", str(inquiry_id))
-            .execute()
-        )
-        if not comm_resp.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Communication record not found",
-            )
-        row = comm_resp.data[0]
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("Failed to resolve communication: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to resolve communication: {exc}",
-        ) from exc
+    client.table("task_communications").update({"status": "resolved", "updated_at": now_iso}).eq(
+        "task_id", str(task_id)).eq("workspace_id", str(workspace_id)).execute()
 
     profile_map = _fetch_profile_map(client, {str(row["sender_id"]), str(row["recipient_id"])})
     sender_p = profile_map.get(str(row["sender_id"]))

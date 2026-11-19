@@ -33,8 +33,7 @@ import { OnlineMeetingAutomationHub } from '../components/meetings/OnlineMeeting
 import { WhatsAppShareButton } from '../components/kanban/WhatsAppShareButton';
 import type { KanbanTaskItem, TaskStatus, TaskPriority } from '../components/kanban/KanbanCard';
 import type { TranscriptSegment } from '../types/review';
-import { reviewApi, INITIAL_TRANSCRIPT_SEGMENTS } from '../services/reviewApi';
-import { DESIGN_SPRINT_TRANSCRIPT } from '../data/mockMeetingDetails';
+import { reviewApi } from '../services/reviewApi';
 import { Button } from '../components/ui/button';
 
 interface MeetingItem {
@@ -72,228 +71,6 @@ interface LoadedTranscriptData {
   file_name?: string | null;
   segments: TranscriptSegment[];
 }
-
-const DEMO_MEETINGS: MeetingItem[] = [
-  {
-    id: 'mtg-sprint-102',
-    title: 'Sprint 2 Architecture & AI Staging Review',
-    starts_at: '2026-10-11T10:00:00Z',
-    timezone: 'Asia/Kolkata',
-    status: 'ready',
-    organiser_id: '00000000-0000-0000-0000-000000000001',
-    created_at: '2026-10-11T10:00:00Z',
-  },
-  {
-    id: 'mtg-ds-01',
-    title: 'Design Sprint Review & Next Steps',
-    starts_at: '2026-10-14T10:00:00Z',
-    timezone: 'Asia/Kolkata',
-    status: 'ready',
-    organiser_id: '00000000-0000-0000-0000-000000000001',
-    created_at: '2026-10-14T10:00:00Z',
-  },
-];
-
-const DEMO_TASKS_SPRINT_102: KanbanTaskItem[] = [
-  {
-    id: 'demo-task-1',
-    workspace_id: 'ws-team-10',
-    meeting_id: 'mtg-sprint-102',
-    title: 'Implement Supabase RLS security policies for workspace tables',
-    description: 'Ensure members can only read and write data within their authorized workspace scope per CR-01.',
-    deadline_utc: '2026-10-14T23:59:59Z',
-    priority: 'urgent',
-    status: 'in_progress',
-    source_excerpt: 'Can you own the implementation of Supabase RLS security policies for workspace tables by October 14th?',
-    created_at: '2026-10-11T10:15:00Z',
-    updated_at: '2026-10-11T10:15:00Z',
-    task_assignees: [
-      {
-        user_id: '00000000-0000-0000-0000-000000000004',
-        is_primary: true,
-        profiles: {
-          id: '00000000-0000-0000-0000-000000000004',
-          display_name: 'Arnav Pandita',
-          email: 'arnav.pandita@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-2',
-    workspace_id: 'ws-team-10',
-    meeting_id: 'mtg-sprint-102',
-    title: 'Write database migration scripts and test admin vs member permissions',
-    description: 'Validate schema migration scripts and test permission enforcement under RLS.',
-    deadline_utc: '2026-10-14T23:59:59Z',
-    priority: 'high',
-    status: 'todo',
-    source_excerpt: "I will write the migration scripts and test admin vs team_member permissions.",
-    created_at: '2026-10-11T10:16:00Z',
-    updated_at: '2026-10-11T10:16:00Z',
-    task_assignees: [
-      {
-        user_id: '00000000-0000-0000-0000-000000000004',
-        is_primary: true,
-        profiles: {
-          id: '00000000-0000-0000-0000-000000000004',
-          display_name: 'Arnav Pandita',
-          email: 'arnav.pandita@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-3',
-    workspace_id: 'ws-team-10',
-    meeting_id: 'mtg-sprint-102',
-    title: 'Add drag-and-drop file uploader with mime type error boundaries',
-    description: 'Support .vtt, .srt, .txt, and .docx formats following the storage path convention.',
-    deadline_utc: '2026-10-15T23:59:59Z',
-    priority: 'normal',
-    status: 'done',
-    source_excerpt: 'Make sure the drag-and-drop file uploader has instant upload feedback and error boundaries for unsupported mime types by October 15th.',
-    created_at: '2026-10-11T10:18:00Z',
-    updated_at: '2026-10-11T10:18:00Z',
-    completed_at: '2026-10-13T14:30:00Z',
-    task_assignees: [
-      {
-        user_id: '00000000-0000-0000-0000-000000000005',
-        is_primary: true,
-        profiles: {
-          id: '00000000-0000-0000-0000-000000000005',
-          display_name: 'Bharat Odedara',
-          email: 'bharat.odedara@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-4',
-    workspace_id: 'ws-team-10',
-    meeting_id: 'mtg-sprint-102',
-    title: 'Sanitize user inputs in multi-line paste widget',
-    description: 'Strip dangerous HTML and script injections before dispatching transcript text.',
-    deadline_utc: '2026-10-15T23:59:59Z',
-    priority: 'high',
-    status: 'todo',
-    source_excerpt: 'someone needs to sanitize user inputs in the multi-line paste widget to strip dangerous HTML and scripts',
-    created_at: '2026-10-11T10:20:00Z',
-    updated_at: '2026-10-11T10:20:00Z',
-    task_assignees: [
-      {
-        user_id: '00000000-0000-0000-0000-000000000001',
-        is_primary: true,
-        profiles: {
-          id: '00000000-0000-0000-0000-000000000001',
-          display_name: 'Madhav Chauhan',
-          email: 'madhav.chauhan@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-5',
-    workspace_id: 'ws-team-10',
-    meeting_id: 'mtg-sprint-102',
-    title: 'Implement CR-01 AI Attestation disclaimer banner',
-    description: 'Display AI-generated suggestions disclaimer across all review and staging screens.',
-    deadline_utc: '2026-10-16T23:59:59Z',
-    priority: 'normal',
-    status: 'todo',
-    source_excerpt: "per CR-01 compliance, we must add the AI Attestation disclaimer banner stating: 'AI-generated suggestions. Verify before publishing.'",
-    created_at: '2026-10-11T10:22:00Z',
-    updated_at: '2026-10-11T10:22:00Z',
-    task_assignees: [
-      {
-        user_id: '00000000-0000-0000-0000-000000000006',
-        is_primary: true,
-        profiles: {
-          id: '00000000-0000-0000-0000-000000000006',
-          display_name: 'Yuvraj Katara',
-          email: 'yuvraj.katara@actionpulse.io',
-        },
-      },
-    ],
-  },
-];
-
-const DEMO_TASKS_DS_01: KanbanTaskItem[] = [
-  {
-    id: 'demo-task-ds-1',
-    workspace_id: 'ws-team-10',
-    meeting_id: 'mtg-ds-01',
-    title: 'Tweak accent colors from blue to teal for better accessibility',
-    description: 'Update design system tokens and ensure high-contrast visibility.',
-    deadline_utc: '2026-10-18T23:59:59Z',
-    priority: 'normal',
-    status: 'in_progress',
-    source_excerpt: "Got it — I'll tweak the accent colors. Maybe shift from blue to teal for better visibility.",
-    created_at: '2026-10-14T10:05:00Z',
-    updated_at: '2026-10-14T10:05:00Z',
-    task_assignees: [
-      {
-        user_id: 'user-karthik',
-        is_primary: true,
-        profiles: {
-          id: 'user-karthik',
-          display_name: 'Karthik',
-          email: 'karthik@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-ds-2',
-    workspace_id: 'ws-team-10',
-    meeting_id: 'mtg-ds-01',
-    title: 'Add dedicated tab for Action Items under Meeting Review',
-    description: 'Separate general insights from extracted task candidates to ease post-meeting review.',
-    deadline_utc: '2026-10-19T23:59:59Z',
-    priority: 'high',
-    status: 'done',
-    source_excerpt: "One quick note — we should also improve how 'Action Items' are displayed... maybe give them their own dedicated tab.",
-    created_at: '2026-10-14T10:07:00Z',
-    updated_at: '2026-10-14T10:07:00Z',
-    completed_at: '2026-10-15T11:00:00Z',
-    task_assignees: [
-      {
-        user_id: 'user-asha',
-        is_primary: true,
-        profiles: {
-          id: 'user-asha',
-          display_name: 'Asha',
-          email: 'asha@actionpulse.io',
-        },
-      },
-    ],
-  },
-  {
-    id: 'demo-task-ds-3',
-    workspace_id: 'ws-team-10',
-    meeting_id: 'mtg-ds-01',
-    title: 'Optimize API calls for real-time summary generation',
-    description: 'Cut down API latency to under one second for live summary generation.',
-    deadline_utc: '2026-10-20T23:59:59Z',
-    priority: 'high',
-    status: 'done',
-    source_excerpt: 'From the dev side, the live transcription latency is now under one second. I also optimized the API calls for faster summary generation.',
-    created_at: '2026-10-14T10:10:00Z',
-    updated_at: '2026-10-14T10:10:00Z',
-    completed_at: '2026-10-15T16:20:00Z',
-    task_assignees: [
-      {
-        user_id: 'user-vikram',
-        is_primary: true,
-        profiles: {
-          id: 'user-vikram',
-          display_name: 'Vikram',
-          email: 'vikram@actionpulse.io',
-        },
-      },
-    ],
-  },
-];
 
 const SPEAKER_PILL_STYLES: Record<string, { bg: string; text: string; border: string }> = {
   indigo: { bg: 'bg-indigo-500/15', text: 'text-indigo-300', border: 'border-indigo-500/30' },
@@ -358,6 +135,8 @@ export default function MeetingsPage() {
   const [transcriptData, setTranscriptData] = useState<LoadedTranscriptData | null>(null);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const dataGeneration = useRef(0);
   const segmentRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const showToast = (msg: string) => {
@@ -367,7 +146,9 @@ export default function MeetingsPage() {
 
   // 1. Fetch meetings, confirmed tasks, and candidate items dynamically from Supabase
   const loadWorkspaceMeetingData = useCallback(async () => {
-    if (!workspaceId) return;
+    const request = ++dataGeneration.current;
+    setMeetings([]); setAllTasks([]); setCandidateItems([]); setLoadError(null);
+    if (!workspaceId) { setSelectedMeetingId(null); setLoading(false); return; }
     setLoading(true);
 
     try {
@@ -413,9 +194,10 @@ export default function MeetingsPage() {
           .order('created_at', { ascending: true }),
       ]);
 
+      for (const result of [meetingsRes, tasksRes, candidatesRes]) { if (result.error) throw result.error; }
+      if (request !== dataGeneration.current) return;
       const rawMeetingList = (meetingsRes.data || []) as MeetingItem[];
-      // If workspace has no meetings yet, provide demo meetings so the user can immediately experience old meetings
-      const finalMeetingList = rawMeetingList.length > 0 ? rawMeetingList : DEMO_MEETINGS;
+      const finalMeetingList = rawMeetingList;
       setMeetings(finalMeetingList);
 
       const rawTasks = (tasksRes.data || []) as any[];
@@ -442,9 +224,10 @@ export default function MeetingsPage() {
         }
       }
 
+      if (request !== dataGeneration.current) return;
       const taskList: KanbanTaskItem[] = rawTasks.map((t) => ({
         ...t,
-        execution_type: t.execution_type || (t.external_owner_label === 'AI Agent' ? 'agent' : 'human'),
+        execution_type: 'human',
         task_assignees: (t.task_assignees || []).map((a: any) => ({
           user_id: a.user_id,
           is_primary: Boolean(a.is_primary),
@@ -459,24 +242,20 @@ export default function MeetingsPage() {
       setAllTasks(taskList);
 
       const candidateList = (candidatesRes.data || []) as ExtractedActionCandidate[];
-      setCandidateItems(candidateList);
+      setCandidateItems(candidateList.filter(c => finalMeetingList.some(m => m.id === c.meeting_id)));
 
-      // Default select the most recent meeting if none selected
-      if (finalMeetingList.length > 0 && !selectedMeetingId) {
-        setSelectedMeetingId(finalMeetingList[0].id);
-      }
+      setSelectedMeetingId(previous => finalMeetingList.some(m => m.id === previous) ? previous : finalMeetingList[0]?.id || null);
     } catch (err) {
-      console.error('Failed to load meetings data from Supabase:', err);
-      // Fallback to demo meetings
-      setMeetings(DEMO_MEETINGS);
-      if (!selectedMeetingId) setSelectedMeetingId(DEMO_MEETINGS[0].id);
+      if (request !== dataGeneration.current) return;
+      setLoadError(err instanceof Error ? err.message : 'Unable to load meetings.');
     } finally {
-      setLoading(false);
+      if (request === dataGeneration.current) setLoading(false);
     }
-  }, [workspaceId, selectedMeetingId]);
+  }, [workspaceId]);
 
   useEffect(() => {
-    loadWorkspaceMeetingData();
+    void loadWorkspaceMeetingData();
+    return () => { dataGeneration.current++; };
   }, [loadWorkspaceMeetingData]);
 
   // 2. Fetch transcript specifically for the active meeting
@@ -487,34 +266,11 @@ export default function MeetingsPage() {
     }
 
     let isMounted = true;
+    setTranscriptData(null);
     setTranscriptLoading(true);
 
     const loadTranscript = async () => {
       try {
-        // A. Handle demo meetings
-        if (selectedMeetingId === 'mtg-sprint-102') {
-          if (isMounted) {
-            setTranscriptData({
-              id: 'tr-sprint-102',
-              source: 'txt',
-              canonical_text: INITIAL_TRANSCRIPT_SEGMENTS.map(s => `${s.speaker_name} (${s.timestamp}): ${s.text}`).join('\n\n'),
-              segments: INITIAL_TRANSCRIPT_SEGMENTS,
-            });
-          }
-          return;
-        }
-        if (selectedMeetingId === 'mtg-ds-01') {
-          if (isMounted) {
-            setTranscriptData({
-              id: 'tr-ds-01',
-              source: 'vtt',
-              canonical_text: DESIGN_SPRINT_TRANSCRIPT.map(s => `${s.speaker_name} (${s.timestamp}): ${s.text}`).join('\n\n'),
-              segments: DESIGN_SPRINT_TRANSCRIPT,
-            });
-          }
-          return;
-        }
-
         // B. Query Supabase transcripts table
         const { data: tRow, error: tErr } = await supabase
           .from('transcripts')
@@ -571,7 +327,7 @@ export default function MeetingsPage() {
         }
       } catch (err) {
         console.warn('Transcript fetch notice:', err);
-        if (isMounted) setTranscriptData(null);
+        if (isMounted) { setTranscriptData(null); setLoadError('Unable to load transcript. Please retry.'); }
       } finally {
         if (isMounted) setTranscriptLoading(false);
       }
@@ -631,10 +387,6 @@ export default function MeetingsPage() {
     if (!selectedMeetingId) return [];
     const directTasks = allTasks.filter((t) => t.meeting_id === selectedMeetingId);
     if (directTasks.length > 0) return directTasks;
-
-    // If demo meeting and no direct tasks in Supabase yet, use demo tasks
-    if (selectedMeetingId === 'mtg-sprint-102') return DEMO_TASKS_SPRINT_102;
-    if (selectedMeetingId === 'mtg-ds-01') return DEMO_TASKS_DS_01;
 
     return [];
   }, [allTasks, selectedMeetingId]);
@@ -749,7 +501,7 @@ export default function MeetingsPage() {
           ? c.rejection_reason.split('depends_on:')[1]?.trim() || null
           : null,
         status: 'pending' as const,
-        confidence_score: 0.95,
+        confidence_score: null,
         transcript_timestamp: '00:00',
         created_at: c.created_at,
         updated_at: c.created_at,
@@ -758,7 +510,7 @@ export default function MeetingsPage() {
       await loadWorkspaceMeetingData();
       showToast('Action items approved and synced to task board!');
     } catch (err) {
-      console.error('Failed to approve workflow items:', err);
+      showToast(err instanceof Error ? err.message : 'Approval failed.');
     } finally {
       setApproving(false);
     }
@@ -766,28 +518,13 @@ export default function MeetingsPage() {
 
   // Task status transition handler (Compliant with Backend RLS rules)
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
-    setAllTasks((prev) =>
-      prev.map((t) => {
-        if (t.id === taskId) return { ...t, status: newStatus };
-        if (newStatus === 'done' && t.blocked_by === taskId && t.status === 'blocked') {
-          return { ...t, status: 'todo' };
-        }
-        return t;
-      })
-    );
-
+    if (!workspaceId) return;
     try {
-      await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
-      if (newStatus === 'done') {
-        await supabase
-          .from('tasks')
-          .update({ status: 'todo' })
-          .eq('blocked_by', taskId)
-          .eq('status', 'blocked');
-      }
+      await reviewApi.updateTaskStatus(workspaceId, taskId, newStatus);
+      await loadWorkspaceMeetingData();
       showToast(`Task status updated to ${STATUS_CONFIG[newStatus].label}`);
     } catch (err) {
-      console.warn('Status update notice:', err);
+      showToast(err instanceof Error ? err.message : 'Task update failed.');
     }
   };
 
@@ -819,7 +556,9 @@ export default function MeetingsPage() {
     // Find segment that contains excerpt snippet
     const targetSegment = transcriptData.segments.find((seg) => {
       const excerptWords = sourceExcerpt.toLowerCase().split(' ').slice(0, 4).join(' ');
-      return (
+      if (loadError) return <div role="alert" className="p-6">{loadError}<Button onClick={() => loadWorkspaceMeetingData()}>Retry</Button></div>;
+
+  return (
         seg.text.toLowerCase().includes(sourceExcerpt.toLowerCase()) ||
         seg.text.toLowerCase().includes(excerptWords)
       );
@@ -1035,13 +774,7 @@ export default function MeetingsPage() {
                   const isSelected = m.id === selectedMeetingId;
                   const isPast = isPastMeeting(m);
                   const mTasks = allTasks.filter((t) => t.meeting_id === m.id);
-                  const taskCount = mTasks.length > 0
-                    ? mTasks.length
-                    : m.id === 'mtg-sprint-102'
-                    ? DEMO_TASKS_SPRINT_102.length
-                    : m.id === 'mtg-ds-01'
-                    ? DEMO_TASKS_DS_01.length
-                    : 0;
+                  const taskCount = mTasks.length;
 
                   return (
                     <div

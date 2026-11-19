@@ -47,11 +47,6 @@ export const MeetingTopNav: React.FC<TopNavProps> = ({
           </div>
 
           <ChevronRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-          <span className="text-slate-400 hidden md:inline hover:text-slate-200 transition cursor-pointer">November</span>
-          <ChevronRight className="w-3.5 h-3.5 text-slate-400 hidden md:inline flex-shrink-0" />
-          <span className="text-slate-400 hidden sm:inline hover:text-slate-200 transition cursor-pointer">Client 04</span>
-          <ChevronRight className="w-3.5 h-3.5 text-slate-400 hidden sm:inline flex-shrink-0" />
-
           <span className="font-semibold text-white truncate">
             {meeting.title}
           </span>
@@ -86,7 +81,7 @@ export const MeetingTopNav: React.FC<TopNavProps> = ({
 
         {/* Go to Review */}
         <button
-          onClick={() => navigate('/meeting-review')}
+          onClick={() => navigate(`/meetings/${meeting.id}/review`)}
           className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white bg-[#151921] hover:bg-[#1b212c] border border-[#232936] rounded-lg transition"
           title="Open Action Item Review & Staging Gate"
         >

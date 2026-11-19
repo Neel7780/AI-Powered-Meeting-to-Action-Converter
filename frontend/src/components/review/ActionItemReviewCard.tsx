@@ -40,13 +40,11 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(item.title);
-  const [editDescription, setEditDescription] = useState(item.description);
   const [editDueDate, setEditDueDate] = useState(item.due_date || '');
   const [assigneeError, setAssigneeError] = useState(false);
 
   React.useEffect(() => {
     setEditTitle(item.title);
-    setEditDescription(item.description);
     setEditDueDate(item.due_date || '');
   }, [item.title, item.description, item.due_date]);
 
@@ -56,7 +54,6 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
     if (!editTitle.trim()) return;
     onUpdate(item.id, {
       title: editTitle.trim(),
-      description: editDescription.trim(),
       due_date: editDueDate || null
     });
     setIsEditing(false);
@@ -64,7 +61,6 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
 
   const handleCancelEdit = () => {
     setEditTitle(item.title);
-    setEditDescription(item.description);
     setEditDueDate(item.due_date || '');
     setIsEditing(false);
   };
@@ -84,7 +80,7 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
     onApprove(item.id);
   };
 
-  const confidencePercent = Math.round(item.confidence_score * 100);
+  const confidencePercent = item.confidence_score == null ? null : Math.round(item.confidence_score * 100);
 
   const cardState =
     item.status === 'approved'
@@ -101,10 +97,10 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <span
             className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-neutral-300"
-            title={`AI extraction confidence: ${confidencePercent}%`}
+            title={confidencePercent == null ? "Confidence unavailable" : `AI extraction confidence: ${confidencePercent}%`}
           >
             <Sparkles className="size-3 text-white" />
-            {confidencePercent}% AI confidence
+            {confidencePercent == null ? "Confidence unavailable" : `${confidencePercent}% AI confidence`}
           </span>
 
           <button
@@ -137,7 +133,7 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
             type="button"
             onClick={() => setIsEditing(true)}
             className="rounded-md p-1 text-neutral-500 transition-colors hover:bg-white/10 hover:text-white"
-            title="Inline edit action item title, description or date"
+            title="Inline edit action item title or date"
             aria-label="Edit action item"
           >
             <Edit3 className="size-3.5" />
@@ -163,12 +159,12 @@ export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
 
           <div>
             <label htmlFor={`description-${item.id}`} className="field-label text-[11px]">
-              Description & context
+              Source evidence (read-only)
             </label>
             <textarea
               id={`description-${item.id}`}
-              value={editDescription}
-              onChange={(e) => setEditDescription(e.target.value)}
+              value={item.description}
+              readOnly
               rows={2}
               placeholder="Detailed description..."
               className="field py-1.5 text-xs"

@@ -4,12 +4,12 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ApproveItemUpdate(BaseModel):
     id: UUID = Field(..., description="ID of the extracted_items candidate to approve")
-    task: str | None = Field(default=None, description="Edited task description. If omitted, retains extracted value")
+    task: str | None = Field(default=None, min_length=1, max_length=500, description="Edited task description. If omitted, retains extracted value")
     owner_user_id: UUID | None = Field(
         default=None, description="Assigned workspace member UUID. Null clears the owner"
     )
@@ -21,13 +21,29 @@ class ApproveItemUpdate(BaseModel):
     blocked_by_id: UUID | None = Field(
         default=None, description="Prerequisite candidate item UUID or existing task UUID"
     )
-    execution_type: Literal["human", "agent"] | None = Field(
-        default=None, description="Execution routing: human team member or automated AI agent"
+    execution_type: Literal["human"] | None = Field(
+        default=None, description="Manual team task; automatic execution is unavailable"
     )
+
+
+    @model_validator(mode="after")
+    def valid_edits(self):
+        if "task" in self.model_fields_set and (self.task is None or not self.task.strip()):
+            raise ValueError("Task description cannot be blank")
+        if "priority" in self.model_fields_set and self.priority is None:
+            raise ValueError("Priority cannot be null")
+        return self
 
 
 class ApproveRequest(BaseModel):
     items: list[ApproveItemUpdate] = Field(..., min_length=1, description="List of candidate items to approve")
+
+
+    @model_validator(mode="after")
+    def unique_items(self):
+        if len({item.id for item in self.items}) != len(self.items):
+            raise ValueError("Candidate IDs must be unique")
+        return self
 
 
 class ApproveResponse(BaseModel):

@@ -20,8 +20,6 @@ import {
   AlertTriangle,
   GitFork,
   LayoutGrid,
-  Bot,
-  User,
   TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -72,7 +70,6 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
 
   // Filter states
   const [filterType, setFilterType] = useState<'all' | 'assigned'>('all');
-  const [executionFilter, setExecutionFilter] = useState<'all' | 'human' | 'agent'>('all');
   const [selectedMeetingId, setSelectedMeetingId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -140,6 +137,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           .order('starts_at', { ascending: false }),
       ]);
 
+      if (meetingRes.error) throw meetingRes.error;
       const meetingList = (meetingRes.data || []) as MeetingOption[];
       setMeetings(meetingList);
       setSelectedMeetingId((prev) => {
@@ -179,7 +177,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
         const mapped: KanbanTaskItem[] = rawTasks.map((t) => ({
           ...t,
           execution_type:
-            t.execution_type || (t.external_owner_label === 'AI Agent' ? 'agent' : 'human'),
+            'human',
           task_assignees: (t.task_assignees || []).map((a: any) => ({
             user_id: a.user_id,
             is_primary: Boolean(a.is_primary),
@@ -196,6 +194,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
     } catch (err: unknown) {
       console.error('Network exception while fetching tasks:', err);
       setTasks([]);
+      setErrorMsg(err instanceof Error ? err.message : "Unable to load tasks. Please retry.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -266,119 +265,23 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       }
     }
 
-    const previousStatus = targetTask.status;
-
-    // Optimistic UI update
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id === taskId) {
-          return { ...t, status: newStatus };
-        }
-        // If this task is completed ('done'), automatically unblock downstream tasks
-        if (newStatus === 'done' && t.blocked_by === taskId && t.status === 'blocked') {
-          return { ...t, status: 'todo' };
-        }
-        // If moved backwards from done, re-block downstream tasks
-        if (previousStatus === 'done' && newStatus !== 'done' && t.blocked_by === taskId && t.status !== 'blocked') {
-          return { ...t, status: 'blocked' };
-        }
-        return t;
-      })
-    );
-
-    setUpdatingTaskIds((prev) => new Set(prev).add(taskId));
-
+    setUpdatingTaskIds(prev => new Set(prev).add(taskId));
     try {
-      if (activeWorkspaceId) {
-        await reviewApi.updateTaskStatus(activeWorkspaceId, taskId, newStatus);
-      } else {
-        await supabase
-          .from('tasks')
-          .update({ status: newStatus })
-          .eq('id', taskId);
-      }
-    } catch (err: any) {
-      console.warn('Backend update failed, trying direct Supabase fallback:', err);
-      try {
-        const { error } = await supabase
-          .from('tasks')
-          .update({ status: newStatus })
-          .eq('id', taskId);
-
-        if (error) {
-          throw error;
-        } else if (newStatus === 'done') {
-          await supabase
-            .from('tasks')
-            .update({ status: 'todo' })
-            .eq('blocked_by', taskId)
-            .eq('status', 'blocked');
-        } else if (previousStatus === 'done') {
-          await supabase
-            .from('tasks')
-            .update({ status: 'blocked' })
-            .eq('blocked_by', taskId)
-            .neq('status', 'blocked');
-        }
-      } catch (dbErr: any) {
-        console.error('Supabase status update error:', dbErr?.message || err?.message);
-        setTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? { ...t, status: previousStatus } : t))
-        );
-        setErrorMsg(`Failed to move task: ${dbErr?.message || err?.message || 'Update error'}`);
-      }
+      if (!activeWorkspaceId) throw new Error('Select a workspace.');
+      await reviewApi.updateTaskStatus(activeWorkspaceId, taskId, newStatus);
+      await fetchData();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Task update failed.');
+      await fetchData();
     } finally {
-      setUpdatingTaskIds((prev) => {
-        const next = new Set(prev);
-        next.delete(taskId);
-        return next;
-      });
+      setUpdatingTaskIds(prev => { const next = new Set(prev); next.delete(taskId); return next; });
     }
   };
 
-  // 5. Sprint 2: Handle Task Dependency & Execution Routing Update
-  const handleUpdateDependency = async (
-    taskId: string,
-    blockedById: string | null,
-    executionType?: 'human' | 'agent'
-  ) => {
-    setTasks((prev) => {
-      const prerequisite = blockedById ? prev.find((t) => t.id === blockedById) : null;
-      return prev.map((t) => {
-        if (t.id === taskId) {
-          // If a prerequisite is set that is not 'done', auto-mark this task as 'blocked'
-          let newStatus = t.status;
-          if (blockedById && prerequisite && prerequisite.status !== 'done') {
-            newStatus = 'blocked';
-          } else if (!blockedById && t.status === 'blocked') {
-            newStatus = 'todo';
-          }
-          return {
-            ...t,
-            blocked_by: blockedById,
-            status: newStatus,
-            execution_type: executionType || t.execution_type,
-          };
-        }
-        return t;
-      });
-    });
-
-    try {
-      if (activeWorkspaceId) {
-        await reviewApi.updateTaskDependency(
-          activeWorkspaceId,
-          taskId,
-          blockedById,
-          executionType
-        );
-      }
-    } catch (err: any) {
-      console.warn('Backend dependency update warning, falling back to local state:', err);
-      if (err?.message) {
-        setErrorMsg(`Failed to update dependency: ${err.message}`);
-      }
-    }
+  const handleUpdateDependency = async (taskId: string, blockedById: string | null) => {
+    if (!activeWorkspaceId) throw new Error('Select a workspace.');
+    await reviewApi.updateTaskDependency(activeWorkspaceId, taskId, blockedById);
+    await fetchData();
   };
 
   // 6. Filter & Search Logic
@@ -394,8 +297,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
       }
 
       // Execution type filter
-      if (executionFilter === 'agent' && task.execution_type !== 'agent') return false;
-      if (executionFilter === 'human' && task.execution_type === 'agent') return false;
+
 
       // Meeting filter
       if (selectedMeetingId !== 'all') {
@@ -413,7 +315,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
 
       return true;
     });
-  }, [tasks, filterType, executionFilter, currentUserId, selectedMeetingId, searchQuery]);
+  }, [tasks, filterType, currentUserId, selectedMeetingId, searchQuery]);
 
   // 7. Group into Kanban columns
   const todoTasks = useMemo(() => filteredTasks.filter((t) => t.status === 'todo'), [filteredTasks]);
@@ -438,7 +340,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
           <p className="eyebrow">Task Management & Orchestration</p>
           <h1 className="mt-2 text-3xl font-medium tracking-tight text-white">Tasks & Workflow Chains</h1>
           <p className="mt-2 text-sm text-neutral-400">
-            Approved action items, multi-step dependencies, and AI agent execution routing.
+            Approved action items and task dependencies.
           </p>
         </div>
 
@@ -534,34 +436,7 @@ export function KanbanBoard({ workspaceId: propWorkspaceId }: KanbanBoardProps =
             </button>
           </div>
 
-          {/* Filter 2: Execution Mode (Human vs Agent) */}
-          <div className="inline-flex rounded-md border border-white/10 bg-white/[0.02] p-0.5">
-            <button
-              type="button"
-              onClick={() => setExecutionFilter('all')}
-              className={segmentClass(executionFilter === 'all')}
-            >
-              All types
-            </button>
-            <button
-              type="button"
-              onClick={() => setExecutionFilter('human')}
-              className={segmentClass(executionFilter === 'human')}
-              title="Tasks assigned to human team members"
-            >
-              <User className="size-3 text-slate-400" />
-              Human
-            </button>
-            <button
-              type="button"
-              onClick={() => setExecutionFilter('agent')}
-              className={segmentClass(executionFilter === 'agent')}
-              title="Automated tasks executed by AI Agents"
-            >
-              <Bot className="size-3 text-purple-400" />
-              Agent
-            </button>
-          </div>
+
 
           {/* Filter 3: Filter by Meeting */}
           <div className="relative">

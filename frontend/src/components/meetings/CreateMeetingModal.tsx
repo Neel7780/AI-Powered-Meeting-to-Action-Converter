@@ -10,10 +10,8 @@ import {
   LoaderCircle,
   AlertCircle,
   CheckCircle2,
-  Wand2,
 } from 'lucide-react';
 import { postApi } from '../../services/reviewApi';
-import { supabase } from '../../lib/supabase';
 import { Button } from '../ui/button';
 import { TimezoneSelector } from './TimezoneSelector';
 
@@ -25,12 +23,6 @@ interface CreateMeetingModalProps {
   onSwitchToAdvanced?: () => void;
   initialDate?: string;
 }
-
-const SAMPLE_TRANSCRIPT = `Madhav Chauhan (00:05): Team, let's review our sprint progress. Bharat, can you verify the transcript parser handles .vtt and .srt subtitle files properly by Friday?
-Bharat Odedara (00:22): Yes, I'll test the parser and add error handling for corrupted files before Friday October 16th.
-Arnav Pandita (00:38): I will write the Supabase RLS security policies for the meetings and tasks tables by next Monday.
-Madhav Chauhan (00:55): Great. Yuvraj, please add the AI Attestation disclaimer banner on the meeting review gate by October 18th.
-Yuvraj Katara (01:10): On it. I'll make sure it's visible before organisers approve extracted tasks.`;
 
 export const CreateMeetingModal: React.FC<CreateMeetingModalProps> = ({
   isOpen,
@@ -56,25 +48,19 @@ export const CreateMeetingModal: React.FC<CreateMeetingModalProps> = ({
   const [timezone, setTimezone] = useState('Asia/Kolkata');
   const [meetingFormat, setMeetingFormat] = useState<'online' | 'in_person'>('online');
   const [conferenceUrl, setConferenceUrl] = useState('');
-  const [attested, setAttested] = useState(true);
+  const [attested, setAttested] = useState(false);
 
   // Transcript tab: 'paste' | 'upload' | 'later'
   const [transcriptTab, setTranscriptTab] = useState<'paste' | 'upload' | 'later'>('paste');
   const [transcriptText, setTranscriptText] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
+  const [createdMeeting, setCreatedMeeting] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
-
-  const handleUseSampleTranscript = () => {
-    setTranscriptText(SAMPLE_TRANSCRIPT);
-    if (!title.trim()) {
-      setTitle('Sprint Architecture & Security Review');
-    }
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -110,117 +96,25 @@ export const CreateMeetingModal: React.FC<CreateMeetingModalProps> = ({
     setStatusMessage('Creating meeting...');
 
     try {
-      // 1. Convert local date to UTC ISO string
-      let startsAtUtc = new Date().toISOString();
-      try {
-        const localDate = new Date(date);
-        startsAtUtc = localDate.toISOString();
-      } catch {
-        startsAtUtc = new Date().toISOString();
-      }
-
-      // 2. Call backend meeting creation
-      let createdMeeting: any = null;
-      try {
-        createdMeeting = await postApi(`/api/workspaces/${workspaceId}/meetings`, {
-          title: title.trim(),
-          starts_at: startsAtUtc,
-          timezone,
-          participant_user_ids: [],
-          external_participants: [],
-          ai_processing: true,
-          ai_attestation: true,
-          conference_url: meetingFormat === 'online' && conferenceUrl.trim() ? conferenceUrl.trim() : undefined,
-        });
-      } catch (backendErr) {
-        console.warn('Backend API meeting creation failed, falling back to direct Supabase insert:', backendErr);
-        // Supabase direct fallback
-        const { data: userData } = await supabase.auth.getUser();
-        const userId = userData?.user?.id || '00000000-0000-0000-0000-000000000001';
-
-        const { data: inserted, error: insertErr } = await supabase
-          .from('meetings')
-          .insert({
-            workspace_id: workspaceId,
-            title: title.trim(),
-            starts_at: startsAtUtc,
-            timezone,
-            organiser_id: userId,
-            status: transcriptTab !== 'later' ? 'ready' : 'draft',
-            conference_url: meetingFormat === 'online' && conferenceUrl.trim() ? conferenceUrl.trim() : null,
-          })
-          .select()
-          .single();
-
-        if (insertErr) throw insertErr;
-        createdMeeting = inserted;
-      }
-
-      if (!createdMeeting || !createdMeeting.id) {
-        throw new Error('Failed to retrieve created meeting record.');
-      }
-
-      // 3. Attach transcript if provided
-      if (transcriptTab === 'paste' && transcriptText.trim()) {
+      const startsAtUtc = new Date(date).toISOString();
+      const meeting = createdMeeting || await postApi(`/api/workspaces/${workspaceId}/meetings`, {
+        title: title.trim(), starts_at: startsAtUtc, timezone,
+        participant_user_ids: [], external_participants: [],
+        ai_processing: true, ai_attestation: attested,
+        conference_url: meetingFormat === 'online' && conferenceUrl.trim() ? conferenceUrl.trim() : undefined,
+      });
+      setCreatedMeeting(meeting);
+      if (!meeting?.id) throw new Error('Meeting creation returned no record.');
+      const form = new FormData();
+      if (transcriptTab === 'paste' && transcriptText.trim()) form.append('text', transcriptText.trim());
+      if (transcriptTab === 'upload' && uploadedFile) form.append('file', uploadedFile);
+      if (form.has('text') || form.has('file')) {
         setStatusMessage('Saving transcript...');
-        try {
-          const form = new FormData();
-          form.append('text', transcriptText.trim());
-          await postApi(`/api/meetings/${createdMeeting.id}/transcript`, form);
-          setStatusMessage('Extracting action items...');
-          await postApi(`/api/meetings/${createdMeeting.id}/extract`, {}).catch(() => null);
-        } catch (tErr) {
-          console.warn('Backend transcript upload fallback, inserting to Supabase:', tErr);
-          const { data: tRow } = await supabase
-            .from('transcripts')
-            .insert({
-              meeting_id: createdMeeting.id,
-              source: 'paste',
-              canonical_text: transcriptText.trim(),
-              raw_text: transcriptText.trim(),
-            })
-            .select()
-            .single();
-
-          // Split lines to create segments if available
-          if (tRow) {
-            const lines = transcriptText.trim().split('\n').filter(Boolean);
-            const segments = lines.map((line, idx) => {
-              const speakerMatch = line.match(/^([^:(]+)(?:\s*\(([^)]+)\))?:\s*(.+)$/);
-              const speaker = speakerMatch ? speakerMatch[1].trim() : `Speaker ${idx + 1}`;
-              const text = speakerMatch ? speakerMatch[3].trim() : line.trim();
-              return {
-                transcript_id: tRow.id,
-                segment_index: idx,
-                speaker_name: speaker,
-                start_ms: idx * 30000,
-                end_ms: (idx + 1) * 30000,
-                text,
-              };
-            });
-            try {
-              await supabase.from('transcript_segments').insert(segments);
-            } catch {
-              // ignore segment insertion error
-            }
-          }
-        }
-      } else if (transcriptTab === 'upload' && uploadedFile) {
-        setStatusMessage('Uploading transcript file...');
-        try {
-          const form = new FormData();
-          form.append('file', uploadedFile);
-          await postApi(`/api/meetings/${createdMeeting.id}/transcript`, form);
-          setStatusMessage('Extracting action items...');
-          await postApi(`/api/meetings/${createdMeeting.id}/extract`, {}).catch(() => null);
-        } catch (fErr) {
-          console.warn('Transcript file upload notice:', fErr);
-        }
+        await postApi(`/api/meetings/${meeting.id}/transcript`, form);
+        setStatusMessage('Starting extraction...');
+        await postApi(`/api/meetings/${meeting.id}/extract`, {});
       }
-
-      // Success!
-      setStatusMessage('Meeting created successfully!');
-      onMeetingCreated(createdMeeting);
+      onMeetingCreated(meeting);
       onClose();
     } catch (err: any) {
       console.error('Error creating meeting:', err);
@@ -365,16 +259,7 @@ export const CreateMeetingModal: React.FC<CreateMeetingModalProps> = ({
                 </p>
               </div>
 
-              {transcriptTab === 'paste' && (
-                <button
-                  type="button"
-                  onClick={handleUseSampleTranscript}
-                  className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2"
-                >
-                  <Wand2 className="size-3" />
-                  Use Sample Notes
-                </button>
-              )}
+
             </div>
 
             {/* Tab switchers */}

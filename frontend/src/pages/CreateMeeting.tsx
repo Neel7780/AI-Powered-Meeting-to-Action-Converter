@@ -117,7 +117,8 @@ export function CreateMeeting({ onSuccess, onCancel }: CreateMeetingProps = {}) 
     await postApi(`/api/meetings/${meeting.id}/extract`, {});
     for (let i = 0; i < 60; i++) {
       await new Promise(r => setTimeout(r, 2000));
-      const { data } = await supabase.from('meetings').select('status').eq('id', meeting.id).single();
+      const { data, error } = await supabase.from('meetings').select('status').eq('id', meeting.id).single();
+      if (error) throw error;
       if (data?.status === 'ready') {
         if (onSuccess) {
           onSuccess(meeting);
@@ -128,11 +129,7 @@ export function CreateMeeting({ onSuccess, onCancel }: CreateMeetingProps = {}) 
       }
       if (data?.status === 'failed') throw new Error('AI extraction failed. Please try again.');
     }
-    if (onSuccess) {
-      onSuccess(meeting);
-    } else {
-      throw new Error('Extraction is taking too long; check the meeting later.');
-    }
+    throw new Error("Meeting created; extraction is still processing. Check the meeting later.");
   };
 
   return (

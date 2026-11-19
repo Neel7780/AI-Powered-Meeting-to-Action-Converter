@@ -23,6 +23,7 @@ export const MeetingShareModal: React.FC<ShareModalProps> = ({
   onClose
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -41,10 +42,13 @@ export const MeetingShareModal: React.FC<ShareModalProps> = ({
     `Meeting Summary: ${meeting.title}`
   )}&body=${encodeURIComponent(shareText)}`;
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(meetingUrl);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
+  const handleCopyLink = async () => {
+    setCopyError(null);
+    try {
+      await navigator.clipboard.writeText(meetingUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch { setCopyError('Unable to copy the link. Select and copy it manually.'); }
   };
 
   const handleDownloadMarkdown = () => {
@@ -105,6 +109,7 @@ export const MeetingShareModal: React.FC<ShareModalProps> = ({
             </div>
           </div>
 
+          {copyError && <p role="alert">{copyError}</p>}
           {/* 1-Tap Zero-Cost Sharing Channels */}
           <div>
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">

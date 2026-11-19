@@ -257,6 +257,10 @@ def test_task_prerequisite_inquiry_and_reply_flow():
             table_mock = MagicMock()
             if name == "tasks":
                 table_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[task_mock])
+            elif name == "workspace_members":
+                table_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"role":"admin", "user_id":str(uuid4())}])
+            elif name == "task_assignees":
+                table_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"user_id":str(uuid4())}])
             elif name == "task_communications":
                 table_mock.insert.return_value.execute.return_value = MagicMock(data=[inquiry_mock])
                 table_mock.select.return_value.eq.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(data=[inquiry_mock])
@@ -361,8 +365,12 @@ def test_manager_reply_links_prerequisite_task():
                     return sel_mock
                 table_mock.select.side_effect = mock_select
                 table_mock.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"id": t1_id}])
+            elif name == "workspace_members":
+                table_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"role":"admin", "user_id":str(uuid4())}])
+            elif name == "task_assignees":
+                table_mock.select.return_value.eq.return_value.eq.return_value.execute.return_value = MagicMock(data=[{"user_id":str(uuid4())}])
             elif name == "task_communications":
-                table_mock.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+                table_mock.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
                     data=[{"sender_id": assignee_id}]
                 )
                 table_mock.insert.return_value.execute.return_value = MagicMock(data=[reply_comm_mock])

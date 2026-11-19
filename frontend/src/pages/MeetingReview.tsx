@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   CheckCheck,
   Sparkles,
   ArrowLeft,
-  RotateCcw,
   CheckCircle2,
   Clock,
   Users,
@@ -40,7 +39,7 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
 }) => {
   const navigate = useNavigate();
   const { id: routeMeetingId } = useParams();
-  const meetingId = meetingIdProp || routeMeetingId || 'mtg-sprint-102';
+  const meetingId = meetingIdProp || routeMeetingId || '';
   const [meeting, setMeeting] = useState<MeetingDetails | null>(null);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [candidates, setCandidates] = useState<ActionItemCandidate[]>([]);
@@ -63,7 +62,11 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const loadData = async () => {
+  const generation = useRef(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadData = useCallback(async () => {
+    const request = ++generation.current;
+    setMeeting(null); setCandidates([]); setTranscript([]); setMembers([]); setLoadError(null);
     try {
       setLoading(true);
       const [mtgData, transData] = await Promise.all([
@@ -73,21 +76,23 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
       const memData = await reviewApi.fetchWorkspaceMembers(mtgData.workspace_id);
       const candData = await reviewApi.fetchActionItemCandidates(meetingId, memData);
 
+      if (request !== generation.current) return;
       setMeeting(mtgData);
       setTranscript(transData);
       setCandidates(candData);
       setMembers(memData);
     } catch (err) {
       console.error('Failed to load meeting review workspace data:', err);
-      showToast('Error loading meeting data', 'warning');
+      if (request === generation.current) setLoadError(err instanceof Error ? err.message : 'Unable to load meeting.');
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
-  };
+  }, [meetingId]);
 
   useEffect(() => {
-    loadData();
-  }, [meetingId]);
+    void loadData();
+    return () => { generation.current++; };
+  }, [loadData]);
 
   const totalItems = candidates.length;
   const pendingItems = candidates.filter(c => c.status === 'pending');
@@ -158,24 +163,13 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
     }
   };
 
-  const handleRevert = async (id: string) => {
-    try {
-      const updated = await reviewApi.revertActionItem(id);
-      setCandidates(prev => prev.map(c => c.id === id ? updated : c));
-      showToast(`Reverted back to pending review`, 'info');
-    } catch (err) {
-      console.error('Revert failed:', err);
-      showToast((err as Error).message, 'warning');
-    }
-  };
-
   const handleUpdate = async (id: string, updates: Partial<ActionItemCandidate>) => {
     try {
       const item = candidates.find(c => c.id === id);
       if (!item) return;
       const updated = await reviewApi.editActionItem(item, updates, members);
       setCandidates(prev => prev.map(c => c.id === id ? updated : c));
-      showToast(`Updated action item details`, 'success');
+      showToast('Edits kept for approval; not yet saved.', 'info');
     } catch (err) {
       console.error('Update failed:', err);
       showToast('Failed to update action item', 'warning');
@@ -217,14 +211,6 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
     }
   };
 
-  const handleReset = async () => {
-    if (window.confirm('Reset candidate items back to demo state?')) {
-      const fresh = await reviewApi.resetToInitialData();
-      setCandidates(fresh);
-      showToast('Reset staging gate candidate items to default state', 'info');
-    }
-  };
-
   const handleJumpToTranscript = (timestamp: string, segmentId?: string) => {
     setActiveTimestamp(timestamp);
     if (segmentId) {
@@ -257,6 +243,7 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
     ['rejected', 'Rejected', rejectedItems.length],
   ] as const;
 
+  if (loadError) return <div role="alert" className="p-6">{loadError}<Button onClick={() => void loadData()}>Retry</Button></div>;
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center gap-3 bg-black text-sm text-neutral-500">
@@ -321,16 +308,6 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
                   />
                 </div>
               </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleReset}
-                title="Reset demo items back to original state"
-              >
-                <RotateCcw />
-                <span className="hidden md:inline">Reset</span>
-              </Button>
 
               <Button
                 size="sm"
@@ -515,7 +492,7 @@ export const MeetingReview: React.FC<MeetingReviewProps> = ({
                     isSelected={selectedCandidateId === item.id}
                     onApprove={handleApprove}
                     onReject={handleReject}
-                    onRevert={handleRevert}
+                    onRevert={undefined}
                     onUpdate={handleUpdate}
                     onJumpToTranscript={handleJumpToTranscript}
                   />

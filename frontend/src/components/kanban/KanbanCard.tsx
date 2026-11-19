@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertCircle, Quote, ChevronDown, CheckCircle2, Clock, Link as LinkIcon, Bot, GitFork, MessageSquare } from 'lucide-react';
+import { AlertCircle, Quote, ChevronDown, CheckCircle2, Clock, Link as LinkIcon, GitFork, MessageSquare } from 'lucide-react';
 import { WhatsAppShareButton } from './WhatsAppShareButton';
 
 export type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done';
@@ -104,6 +104,7 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
   const priority = priorityConfig[task.priority] || priorityConfig.normal;
   const blockingTask = task.blocked_by ? allTasks.find((t) => t.id === task.blocked_by) : null;
 
+
   // Find primary assignee or fallback to first assignee
   const primaryAssignee =
     task.task_assignees?.find((a) => a.is_primary)?.profiles ||
@@ -174,17 +175,6 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
             {priority.label}
           </span>
 
-          {/* AI Agent Execution Badge */}
-          {task.execution_type === 'agent' ? (
-            <span
-              title="This task is automated for AI Agent Execution"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800/40 font-medium"
-            >
-              <Bot className="size-3 text-purple-600 dark:text-purple-400" />
-              Agent
-            </span>
-          ) : null}
-
           {/* Blocked by indicator with tooltip & modal trigger */}
           {task.blocked_by && (
             <button
@@ -200,6 +190,8 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
               <span>{blockingTask ? `Blocked: ${blockingTask.title.slice(0, 15)}...` : 'Blocked'}</span>
             </button>
           )}
+
+
         </div>
 
         {/* WhatsApp 1-Tap Share Button */}

@@ -6,8 +6,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Bot,
-  User,
   Link as LinkIcon,
   Filter,
   Layers,
@@ -27,7 +25,7 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
   onOpenDependencyModal,
   onStatusChange,
 }) => {
-  const [filterMode, setFilterMode] = useState<'all' | 'blocked' | 'agent' | 'chains'>('all');
+  const [filterMode, setFilterMode] = useState<'all' | 'blocked' | 'chains'>('all');
 
   const sourceTasks = useMemo(() => {
     return allTasks && allTasks.length > 0 ? allTasks : tasks;
@@ -102,10 +100,9 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
   const metrics = useMemo(() => {
     const total = tasks.length;
     const blockedCount = tasks.filter((t) => t.status === 'blocked' || (t.blocked_by && taskMap.get(t.blocked_by)?.status !== 'done')).length;
-    const agentTasksCount = tasks.filter((t) => t.execution_type === 'agent').length;
     const totalChains = workflowChains.length;
 
-    return { total, blockedCount, agentTasksCount, totalChains };
+    return { total, blockedCount, totalChains };
   }, [tasks, taskMap, workflowChains]);
 
   // Filtered tasks display
@@ -115,18 +112,13 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
         chain.dependents.some((d) => d.status === 'blocked' || (d.blocked_by && taskMap.get(d.blocked_by)?.status !== 'done'))
       );
     }
-    if (filterMode === 'agent') {
-      return workflowChains.filter((chain) =>
-        chain.root.execution_type === 'agent' || chain.dependents.some((d) => d.execution_type === 'agent')
-      );
-    }
     return workflowChains;
   }, [workflowChains, filterMode, taskMap]);
 
   return (
     <div className="space-y-6">
       {/* 1. Header KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-[#202020] dark:bg-[#0c0c0e]">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-500 dark:text-neutral-400">
@@ -147,17 +139,6 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
           </div>
           <p className="mt-2 text-2xl font-bold text-red-600 dark:text-red-400">{metrics.blockedCount}</p>
           <p className="text-[11px] text-slate-400 dark:text-neutral-500">Waiting on prerequisites</p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-[#202020] dark:bg-[#0c0c0e]">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-slate-500 dark:text-neutral-400">
-              Agent Workflows
-            </span>
-            <Bot className="size-4 text-purple-500" />
-          </div>
-          <p className="mt-2 text-2xl font-bold text-purple-600 dark:text-purple-400">{metrics.agentTasksCount}</p>
-          <p className="text-[11px] text-slate-400 dark:text-neutral-500">AI auto-executable tasks</p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-[#202020] dark:bg-[#0c0c0e]">
@@ -198,20 +179,11 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
           >
             Blocked Chains Only
           </button>
-          <button
-            onClick={() => setFilterMode('agent')}
-            className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-              filterMode === 'agent'
-                ? 'bg-purple-600 text-white dark:bg-purple-500 dark:text-white'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-neutral-400 dark:hover:bg-white/5'
-            }`}
-          >
-            Agent Automated Chains
-          </button>
+
         </div>
 
         <p className="text-[11px] text-slate-400 dark:text-neutral-500">
-          Click any task card to edit prerequisites or toggle AI execution.
+          Click any task card to edit prerequisites.
         </p>
       </div>
 
@@ -262,15 +234,7 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
                       <span className="size-1.5 rounded-full bg-indigo-500" />
                       Step 1 (Root Prerequisite)
                     </span>
-                    {chain.root.execution_type === 'agent' ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
-                        <Bot className="size-3" /> Agent
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-neutral-300">
-                        <User className="size-3" /> Human
-                      </span>
-                    )}
+                    <span className="text-xs text-neutral-400">Team task</span>
                   </div>
                   <h4 className="text-xs font-semibold text-slate-900 dark:text-white line-clamp-2">
                     {chain.root.title}
@@ -330,15 +294,7 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
                             <span className={`size-1.5 rounded-full ${isBlockedByUnfinished ? 'bg-red-500' : 'bg-emerald-500'}`} />
                             Step {depIdx + 2} {isBlockedByUnfinished ? '(Blocked)' : '(Unlocked)'}
                           </span>
-                          {dep.execution_type === 'agent' ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
-                              <Bot className="size-3" /> Agent
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-neutral-300">
-                              <User className="size-3" /> Human
-                            </span>
-                          )}
+                          <span className="text-xs text-neutral-400">Team task</span>
                         </div>
 
                         <h4 className="text-xs font-semibold text-slate-900 dark:text-white line-clamp-2">
@@ -425,11 +381,7 @@ export const WorkflowChainsView: React.FC<WorkflowChainsViewProps> = ({
                     <span className="text-[10px] font-mono uppercase text-slate-400 dark:text-neutral-500">
                       {task.status}
                     </span>
-                    {task.execution_type === 'agent' && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] text-purple-600 dark:text-purple-400 font-medium">
-                        <Bot className="size-3" /> Agent
-                      </span>
-                    )}
+
                   </div>
                   <p className="text-xs font-medium text-slate-900 dark:text-white truncate">
                     {task.title}

@@ -10,7 +10,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.deps import CurrentUser, get_current_user, require_role
+from app.core.deps import CurrentUser, get_current_user, require_role, require_meeting_role, filter_visible_meetings
+from app.api.tasks import require_task_access
 from app.core.supabase import get_supabase_client
 from app.schemas.velocity import (
     DiffTaskSchema,
@@ -60,12 +61,13 @@ def get_sprint_velocity(
     # 1. Fetch meetings in workspace chronologically
     meetings_resp = (
         client.table("meetings")
-        .select("id, title, starts_at, created_at")
+        .select("id, title, starts_at, created_at, visibility, organiser_id, lifecycle")
         .eq("workspace_id", str(workspace_id))
         .order("starts_at", desc=False)
         .execute()
     )
-    meetings_data = meetings_resp.data or []
+    meetings_data = filter_visible_meetings(client, meetings_resp.data or [], user)
+    visible_ids = {str(m["id"]) for m in meetings_data}
 
     # 2. Fetch tasks in workspace
     tasks_resp = (
@@ -78,7 +80,11 @@ def get_sprint_velocity(
         .eq("workspace_id", str(workspace_id))
         .execute()
     )
-    tasks_data = tasks_resp.data or []
+    tasks_data = [t for t in (tasks_resp.data or []) if str(t.get("meeting_id")) in visible_ids]
+    carryovers = client.table("task_carryovers").select("task_id, target_meeting_id").eq("workspace_id", str(workspace_id)).execute().data or []
+    carryovers = [c for c in carryovers if str(c["target_meeting_id"]) in visible_ids]
+    def in_meeting(task, mid):
+        return task.get("meeting_id") == mid or any(c["task_id"] == task["id"] and c["target_meeting_id"] == mid for c in carryovers)
     task_map = {t["id"]: t for t in tasks_data}
 
     # Helper mapper
@@ -96,7 +102,7 @@ def get_sprint_velocity(
             blocked_by=UUID(t["blocked_by"]) if t.get("blocked_by") else None,
             blocked_by_title=blocked.get("title") if blocked else None,
             assignee_name=t.get("external_owner_label") or "Unassigned",
-            execution_type="agent" if t.get("external_owner_label") == "AI Agent" else "human",
+            execution_type="human",
             source_excerpt=t.get("source_excerpt"),
             meeting_id=UUID(t["meeting_id"]),
         )
@@ -105,11 +111,11 @@ def get_sprint_velocity(
     meeting_briefs: list[MeetingBriefSchema] = []
     for m in meetings_data:
         m_id = m["id"]
-        m_tasks = [t for t in tasks_data if t.get("meeting_id") == m_id]
+        m_tasks = [t for t in tasks_data if in_meeting(t, m_id)]
         total = len(m_tasks)
         done = len([t for t in m_tasks if t.get("status") == "done"])
         spill = total - done
-        rate = round((done / total) * 100, 1) if total > 0 else 100.0
+        rate = round((done / total) * 100, 1) if total > 0 else 0.0
         meeting_briefs.append(
             MeetingBriefSchema(
                 id=UUID(m["id"]),
@@ -138,7 +144,7 @@ def get_sprint_velocity(
             base_m = meetings_data[-2]
             curr_m = meetings_data[-1]
 
-        base_tasks = [t for t in tasks_data if t.get("meeting_id") == base_m["id"]]
+        base_tasks = [t for t in tasks_data if in_meeting(t, base_m["id"])]
         curr_tasks = [t for t in tasks_data if t.get("meeting_id") == curr_m["id"]]
 
         completed = [_to_diff_task(t) for t in base_tasks if t.get("status") == "done"]
@@ -177,11 +183,11 @@ def get_sprint_velocity(
     # 5. Trend History
     trend_history: list[VelocityTrendSchema] = []
     for m in meetings_data:
-        m_tasks = [t for t in tasks_data if t.get("meeting_id") == m["id"]]
+        m_tasks = [t for t in tasks_data if in_meeting(t, m["id"])]
         p = len(m_tasks)
         d = len([t for t in m_tasks if t.get("status") == "done"])
         c = p - d
-        v = round((d / p) * 100, 1) if p > 0 else 100.0
+        v = round((d / p) * 100, 1) if p > 0 else 0.0
         dt = _parse_iso(m.get("starts_at") or m.get("created_at"))
         d_lbl = dt.strftime("%b %d") if dt else "Recent"
         trend_history.append(
@@ -204,19 +210,22 @@ def get_sprint_velocity(
             c_at = _parse_iso(t.get("created_at"))
             if c_at and (now - c_at).days >= 7:
                 item = _to_diff_task(t)
-                item.spillover_count = 2
+                item.spillover_count = sum(1 for c in carryovers if c["task_id"] == t["id"])
                 chronic.append(item)
 
     total_done = len([t for t in tasks_data if t.get("status") == "done"])
     tot_tasks = len(tasks_data) or 1
     avg_v = round((total_done / tot_tasks) * 100, 1)
 
+    turnarounds = [(done - created).total_seconds() / 86400 for t in tasks_data
+                   if t.get("status") == "done" and (done := _parse_iso(t.get("completed_at")))
+                   and (created := _parse_iso(t.get("created_at"))) and done >= created]
     kpi_summary = VelocityKpiSummary(
         average_velocity=avg_v,
         overall_spillover_rate=round(100.0 - avg_v, 1),
         total_meetings_analyzed=len(meetings_data),
         total_completed_tasks=total_done,
-        avg_turnaround_days=2.8,
+        avg_turnaround_days=round(sum(turnarounds) / len(turnarounds), 2) if turnarounds else 0.0,
     )
 
     return SprintVelocityResponse(
@@ -241,18 +250,17 @@ def rollover_task(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Rollover/carry forward an action item to a consecutive meeting via privileged backend update."""
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    task = require_task_access(workspace_id, task_id, user, manager_only=True)
+    target = require_meeting_role(payload.target_meeting_id, {"admin", "organiser"}, user)
+    if str(target["workspace_id"]) != str(workspace_id):
+        raise HTTPException(404, "Target meeting not found in this workspace")
+    if task["status"] == "done" or str(task["meeting_id"]) == str(payload.target_meeting_id):
+        raise HTTPException(409, "Choose an unfinished task and a different meeting")
     client = get_supabase_client()
-    resp = (
-        client.table("tasks")
-        .update({
-            "meeting_id": str(payload.target_meeting_id),
-            "updated_at": datetime.now(UTC).isoformat(),
-        })
-        .eq("id", str(task_id))
-        .eq("workspace_id", str(workspace_id))
-        .execute()
-    )
-    if not resp.data:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found in this workspace")
+    saved = client.table("task_carryovers").upsert({
+        "task_id": str(task_id), "workspace_id": str(workspace_id),
+        "target_meeting_id": str(payload.target_meeting_id), "created_by": str(user.id),
+    }, on_conflict="task_id,target_meeting_id").execute()
+    if not saved.data:
+        raise HTTPException(500, "Carryover was not saved")
     return {"success": True, "task_id": str(task_id), "target_meeting_id": str(payload.target_meeting_id)}

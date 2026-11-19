@@ -8,9 +8,7 @@ import type {
   FollowUpTone,
 } from '../types/review';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { getApiUrl } from '../lib/api';
-
-const STORAGE_KEY_ITEMS = 'staging_gate_candidate_items';
+import { requestApi } from '../lib/api';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,422 +16,8 @@ export function isValidUuid(val: unknown): val is string {
   return typeof val === 'string' && UUID_REGEX.test(val);
 }
 
-/** POST JSON or FormData to the FastAPI backend with the user's Supabase JWT; throws the backend's `detail` on failure. */
-export async function postApi(path: string, body: unknown): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const isForm = body instanceof FormData;
-  const res = await fetch(getApiUrl(path), {
-    method: 'POST',
-    headers: {
-      ...(isForm ? {} : { 'Content-Type': 'application/json' }),
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-    },
-    body: isForm ? body : JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  let detailMsg = `HTTP ${res.status}`;
-  if (typeof data.detail === 'string') {
-    detailMsg = data.detail;
-  } else if (Array.isArray(data.detail)) {
-    detailMsg = data.detail
-      .map((d: any) => {
-        const field = Array.isArray(d.loc) ? d.loc.filter((x: any) => x !== 'body').join('.') : '';
-        return field ? `${field}: ${d.msg}` : d.msg;
-      })
-      .join('; ');
-  } else if (typeof data.message === 'string') {
-    detailMsg = data.message;
-  }
-  if (!res.ok) throw new Error(detailMsg);
-  return data;
-}
-
-export async function patchApi(path: string, body: unknown): Promise<any> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const res = await fetch(getApiUrl(path), {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  let detailMsg = `HTTP ${res.status}`;
-  if (typeof data.detail === 'string') {
-    detailMsg = data.detail;
-  } else if (Array.isArray(data.detail)) {
-    detailMsg = data.detail
-      .map((d: any) => {
-        const field = Array.isArray(d.loc) ? d.loc.filter((x: any) => x !== 'body').join('.') : '';
-        return field ? `${field}: ${d.msg}` : d.msg;
-      })
-      .join('; ');
-  } else if (typeof data.message === 'string') {
-    detailMsg = data.message;
-  }
-  if (!res.ok) throw new Error(detailMsg);
-  return data;
-}
-
-export const INITIAL_MEMBERS: WorkspaceMember[] = [
-  {
-    id: '00000000-0000-0000-0000-000000000001',
-    user_id: '00000000-0000-0000-0000-000000000001',
-    full_name: 'Neel Khatri',
-    email: 'neelkhatri7780@gmail.com',
-    role: 'admin',
-    initials: 'NK'
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000002',
-    user_id: '00000000-0000-0000-0000-000000000002',
-    full_name: 'Manali Malani',
-    email: 'manali.malani@actionpulse.io',
-    role: 'team_member',
-    initials: 'MM'
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000003',
-    user_id: '00000000-0000-0000-0000-000000000003',
-    full_name: 'Krishna Parmar',
-    email: 'krishna.parmar@actionpulse.io',
-    role: 'meeting_organiser',
-    initials: 'KP'
-  },
-  {
-    id: '00000000-0000-0000-0000-000000000004',
-    user_id: '00000000-0000-0000-0000-000000000004',
-    full_name: 'Bhagy Parmar',
-    email: 'bhagy.parmar@actionpulse.io',
-    role: 'team_member',
-    initials: 'BP'
-  }
-];
-
-export const INITIAL_MEETING: MeetingDetails = {
-  id: 'mtg-sprint-102',
-  workspace_id: 'ws-team-10',
-  title: 'Sprint 2 Architecture & AI Staging Review',
-  date: '2026-10-11T10:00:00Z',
-  timezone: 'Asia/Kolkata (IST)',
-  duration: '42 mins',
-  organiser_name: 'Madhav Chauhan',
-  status: 'review_ready',
-  candidate_count: 7
-};
-
-export const INITIAL_TRANSCRIPT_SEGMENTS: TranscriptSegment[] = [
-  {
-    id: 'seg-1',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 0,
-    speaker_name: 'Madhav Chauhan',
-    speaker_color: 'emerald',
-    start_ms: 12000,
-    end_ms: 35000,
-    start_seconds: 12,
-    timestamp: '00:12',
-    text: "Alright team, welcome to our Sprint 2 architecture sync. Today we're reviewing the AI action item extraction pipeline and our staging gate workflow before tasks go directly to the Kanban board."
-  },
-  {
-    id: 'seg-2',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 1,
-    speaker_name: 'Arnav Pandita',
-    speaker_color: 'indigo',
-    start_ms: 75000,
-    end_ms: 120000,
-    start_seconds: 75,
-    timestamp: '01:15',
-    text: "Thanks Madhav. On FE 1 auth and workspace navigation, I have the login/signup and workspace switcher ready. However, we strictly need row-level security policies configured on Supabase so members can only read their workspace's meetings."
-  },
-  {
-    id: 'seg-3',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 2,
-    speaker_name: 'Madhav Chauhan',
-    speaker_color: 'emerald',
-    start_ms: 135000,
-    end_ms: 155000,
-    start_seconds: 135,
-    timestamp: '02:15',
-    text: "Agreed Arnav. Can you own the implementation of Supabase RLS security policies for workspace tables by October 14th?"
-  },
-  {
-    id: 'seg-4',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 3,
-    speaker_name: 'Arnav Pandita',
-    speaker_color: 'indigo',
-    start_ms: 160000,
-    end_ms: 220000,
-    start_seconds: 160,
-    timestamp: '02:40',
-    text: "Yes, I'll take that. I will write the migration scripts and test admin vs team_member permissions."
-  },
-  {
-    id: 'seg-5',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 4,
-    speaker_name: 'Bharat Odedara',
-    speaker_color: 'blue',
-    start_ms: 240000,
-    end_ms: 320000,
-    start_seconds: 240,
-    timestamp: '04:00',
-    text: "On the meeting ingestion side (FE 2), users can now upload transcripts. We support .vtt, .srt, .txt, and .docx formats following the storage path convention meeting-transcripts/{workspace_id}/{meeting_id}/{filename}."
-  },
-  {
-    id: 'seg-6',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 5,
-    speaker_name: 'Madhav Chauhan',
-    speaker_color: 'emerald',
-    start_ms: 340000,
-    end_ms: 380000,
-    start_seconds: 340,
-    timestamp: '05:40',
-    text: "Great progress Bharat. Make sure the drag-and-drop file uploader has instant upload feedback and error boundaries for unsupported mime types by October 15th."
-  },
-  {
-    id: 'seg-7',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 6,
-    speaker_name: 'Bharat Odedara',
-    speaker_color: 'blue',
-    start_ms: 390000,
-    end_ms: 440000,
-    start_seconds: 390,
-    timestamp: '06:30',
-    text: "Got it. Also, regarding the text paste tab, someone needs to sanitize user inputs in the multi-line paste widget to strip dangerous HTML and scripts before dispatching to the storage bucket."
-  },
-  {
-    id: 'seg-8',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 7,
-    speaker_name: 'Yuvraj Katara',
-    speaker_color: 'purple',
-    start_ms: 450000,
-    end_ms: 530000,
-    start_seconds: 450,
-    timestamp: '07:30',
-    text: "That paste sanitization is crucial. We should flag that as an unassigned action item for anyone on frontend to pick up by October 15th."
-  },
-  {
-    id: 'seg-9',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 8,
-    speaker_name: 'Yuvraj Katara',
-    speaker_color: 'purple',
-    start_ms: 552000,
-    end_ms: 750000,
-    start_seconds: 552,
-    timestamp: '09:12',
-    text: "For FE 3, the AI extraction trigger and status machine are wired up. But per CR-01 compliance, we must add the AI Attestation disclaimer banner stating: 'AI-generated suggestions. Verify before publishing.' across all review screens."
-  },
-  {
-    id: 'seg-10',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 9,
-    speaker_name: 'Madhav Chauhan',
-    speaker_color: 'emerald',
-    start_ms: 825000,
-    end_ms: 1050000,
-    start_seconds: 825,
-    timestamp: '13:45',
-    text: "Exactly. That leads right into FE 4: Meeting Review Workspace. The meeting organiser needs a two-column view where the transcript is clickable on the left, and candidate review cards sit on the right. Organisers can inline edit the title, description, and due date, pick an assignee, and hit [Approve], [Reject], or [Approve All]."
-  },
-  {
-    id: 'seg-11',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 10,
-    speaker_name: 'Harshil Patel',
-    speaker_color: 'amber',
-    start_ms: 1100000,
-    end_ms: 1240000,
-    start_seconds: 1100,
-    timestamp: '18:20',
-    text: "And once items are approved from the staging gate, they will flow into our FE 5 Kanban board. I'm building the 1-Tap WhatsApp share button that creates wa.me/?text=... prefilled URLs so assignees get instant mobile notifications."
-  },
-  {
-    id: 'seg-12',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 11,
-    speaker_name: 'Arnav Pandita',
-    speaker_color: 'indigo',
-    start_ms: 1265000,
-    end_ms: 1350000,
-    start_seconds: 1265,
-    timestamp: '21:05',
-    text: "I'll also define database triggers so whenever a candidate item is approved in FE 4, a corresponding row is inserted into the tasks table for the Kanban board."
-  },
-  {
-    id: 'seg-13',
-    transcript_id: 'tr-sprint-102',
-    meeting_id: 'mtg-sprint-102',
-    segment_index: 12,
-    speaker_name: 'Madhav Chauhan',
-    speaker_color: 'emerald',
-    start_ms: 1380000,
-    end_ms: 1450000,
-    start_seconds: 1380,
-    timestamp: '23:00',
-    text: "Perfect. Let's make sure the staging gate interface shows the 'Assignee Required' badge whenever an item has no owner assigned, so no unfinished tasks slip onto the Kanban board without an owner."
-  }
-];
-
-export const INITIAL_CANDIDATE_ITEMS: ActionItemCandidate[] = [
-  {
-    id: 'cand-001',
-    meeting_id: 'mtg-sprint-102',
-    workspace_id: 'ws-team-10',
-    title: 'Implement Supabase RLS security policies for workspace tables',
-    description: 'Ensure row-level security prevents cross-workspace tenant data access for meetings and action items. Test admin vs team member permissions.',
-    due_date: '2026-10-14',
-    assignee_id: 'mem-1',
-    status: 'pending',
-    confidence_score: 0.96,
-    transcript_timestamp: '02:15',
-    transcript_segment_id: 'seg-3',
-    suggested_tags: ['Backend', 'Security', 'Supabase'],
-    created_at: '2026-10-11T10:30:00Z',
-    updated_at: '2026-10-11T10:30:00Z'
-  },
-  {
-    id: 'cand-002',
-    meeting_id: 'mtg-sprint-102',
-    workspace_id: 'ws-team-10',
-    title: 'Build drag-and-drop file uploader for .vtt and .docx transcripts',
-    description: 'Implement direct Supabase Storage upload with instant feedback and proper file validation following the meeting-transcripts/{ws_id}/{mtg_id} path convention.',
-    due_date: '2026-10-15',
-    assignee_id: 'mem-2',
-    status: 'pending',
-    confidence_score: 0.92,
-    transcript_timestamp: '05:40',
-    transcript_segment_id: 'seg-6',
-    suggested_tags: ['Frontend', 'Storage', 'FE-2'],
-    created_at: '2026-10-11T10:31:00Z',
-    updated_at: '2026-10-11T10:31:00Z'
-  },
-  {
-    id: 'cand-003',
-    meeting_id: 'mtg-sprint-102',
-    workspace_id: 'ws-team-10',
-    title: 'Sanitize user inputs in multi-line paste ingestion widget',
-    description: 'Strip harmful scripts and format raw pasted text before saving to the storage bucket to avoid injection vulnerabilities.',
-    due_date: '2026-10-15',
-    assignee_id: null, // Unassigned to show "Assignee Required" badge!
-    status: 'pending',
-    confidence_score: 0.85,
-    transcript_timestamp: '07:30',
-    transcript_segment_id: 'seg-8',
-    suggested_tags: ['Security', 'Sanitization'],
-    created_at: '2026-10-11T10:32:00Z',
-    updated_at: '2026-10-11T10:32:00Z'
-  },
-  {
-    id: 'cand-004',
-    meeting_id: 'mtg-sprint-102',
-    workspace_id: 'ws-team-10',
-    title: 'Implement CR-01 AI Attestation disclaimer banner',
-    description: 'Add mandatory compliance notice: "AI-generated suggestions. Verify before publishing." prominently on candidate review screens.',
-    due_date: '2026-10-16',
-    assignee_id: null, // Unassigned to test owner selector dropdown!
-    status: 'pending',
-    confidence_score: 0.89,
-    transcript_timestamp: '09:12',
-    transcript_segment_id: 'seg-9',
-    suggested_tags: ['Compliance', 'AI Safety'],
-    created_at: '2026-10-11T10:33:00Z',
-    updated_at: '2026-10-11T10:33:00Z'
-  },
-  {
-    id: 'cand-005',
-    meeting_id: 'mtg-sprint-102',
-    workspace_id: 'ws-team-10',
-    title: 'Design two-column staging gate review workspace with timestamps',
-    description: 'Two-column layout connecting transcript segments with candidate cards. Supports inline title/desc/due date edits, owner selection, approve/reject buttons, and batch approve.',
-    due_date: '2026-10-17',
-    assignee_id: 'mem-4',
-    status: 'pending',
-    confidence_score: 0.98,
-    transcript_timestamp: '13:45',
-    transcript_segment_id: 'seg-10',
-    suggested_tags: ['FE-4', 'Staging Gate', 'UX'],
-    created_at: '2026-10-11T10:34:00Z',
-    updated_at: '2026-10-11T10:34:00Z'
-  },
-  {
-    id: 'cand-006',
-    meeting_id: 'mtg-sprint-102',
-    workspace_id: 'ws-team-10',
-    title: 'Create WhatsApp 1-Tap sharing URL generator with title and due date',
-    description: 'Format wa.me/?text=... prefilled link with task title, assignee name, and deadline for instant mobile dispatching.',
-    due_date: '2026-10-18',
-    assignee_id: 'mem-5',
-    status: 'pending',
-    confidence_score: 0.91,
-    transcript_timestamp: '18:20',
-    transcript_segment_id: 'seg-11',
-    suggested_tags: ['FE-5', 'WhatsApp', 'Integration'],
-    created_at: '2026-10-11T10:35:00Z',
-    updated_at: '2026-10-11T10:35:00Z'
-  },
-  {
-    id: 'cand-007',
-    meeting_id: 'mtg-sprint-102',
-    workspace_id: 'ws-team-10',
-    title: 'Define database triggers for task status updates',
-    description: 'Create Supabase trigger that copies approved candidate items into the main tasks table with status "To Do".',
-    due_date: '2026-10-19',
-    assignee_id: 'mem-1',
-    status: 'pending',
-    confidence_score: 0.94,
-    transcript_timestamp: '21:05',
-    transcript_segment_id: 'seg-12',
-    suggested_tags: ['Database', 'Triggers', 'Postgres'],
-    created_at: '2026-10-11T10:36:00Z',
-    updated_at: '2026-10-11T10:36:00Z'
-  }
-];
-
-function getStoredCandidateItems(): ActionItemCandidate[] {
-  if (typeof window === 'undefined') return INITIAL_CANDIDATE_ITEMS;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_ITEMS);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(INITIAL_CANDIDATE_ITEMS));
-      return INITIAL_CANDIDATE_ITEMS;
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_CANDIDATE_ITEMS;
-  } catch (err) {
-    console.error('Error reading candidate items from storage:', err);
-    return INITIAL_CANDIDATE_ITEMS;
-  }
-}
-
-function saveStoredCandidateItems(items: ActionItemCandidate[]) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
-  } catch (err) {
-    console.error('Error saving candidate items to storage:', err);
-  }
-}
+export const postApi = (path: string, body: unknown): Promise<any> => requestApi(path, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body) });
+export const patchApi = (path: string, body: unknown): Promise<any> => requestApi(path, { method: 'PATCH', body: JSON.stringify(body) });
 
 export const reviewApi = {
   async fetchMeetingDetails(meetingId: string): Promise<MeetingDetails> {
@@ -452,13 +36,13 @@ export const reviewApi = {
           title: data.title,
           date: data.starts_at || data.created_at,
           timezone: data.timezone || 'Asia/Kolkata',
-          duration: '45 mins',
+          duration: 'Unavailable',
           organiser_name: 'Organiser',
           status: data.status === 'ready' ? 'review_ready' : data.status,
           candidate_count: 0
         };
     }
-    return INITIAL_MEETING;
+    throw new Error('Database is not configured.');
   },
 
   async fetchTranscript(meetingId: string): Promise<TranscriptSegment[]> {
@@ -504,7 +88,7 @@ export const reviewApi = {
         }
         return [];
     }
-    return INITIAL_TRANSCRIPT_SEGMENTS;
+    throw new Error('Database is not configured.');
   },
 
   async fetchWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
@@ -540,7 +124,7 @@ export const reviewApi = {
           };
         });
     }
-    return INITIAL_MEMBERS;
+    throw new Error('Database is not configured.');
   },
 
   async fetchActionItemCandidates(meetingId: string, members: WorkspaceMember[]): Promise<ActionItemCandidate[]> {
@@ -586,7 +170,7 @@ export const reviewApi = {
               assignee,
               blocked_by_id: blockedById,
               status,
-              confidence_score: item.confidence !== null && item.confidence !== undefined ? Number(item.confidence) : 0.9,
+              confidence_score: item.confidence !== null && item.confidence !== undefined ? Number(item.confidence) : null,
               transcript_timestamp: timestamp,
               created_at: item.created_at,
               updated_at: item.updated_at
@@ -594,38 +178,7 @@ export const reviewApi = {
         });
     }
     
-    const items = getStoredCandidateItems().map(item => ({
-      ...item,
-      assignee: item.assignee_id ? members.find(m => m.id === item.assignee_id) || null : null
-    }));
-    return items;
-  },
-
-  async updateActionItem(
-    itemId: string, 
-    updates: Partial<ActionItemCandidate>
-  ): Promise<ActionItemCandidate> {
-    const items = getStoredCandidateItems();
-    const index = items.findIndex(i => i.id === itemId);
-    if (index === -1) {
-      throw new Error(`Action item candidate ${itemId} not found`);
-    }
-
-    const updated = {
-      ...items[index],
-      ...updates,
-      updated_at: new Date().toISOString()
-    };
-    
-    if (updates.assignee_id !== undefined) {
-      updated.assignee = updates.assignee_id 
-        ? INITIAL_MEMBERS.find(m => m.id === updates.assignee_id) || null 
-        : null;
-    }
-
-    items[index] = updated;
-    saveStoredCandidateItems(items);
-    return updated;
+    throw new Error('Database is not configured.');
   },
 
   /** Local edit only: extracted_items is backend-owned, edits are sent with the approve call. */
@@ -634,7 +187,7 @@ export const reviewApi = {
     updates: Partial<ActionItemCandidate>,
     members: WorkspaceMember[]
   ): Promise<ActionItemCandidate> {
-    if (!isSupabaseConfigured) return this.updateActionItem(item.id, updates);
+    if (!isSupabaseConfigured) throw new Error('Database is not configured.');
     const updated = { ...item, ...updates, updated_at: new Date().toISOString() };
     if (updates.assignee_id !== undefined) {
       updated.assignee = members.find(m => m.user_id === updates.assignee_id) || null;
@@ -645,7 +198,7 @@ export const reviewApi = {
   /** Review gate: POST /api/meetings/{id}/approve (creates tasks + sends assignment emails). */
   async approveActionItems(meetingId: string, items: ActionItemCandidate[]): Promise<ActionItemCandidate[]> {
     if (!isSupabaseConfigured || !isValidUuid(meetingId) || items.some(i => !isValidUuid(i.id))) {
-      return Promise.all(items.map(i => this.updateActionItem(i.id, { status: 'approved' })));
+      throw new Error('A configured database and valid meeting/candidate IDs are required.');
     }
 
     const payloadItems = items.map((i) => {
@@ -690,7 +243,7 @@ export const reviewApi = {
   },
 
   async rejectActionItem(meetingId: string, item: ActionItemCandidate): Promise<ActionItemCandidate> {
-    if (!isSupabaseConfigured) return this.updateActionItem(item.id, { status: 'rejected' });
+    if (!isSupabaseConfigured) throw new Error('Database is not configured.');
     await postApi(`/api/meetings/${meetingId}/reject`, { item_ids: [item.id] });
     return { ...item, status: 'rejected' };
   },
@@ -702,7 +255,7 @@ export const reviewApi = {
     executionType?: 'human' | 'agent'
   ): Promise<any> {
     if (!isSupabaseConfigured || !isValidUuid(workspaceId) || !isValidUuid(taskId)) {
-      return { id: taskId, blocked_by: blockedById, status: blockedById ? 'blocked' : 'todo' };
+      throw new Error('A configured database and valid workspace/task IDs are required.');
     }
     return patchApi(`/api/workspaces/${workspaceId}/tasks/${taskId}/dependency`, {
       blocked_by: isValidUuid(blockedById) ? blockedById : null,
@@ -716,91 +269,17 @@ export const reviewApi = {
     status: string
   ): Promise<any> {
     if (!isSupabaseConfigured || !isValidUuid(workspaceId) || !isValidUuid(taskId)) {
-      return { id: taskId, status };
+      throw new Error('A configured database and valid workspace/task IDs are required.');
     }
     return patchApi(`/api/workspaces/${workspaceId}/tasks/${taskId}/status`, { status });
   },
 
-  async revertActionItem(itemId: string): Promise<ActionItemCandidate> {
-    if (isSupabaseConfigured) throw new Error('Reviewed items are final');
-    return this.updateActionItem(itemId, { status: 'pending' });
+  async draftFollowUp(meetingId: string, options?: { targetUserId?: string | null; targetName?: string | null; tone?: FollowUpTone }): Promise<DraftFollowUpResponse> {
+    return postApi(`/api/meetings/${meetingId}/draft-followup`, {
+      target_user_id: options?.targetUserId || null, target_name: options?.targetName || null, tone: options?.tone || 'executive'
+    });
   },
-
-    async resetToInitialData(): Promise<ActionItemCandidate[]> {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(INITIAL_CANDIDATE_ITEMS));
-    }
-    const members = INITIAL_MEMBERS;
-    return INITIAL_CANDIDATE_ITEMS.map(item => ({
-      ...item,
-      assignee: item.assignee_id ? members.find(m => m.id === item.assignee_id) || null : null
-    }));
-  },
-async draftFollowUp(
-    meetingId: string,
-    options?: {
-      targetUserId?: string | null;
-      targetName?: string | null;
-      tone?: FollowUpTone;
-    }
-  ): Promise<DraftFollowUpResponse> {
-    try {
-      const data = await postApi(`/api/meetings/${meetingId}/draft-followup`, {
-        target_user_id: options?.targetUserId || null,
-        target_name: options?.targetName || null,
-        tone: options?.tone || 'executive',
-      });
-      return data;
-    } catch (err) {
-      console.warn('Backend draftFollowUp failed, generating offline demo draft:', err);
-      const target = options?.targetName || (options?.targetUserId ? 'Attendee' : null);
-      const tone = options?.tone || 'executive';
-      const subject = target
-        ? `[ActionPulse] Follow-Up & Action Items for ${target}: Sprint 2 Architecture Review`
-        : `[ActionPulse] Meeting Follow-Up: Sprint 2 Architecture Review`;
-      const waText = encodeURIComponent(`*${subject}*\n\nHere are the deliverables agreed in today's sync.`);
-      return {
-        meeting_id: meetingId,
-        meeting_title: 'Sprint 2 Architecture & AI Staging Review',
-        target_user_id: options?.targetUserId || null,
-        target_name: options?.targetName || null,
-        tone,
-        subject,
-        content_markdown: target
-          ? `### Hi ${target},\n\nThanks for your active contribution in our meeting today. Here is your personalized follow-up:\n\n### 🚀 Assigned Action Items\n- [ ] **Configure Brevo free SMTP and email delivery fallback** (Due: Nov 3, Priority: URGENT)\n- [ ] **Complete review gate verification** (Due: Nov 4, Priority: NORMAL)\n\n### 📌 Key Decisions\n- Confirmed zero-budget stack: Gemini Flash-Lite and Supabase free tier.\n- WhatsApp links use free \`wa.me\` sharing format.\n\n---\n*ActionPulse Meeting Copilot*`
-          : `### 🎯 Executive Summary\nThe team convened to review Sprint 2 architecture, review gate workflows, and zero-budget notifications.\n\n### 📌 Key Decisions & Consensus\n- Confirmed zero-budget architecture using FastAPI, Supabase free tier, and Gemini 3.1 Flash-Lite.\n- All candidate action items require human organizer approval before publishing to Kanban.\n- WhatsApp sharing will use zero-cost \`wa.me\` prefilled URL links instead of paid Business API.\n\n### 🚀 Critical Action Items\n- [ ] **Build 1-Click WhatsApp share link generator** — Assigned to Harshil Patel (Due: Nov 2)\n- [ ] **Configure Brevo free SMTP and email delivery fallback** — Assigned to Bharat Odedara (Due: Nov 3)\n- [ ] **Implement RLS database policies for workspace invites** — Assigned to Arnav Pandita (Due: Nov 4)\n\n---\n*ActionPulse Meeting Copilot*`,
-        content_html: '',
-        whatsapp_share_url: `https://wa.me/?text=${waText}`,
-        recipient_emails: ['bharat.odedara@workspace.io', 'harshil.patel@workspace.io', 'arnav.pandita@workspace.io'],
-        participants: [
-          { user_id: 'mem-1', name: 'Arnav Pandita', email: 'arnav.pandita@workspace.io', is_organiser: false, task_count: 1 },
-          { user_id: 'mem-2', name: 'Bharat Odedara', email: 'bharat.odedara@workspace.io', is_organiser: false, task_count: 1 },
-          { user_id: 'mem-3', name: 'Yuvraj Katara', email: 'yuvraj.katara@workspace.io', is_organiser: false, task_count: 0 },
-          { user_id: 'mem-4', name: 'Madhav Chauhan', email: 'madhav.chauhan@workspace.io', is_organiser: true, task_count: 0 },
-          { user_id: 'mem-5', name: 'Harshil Patel', email: 'harshil.patel@workspace.io', is_organiser: false, task_count: 1 },
-        ]
-      };
-    }
-  },
-
-  async sendFollowUp(
-    meetingId: string,
-    payload: {
-      recipient_emails: string[];
-      subject: string;
-      content_markdown: string;
-      content_html?: string;
-    }
-  ): Promise<SendFollowUpResponse> {
-    try {
-      return await postApi(`/api/meetings/${meetingId}/send-followup`, payload);
-    } catch (err) {
-      console.warn('Backend sendFollowUp failed, returning mock success in dev:', err);
-      return {
-        success: true,
-        recipients_count: payload.recipient_emails.length,
-        message: `Follow-up email dispatched to ${payload.recipient_emails.length} recipient(s).`
-      };
-    }
+  async sendFollowUp(meetingId: string, payload: { recipient_emails: string[]; subject: string; content_markdown: string; content_html?: string }): Promise<SendFollowUpResponse> {
+    return postApi(`/api/meetings/${meetingId}/send-followup`, payload);
   }
 };

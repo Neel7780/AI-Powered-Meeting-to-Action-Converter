@@ -25,7 +25,7 @@ export const MeetingTimelineMultiTrack: React.FC<TimelineProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'timeline' | 'clips' | 'comments' | 'trackers' | 'metrics'>('timeline');
 
-  const totalSeconds = meeting.total_duration_seconds; // 2747
+  const totalSeconds = meeting.total_duration_seconds;
   const progressPercent = totalSeconds > 0 ? (playbackSeconds / totalSeconds) * 100 : 0;
 
   const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -241,6 +241,7 @@ export const MeetingTimelineMultiTrack: React.FC<TimelineProps> = ({
       {/* Clips Tab */}
       {activeTab === 'clips' && (
         <div className="p-4 space-y-2 max-h-56 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800 text-xs">
+          {meeting.clips.length === 0 && <p>This feature is unavailable.</p>}
           {meeting.clips.map((clip) => (
             <div
               key={clip.id}
@@ -272,6 +273,7 @@ export const MeetingTimelineMultiTrack: React.FC<TimelineProps> = ({
       {/* Comments Tab */}
       {activeTab === 'comments' && (
         <div className="p-4 space-y-2.5 max-h-56 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800 text-xs">
+          {meeting.comments.length === 0 && <p>This feature is unavailable.</p>}
           {meeting.comments.map((comm) => (
             <div
               key={comm.id}
@@ -297,6 +299,7 @@ export const MeetingTimelineMultiTrack: React.FC<TimelineProps> = ({
       {/* Trackers Tab */}
       {activeTab === 'trackers' && (
         <div className="p-4 grid grid-cols-2 gap-2 text-xs">
+          {meeting.trackers.length === 0 && <p>This feature is unavailable.</p>}
           {meeting.trackers.map((t) => (
             <div key={t.keyword} className="p-2.5 rounded-xl bg-[#161a22] border border-[#262d3d] flex items-center justify-between">
               <div>
@@ -316,13 +319,13 @@ export const MeetingTimelineMultiTrack: React.FC<TimelineProps> = ({
         <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
           <div className="p-3 rounded-xl bg-[#161a22] border border-[#262d3d]">
             <div className="text-slate-400 text-[11px]">Average Pace</div>
-            <div className="text-lg font-bold text-slate-100 mt-1">{meeting.metrics.pacing_wpm} WPM</div>
-            <div className="text-[10px] text-teal-400 mt-0.5">Optimal conversation tempo</div>
+            <div className="text-lg font-bold text-slate-100 mt-1">Unavailable</div>
+            <div className="text-[10px] text-teal-400 mt-0.5">Pace is not measured</div>
           </div>
           <div className="p-3 rounded-xl bg-[#161a22] border border-[#262d3d]">
             <div className="text-slate-400 text-[11px]">Sentiment Tone</div>
             <div className="text-sm font-bold text-emerald-400 mt-1">{meeting.metrics.sentiment_score}</div>
-            <div className="text-[10px] text-slate-400 mt-0.5">High team cohesion</div>
+            <div className="text-[10px] text-slate-400 mt-0.5">Sentiment is not measured</div>
           </div>
           <div className="p-3 rounded-xl bg-[#161a22] border border-[#262d3d]">
             <div className="text-slate-400 text-[11px]">Staging Items</div>

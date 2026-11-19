@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { KanbanTaskItem } from './KanbanCard';
 import {
   X,
@@ -21,7 +21,7 @@ import {
   resolvePrerequisiteInquiry,
   type TaskCommunicationItem,
 } from '../../services/taskCommunicationApi';
-import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/AuthContext';
 import { useWorkspace } from '../../context/WorkspaceContext';
 
 export interface TaskPrerequisiteDialogProps {
@@ -55,34 +55,22 @@ export const TaskPrerequisiteDialog: React.FC<TaskPrerequisiteDialogProps> = ({
   const [inputText, setInputText] = useState('');
   const [selectedPrereqTaskId, setSelectedPrereqTaskId] = useState<string>('');
   const [markResolvedOnReply, setMarkResolvedOnReply] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-
+  const { user } = useAuth();
+  const currentUserId = user?.id || null;
   const threadEndRef = useRef<HTMLDivElement>(null);
-
-  // Load current user ID
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data?.user?.id) {
-        setCurrentUserId(data.user.id);
-      }
-    });
-  }, []);
+  const generation = useRef(0);
 
   const { currentRole } = useWorkspace();
 
   // Determine user role relative to this task:
-  // A manager is either a workspace admin/organiser or the task creator
-  const isManager = useMemo(() => {
-    if (currentRole === 'admin' || currentRole === 'organiser') return true;
-    if (!currentUserId || !task) return false;
-    return task.created_by === currentUserId;
-  }, [currentUserId, task, currentRole]);
+  // Replies require a current workspace admin/organiser role.
+  const isManager = currentRole === 'admin' || currentRole === 'organiser';
 
   // Existing blocker task if any
   const currentBlockingTask = useMemo(() => {
     if (!task?.blocked_by) return null;
     return allTasks.find((t) => t.id === task.blocked_by);
-  }, [task?.blocked_by, allTasks]);
+  }, [task, allTasks]);
 
   // Downstream tasks to avoid circular dependencies in dropdown
   const eligiblePrerequisiteOptions = useMemo(() => {
@@ -91,29 +79,33 @@ export const TaskPrerequisiteDialog: React.FC<TaskPrerequisiteDialogProps> = ({
   }, [allTasks, task]);
 
   // Load communications
-  const loadCommunications = async () => {
-    if (!task || !workspaceId) return;
+  const taskId = task?.id;
+  const loadCommunications = useCallback(async () => {
+    const request = ++generation.current;
+    if (!taskId || !workspaceId) return;
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      const data = await fetchTaskCommunications(workspaceId, task.id);
-      setCommunications(data);
+      const data = await fetchTaskCommunications(workspaceId, taskId);
+      if (request === generation.current) setCommunications(data);
     } catch (err: any) {
       console.warn('Failed to load task communications:', err);
-      setErrorMsg(err.message || 'Could not load communication history.');
+      if (request === generation.current) setErrorMsg(err.message || 'Could not load communication history.');
     } finally {
-      setIsLoading(false);
+      if (request === generation.current) setIsLoading(false);
     }
-  };
+  }, [taskId, workspaceId]);
 
   useEffect(() => {
-    if (isOpen && task) {
-      loadCommunications();
+    setCommunications([]);
+    if (isOpen && taskId) {
+      void loadCommunications();
       setInputText('');
       setSelectedPrereqTaskId('');
       setMarkResolvedOnReply(false);
     }
-  }, [isOpen, task?.id]);
+    return () => { generation.current++; };
+  }, [isOpen, taskId, loadCommunications]);
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });

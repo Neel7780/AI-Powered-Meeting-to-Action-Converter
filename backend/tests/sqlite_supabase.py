@@ -9,6 +9,7 @@ The client answers only the query-builder calls the backend uses.
 
 import sqlite3
 import threading
+from contextlib import contextmanager
 import uuid
 from datetime import datetime
 from types import SimpleNamespace
@@ -167,6 +168,15 @@ CREATE TABLE tasks (
   created_at {TS}, updated_at {TS}, completed_at TEXT
 );
 
+CREATE TABLE task_carryovers (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  target_meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  created_by TEXT NOT NULL REFERENCES profiles(id),
+  created_at {TS},
+  PRIMARY KEY(task_id, target_meeting_id)
+);
+
 CREATE TABLE task_assignees (
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -273,6 +283,9 @@ class _Query:
     def eq(self, col, val):
         return self._filter(f"{col} = ?", val)
 
+    def neq(self, col, val):
+        return self._filter(f"{col} <> ?", val)
+
     def gte(self, col, val):
         return self._filter(f"{col} >= ?", val)
 
@@ -338,7 +351,8 @@ class SQLiteSupabase:
         self.conn = sqlite3.connect(":memory:", check_same_thread=False, isolation_level=None)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
+        self.depth = 0
         self._columns: dict[str, set[str]] = {}
         self.uploads: dict[str, bytes] = {}
         self.auth = SimpleNamespace(get_user=self._get_user)
@@ -353,16 +367,110 @@ class SQLiteSupabase:
             self._columns[table] = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
         return self._columns[table]
 
-    def run(self, statements: list[tuple[str, list]]) -> list[dict]:
+    @contextmanager
+    def transaction(self):
         with self.lock:
-            self.conn.execute("BEGIN")
+            outermost = self.depth == 0
+            if outermost:
+                self.conn.execute("BEGIN")
+            self.depth += 1
             try:
-                rows = [r for sql, params in statements for r in self.conn.execute(sql, params).fetchall()]
-                self.conn.execute("COMMIT")
+                yield
+                if outermost:
+                    self.conn.execute("COMMIT")
             except Exception:
-                self.conn.execute("ROLLBACK")
+                if outermost:
+                    self.conn.execute("ROLLBACK")
                 raise
+            finally:
+                self.depth -= 1
+
+    def run(self, statements: list[tuple[str, list]]) -> list[dict]:
+        with self.transaction():
+            rows = [r for sql, params in statements for r in self.conn.execute(sql, params).fetchall()]
         return [{k: bool(r[k]) if k in BOOL_COLUMNS else r[k] for k in r.keys()} for r in rows]
+
+    def rpc(self, name, params):
+        if name != "review_meeting_items":
+            raise NotImplementedError(name)
+        return SimpleNamespace(execute=lambda: SimpleNamespace(data=self._review(params)))
+
+    def _review(self, params):
+        """Test-only transaction stand-in; PostgreSQL correctness is checked by cleanup_integration.sql."""
+        def fail(code, message):
+            error = RuntimeError(message)
+            error.code, error.message = code, message
+            raise error
+
+        with self.transaction():
+            mid, actor = params["p_meeting_id"], params["p_actor_id"]
+            meetings = self.rows("meetings", id=mid)
+            if not meetings:
+                fail("P0002", "Meeting not found")
+            meeting = meetings[0]
+            members = self.rows("workspace_members", workspace_id=meeting["workspace_id"], user_id=actor)
+            if not members or members[0]["role"] not in ("admin", "organiser"):
+                fail("42501", "Organiser access required")
+            task_ids, seen = [], set()
+            dependencies = []
+            for change in params["p_items"]:
+                iid = change["id"]
+                if iid in seen:
+                    fail("22023", "Duplicate candidate")
+                seen.add(iid)
+                candidates = self.rows("extracted_items", id=iid, meeting_id=mid)
+                if not candidates or candidates[0]["review_status"] != "needs_review":
+                    fail("40001", "Candidate missing or already reviewed")
+                item = candidates[0]
+                update = {"review_status": params["p_decision"], "reviewed_by": actor,
+                          "reviewed_at": datetime.now().isoformat()}
+                if params["p_decision"] == "rejected":
+                    update["rejection_reason"] = params.get("p_reason")
+                else:
+                    transcripts = self.rows("transcripts", meeting_id=mid)
+                    if not transcripts or item["source_excerpt"] not in (transcripts[0]["canonical_text"] or ""):
+                        fail("22023", "Source excerpt is not grounded in the transcript")
+                    for key in ("task", "owner_user_id", "deadline_utc", "priority"):
+                        if key in change:
+                            update[key] = change[key]
+                    owner = update.get("owner_user_id", item.get("owner_user_id"))
+                    if owner and not self.rows("workspace_members", workspace_id=meeting["workspace_id"], user_id=owner):
+                        fail("22023", "Assignee is not a workspace member")
+                self.table("extracted_items").update(update).eq("id", iid).execute()
+                if params["p_decision"] != "approved" or item["type"] != "action":
+                    continue
+                item.update(update)
+                task = self.table("tasks").insert({
+                    "workspace_id": meeting["workspace_id"], "meeting_id": mid, "extracted_item_id": iid,
+                    "title": item["task"], "priority": item["priority"], "deadline_utc": item.get("deadline_utc"),
+                    "source_excerpt": item["source_excerpt"], "created_by": actor,
+                    "external_owner_label": item.get("owner_name") if not owner else None,
+                }).execute().data[0]
+                task_ids.append(task["id"])
+                if owner:
+                    self.table("task_assignees").insert({"task_id": task["id"], "user_id": owner, "is_primary": True}).execute()
+                raw = change.get("blocked_by_id")
+                if "blocked_by_id" not in change and (item.get("rejection_reason") or "").startswith("depends_on:"):
+                    raw = item["rejection_reason"].split(":", 1)[1]
+                if raw:
+                    dependencies.append((task["id"], raw))
+            for tid, raw in dependencies:
+                candidates = [t for t in self.rows("tasks", workspace_id=meeting["workspace_id"])
+                              if t["id"] == raw or t.get("extracted_item_id") == raw]
+                if not candidates:
+                    fail("22023", "Prerequisite not found in workspace")
+                prerequisite = candidates[0]
+                visited = {tid}
+                node = prerequisite
+                while node:
+                    if node["id"] in visited:
+                        fail("22023", "Circular dependency")
+                    visited.add(node["id"])
+                    node = next(iter(self.rows("tasks", id=node["blocked_by"])), None) if node.get("blocked_by") else None
+                self.table("tasks").update({"blocked_by": prerequisite["id"],
+                    "status": "todo" if prerequisite["status"] == "done" else "blocked"}).eq("id", tid).execute()
+            return {"task_ids": task_ids, "approved": len(seen) if params["p_decision"] == "approved" else 0,
+                    "rejected": len(seen) if params["p_decision"] == "rejected" else 0}
 
     def _get_user(self, token: str):
         rows = self.table("profiles").eq("id", token).execute().data

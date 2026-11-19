@@ -7,9 +7,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Bot,
-  User,
-  Sparkles,
   MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,21 +21,14 @@ export interface TaskDependencyModalProps {
   onOpenPrereqDialog?: (task: KanbanTaskItem) => void;
 }
 
-export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
-  isOpen,
-  onClose,
-  task,
-  allTasks,
-  onUpdateDependency,
-  onStatusChange,
-  onOpenPrereqDialog,
-}) => {
-  if (!isOpen || !task) return null;
+export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = props => {
+  if (!props.isOpen || !props.task) return null;
+  return <DependencyForm key={props.task.id} {...props} task={props.task} />;
+};
 
+const DependencyForm = ({ task, allTasks, onClose, onUpdateDependency, onStatusChange, onOpenPrereqDialog }: TaskDependencyModalProps & { task: KanbanTaskItem }) => {
   const [selectedBlockedBy, setSelectedBlockedBy] = useState<string>(task.blocked_by || '');
-  const [executionType, setExecutionType] = useState<'human' | 'agent'>(
-    task.execution_type === 'agent' ? 'agent' : 'human'
-  );
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // 1. Current blocking task (Prerequisite)
@@ -72,22 +62,28 @@ export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
 
   const handleSave = async () => {
     if (isCircular) return;
+    setSaveError(null);
     setIsSaving(true);
     try {
       const newBlockedBy = selectedBlockedBy ? selectedBlockedBy : null;
-      await onUpdateDependency(task.id, newBlockedBy, executionType);
+      await onUpdateDependency(task.id, newBlockedBy);
       onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Unable to save dependency.");
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleRemoveDependency = async () => {
+    setSaveError(null);
     setIsSaving(true);
     try {
       setSelectedBlockedBy('');
-      await onUpdateDependency(task.id, null, executionType);
+      await onUpdateDependency(task.id, null);
       onClose();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Unable to save dependency.");
     } finally {
       setIsSaving(false);
     }
@@ -113,7 +109,7 @@ export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
               </h2>
             </div>
             <p className="mt-1 text-xs text-slate-500 dark:text-neutral-400">
-              Configure prerequisites and execution routing for this action item.
+              Configure prerequisites for this action item.
             </p>
           </div>
           <button
@@ -168,54 +164,9 @@ export const TaskDependencyModal: React.FC<TaskDependencyModalProps> = ({
           </h3>
         </div>
 
+        {saveError && <p role="alert">{saveError}</p>}
         {/* Form Body */}
         <div className="mt-6 space-y-6">
-          {/* 1. Execution Routing (Human vs AI Agent) */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-neutral-300 mb-2">
-              Task Execution Mode
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setExecutionType('human')}
-                className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${
-                  executionType === 'human'
-                    ? 'border-indigo-500 bg-indigo-50/60 ring-2 ring-indigo-500/20 dark:border-indigo-400 dark:bg-indigo-950/20'
-                    : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-transparent dark:hover:bg-white/5'
-                }`}
-              >
-                <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
-                  <User className="size-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-slate-900 dark:text-white">Human Assignee</p>
-                  <p className="text-[11px] text-slate-500 dark:text-neutral-400">Team member executes task manually</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setExecutionType('agent')}
-                className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-all ${
-                  executionType === 'agent'
-                    ? 'border-purple-500 bg-purple-50/60 ring-2 ring-purple-500/20 dark:border-purple-400 dark:bg-purple-950/20'
-                    : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-transparent dark:hover:bg-white/5'
-                }`}
-              >
-                <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300">
-                  <Bot className="size-4" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-purple-900 dark:text-purple-300 flex items-center gap-1">
-                    AI Agent Runner <Sparkles className="size-3 text-purple-500" />
-                  </p>
-                  <p className="text-[11px] text-slate-500 dark:text-neutral-400">Auto-triggers research, drafting or checklist</p>
-                </div>
-              </button>
-            </div>
-          </div>
-
           {/* 2. Prerequisite Dependency Selector (Blocked By) */}
           <div>
             <div className="flex items-center justify-between mb-2">

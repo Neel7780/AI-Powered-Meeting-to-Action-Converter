@@ -129,7 +129,8 @@ def test_rollover_task_success():
         data=[{"id": task_id, "meeting_id": target_meeting_id}]
     )
 
-    with patch("app.api.velocity.require_role"), \
+    with patch("app.api.velocity.require_task_access", return_value={"id":task_id,"meeting_id":str(uuid4()),"status":"todo"}), \
+         patch("app.api.velocity.require_meeting_role", return_value={"id":target_meeting_id,"workspace_id":ws_id}), \
          patch("app.api.velocity.get_supabase_client", return_value=mock_db):
         resp = client.post(
             f"/api/workspaces/{ws_id}/tasks/{task_id}/rollover",
@@ -142,3 +143,5 @@ def test_rollover_task_success():
     assert data["success"] is True
     assert data["task_id"] == task_id
     assert data["target_meeting_id"] == target_meeting_id
+    assert mock_db.table.call_args.args[0] == "task_carryovers"
+    mock_db.table.return_value.update.assert_not_called()

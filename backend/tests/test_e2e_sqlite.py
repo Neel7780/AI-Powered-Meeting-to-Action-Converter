@@ -266,6 +266,50 @@ def test_full_flow_live_bedrock(world):
     assert "priya@example.com" not in world.emailed()
 
 
+def _candidate(world, meeting_id, **updates):
+    row = {"meeting_id":meeting_id,"type":"action","task":"Fix Safari login",
+           "source_excerpt":"I will fix the login bug on Safari by Wednesday.", **updates}
+    return world.db.table("extracted_items").insert(row).execute().data[0]["id"]
+
+
+def test_approval_failure_rolls_back_candidate_task_and_assignee(world):
+    m = world.create_meeting()
+    world.paste(m)
+    iid = _candidate(world, m)
+    world.db.conn.execute("CREATE TRIGGER fail_assignment BEFORE INSERT ON task_assignees BEGIN SELECT RAISE(ABORT, 'injected assignment failure'); END")
+    response = world.post(f"/meetings/{m}/approve",world.priya,json={"items":[{"id":iid,"owner_user_id":world.rahul}]})
+    assert response.status_code == 500
+    assert world.db.rows("extracted_items",id=iid)[0]["review_status"] == "needs_review"
+    assert world.db.rows("tasks") == [] and world.db.rows("task_assignees") == []
+    assert world.emails == []
+
+
+def test_approval_rejects_foreign_prerequisite_and_rolls_back(world):
+    m = world.create_meeting()
+    world.paste(m)
+    iid = _candidate(world,m)
+    response = world.post(f"/meetings/{m}/approve",world.priya,json={"items":[{"id":iid,"blocked_by_id":str(uuid.uuid4())}]})
+    assert response.status_code == 422
+    assert world.db.rows("extracted_items",id=iid)[0]["review_status"] == "needs_review"
+    assert world.db.rows("tasks") == []
+
+
+def test_task_status_requires_assignment_and_private_meeting_visibility(world):
+    m = world.create_meeting()
+    world.paste(m)
+    iid = _candidate(world,m)
+    response = world.post(f"/meetings/{m}/approve",world.priya,json={"items":[{"id":iid,"owner_user_id":world.rahul}]})
+    tid = response.json()["task_ids"][0]
+    def update(uid):
+        return world.client.patch(f"/api/workspaces/{world.workspace}/tasks/{tid}/status",headers={"Authorization":f"Bearer {uid}"},json={"status":"done"})
+    assert update(world.aman).status_code == 403
+    assert update(world.rahul).status_code == 200
+    world.db.table("meetings").update({"visibility":"private"}).eq("id",m).execute()
+    world.db.table("meeting_participants").delete().eq("meeting_id",m).eq("user_id",world.aman).execute()
+    response = world.client.get(f"/api/meetings/{m}/summary",headers={"Authorization":f"Bearer {world.aman}"})
+    assert response.status_code == 404
+
+
 def test_development_tokens_are_rejected(world):
     response = world.client.get(f"/api/workspaces/{world.workspace}/analytics",headers={"Authorization":"Bearer dev-token-actionpulse"})
     assert response.status_code == 401

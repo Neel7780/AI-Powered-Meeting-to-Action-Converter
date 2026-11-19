@@ -3,7 +3,6 @@ import {
   Sparkles, 
   Copy, 
   Check, 
-  RotateCw, 
   CheckCircle2, 
   ArrowRight, 
   FileText,
@@ -27,24 +26,20 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
   onJumpToCandidate
 }) => {
   const [copied, setCopied] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
-  const handleCopySummary = () => {
+  const handleCopySummary = async () => {
     const text = `# ${summary.overview}\n\n## Key Discussion Points\n` +
       summary.key_discussion_points.map(dp => `### ${dp.topic}\n` + dp.points.map(p => `- ${p}`).join('\n')).join('\n\n') +
       `\n\n## Decisions\n` + summary.decisions.map(d => `- [${d.timestamp}] ${d.speaker}: ${d.text}`).join('\n') +
       `\n\n## Outcomes\n` + summary.outcomes.map(o => `- ${o}`).join('\n');
 
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleRegenerate = () => {
-    setIsRegenerating(true);
-    setTimeout(() => {
-      setIsRegenerating(false);
-    }, 1200);
+    setCopyError(null);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { setCopyError("Unable to copy summary."); }
   };
 
   return (
@@ -56,21 +51,13 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
           <div>
             <span className="font-semibold text-teal-300">Grounded Meeting Summary</span>
             <span className="text-[11px] text-slate-400 ml-2 hidden sm:inline">
-              via Gemini 3.1 Flash-Lite
+              {summary.model_used === "deterministic-grounded" ? "From transcript records" : `via ${summary.model_used}`}
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button
-            onClick={handleRegenerate}
-            disabled={isRegenerating}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#1a202c] hover:bg-[#222a3a] border border-[#2d3748] text-slate-300 hover:text-white text-xs transition disabled:opacity-50"
-            title="Refresh summary with Gemini"
-          >
-            <RotateCw className={`w-3 h-3 ${isRegenerating ? 'animate-spin text-teal-400' : ''}`} />
-            <span className="hidden sm:inline">{isRegenerating ? 'Refreshing...' : 'Refresh'}</span>
-          </button>
+
 
           <button
             onClick={handleCopySummary}
@@ -83,6 +70,7 @@ export const MeetingSummaryTab: React.FC<SummaryTabProps> = ({
         </div>
       </div>
 
+      {copyError && <p role="alert">{copyError}</p>}
       {/* Section 1: Overview */}
       <div className="space-y-2">
         <div className="text-[11px] font-bold tracking-wider uppercase text-teal-400 flex items-center gap-1.5">

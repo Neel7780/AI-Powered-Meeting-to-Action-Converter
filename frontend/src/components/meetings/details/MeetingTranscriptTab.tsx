@@ -32,7 +32,8 @@ export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const isEditMode = false;
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [selectedSpeaker, setSelectedSpeaker] = useState<string>('all');
   const [editableSegments, setEditableSegments] = useState<TranscriptSegment[]>(segments);
 
@@ -92,13 +93,16 @@ export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
     }
   }, [highlightedSegmentId, highlightedTimestamp, segments]);
 
-  const handleCopyFullTranscript = () => {
+  const handleCopyFullTranscript = async () => {
     const fullText = editableSegments
       .map((s) => `[${s.timestamp}] ${s.speaker_name}: ${s.text}`)
       .join('\n\n');
-    navigator.clipboard.writeText(fullText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopyError(null);
+    try {
+      await navigator.clipboard.writeText(fullText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { setCopyError("Unable to copy transcript."); }
   };
 
   const handleTextChange = (id: string, newText: string) => {
@@ -134,16 +138,16 @@ export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
 
           {/* Edit Mode Toggle Button */}
           <button
-            onClick={() => setIsEditMode(!isEditMode)}
+            disabled
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
               isEditMode
                 ? 'bg-amber-950/80 text-amber-300 border-amber-800/60 shadow-xs'
                 : 'bg-[#151922] hover:bg-[#1d2330] text-slate-300 border-[#242b38]'
             }`}
-            title="Edit speaker names or transcript text"
+            title="Transcript editing is unavailable"
           >
             <Edit3 className="w-3.5 h-3.5 text-slate-400" />
-            <span className="hidden sm:inline">{isEditMode ? 'Done' : 'Edit'}</span>
+            <span className="hidden sm:inline">Editing unavailable</span>
           </button>
 
           {/* Copy Full Transcript */}
@@ -157,6 +161,7 @@ export const MeetingTranscriptTab: React.FC<TranscriptTabProps> = ({
           </button>
         </div>
 
+        {copyError && <p role="alert">{copyError}</p>}
         {/* Speaker Chips Filter */}
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5 text-[11px]">
           <span className="text-slate-400 font-medium mr-1 text-[10px] uppercase tracking-wider">

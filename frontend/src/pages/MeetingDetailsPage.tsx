@@ -7,25 +7,23 @@ import { MeetingTimelineMultiTrack } from '../components/meetings/details/Meetin
 import { MeetingRightPanel } from '../components/meetings/details/MeetingRightPanel';
 import { MeetingShareModal } from '../components/meetings/details/MeetingShareModal';
 import { meetingDetailsService } from '../services/meetingDetailsService';
-import { 
-  DESIGN_SPRINT_MEETING_DETAILS, 
-  DESIGN_SPRINT_TRANSCRIPT, 
-  DESIGN_SPRINT_CANDIDATES 
-} from '../data/mockMeetingDetails';
+
+import type { TranscriptSegment, ActionItemCandidate } from '../types/review';
 import type { RichMeetingDetails } from '../types/meetingDetails';
 
 export const MeetingDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
 
-  const [meeting, setMeeting] = useState<RichMeetingDetails>(DESIGN_SPRINT_MEETING_DETAILS);
-  const [transcript, setTranscript] = useState(DESIGN_SPRINT_TRANSCRIPT);
-  const [candidates, setCandidates] = useState(DESIGN_SPRINT_CANDIDATES);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [meeting, setMeeting] = useState<RichMeetingDetails | null>(null);
+  const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
+  const [candidates, setCandidates] = useState<ActionItemCandidate[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Time state: Default to 20:47 (1247 seconds) as shown in the screenshot!
-  const [playbackSeconds, setPlaybackSeconds] = useState<number>(1247);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [highlightedTimestamp, setHighlightedTimestamp] = useState<string | null>('20:47');
+  // Transcript navigation position; recording playback is unavailable.
+  const [playbackSeconds, setPlaybackSeconds] = useState<number>(0);
+  const isPlaying = false;
+  const [highlightedTimestamp, setHighlightedTimestamp] = useState<string | null>(null);
   const [highlightedSegmentId, setHighlightedSegmentId] = useState<string | null>(null);
 
   const [splitView, setSplitView] = useState<boolean>(false);
@@ -36,45 +34,26 @@ export const MeetingDetailsPage: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     const loadData = async () => {
-      setIsLoading(true);
+      setMeeting(null); setError(null); setIsLoading(true);
       try {
-        const result = await meetingDetailsService.loadMeetingStudioData(id || 'design-sprint-review');
+        const result = await meetingDetailsService.loadMeetingStudioData(id || '');
         if (isMounted) {
           setMeeting(result.meeting);
           setTranscript(result.transcript);
           setCandidates(result.candidates);
         }
       } catch (err) {
-        console.warn('Error loading meeting studio data:', err);
+        if (isMounted) setError(err instanceof Error ? err.message : 'Unable to load meeting.');
       } finally {
         if (isMounted) setIsLoading(false);
       }
     };
 
     loadData();
-    return () => {
+  return () => {
       isMounted = false;
     };
   }, [id]);
-
-  // Auto-play timer
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    if (isPlaying) {
-      interval = setInterval(() => {
-        setPlaybackSeconds((prev) => {
-          if (prev >= meeting.total_duration_seconds) {
-            setIsPlaying(false);
-            return 0;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isPlaying, meeting.total_duration_seconds]);
 
   const handleSeek = (newSeconds: number) => {
     setPlaybackSeconds(newSeconds);
@@ -123,6 +102,9 @@ export const MeetingDetailsPage: React.FC = () => {
     }
   };
 
+  if (isLoading) return <div className="p-6" role="status">Loading meeting details…</div>;
+  if (error || !meeting) return <div className="p-6" role="alert">{error || 'Meeting not found'}</div>;
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0a0c10] text-slate-100 font-sans">
       {/* Desktop Left Sidebar (Matching Screenshot) */}
@@ -169,7 +151,7 @@ export const MeetingDetailsPage: React.FC = () => {
                 playbackSeconds={playbackSeconds}
                 onSeek={handleSeek}
                 isPlaying={isPlaying}
-                onTogglePlay={() => setIsPlaying(!isPlaying)}
+                onTogglePlay={() => {}}
               />
 
               <MeetingTimelineMultiTrack
