@@ -16,6 +16,8 @@ from typing import Any, Optional
 from urllib.parse import urlencode
 from uuid import UUID
 
+from cryptography.fernet import Fernet
+
 import httpx
 
 from app.core.config import settings
@@ -36,28 +38,21 @@ SCOPES = [
 
 
 def _get_encryption_key() -> bytes:
-    secret = (
-        settings.CALENDAR_ENCRYPTION_SECRET
-        or settings.SUPABASE_SERVICE_ROLE_KEY
-        or "actionpulse-zero-budget-secret"
-    )
-    return hashlib.sha256(secret.encode("utf-8")).digest()
+    if not settings.CALENDAR_ENCRYPTION_SECRET.strip():
+        raise ValueError("Calendar integration requires CALENDAR_ENCRYPTION_SECRET")
+    return hashlib.sha256(settings.CALENDAR_ENCRYPTION_SECRET.encode()).digest()
 
 
 def encrypt_token(plain_token: str) -> str:
-    """Reversibly encrypt token using a derived SHA-256 key and XOR streaming."""
-    key = _get_encryption_key()
-    raw = plain_token.encode("utf-8")
-    encrypted = bytes([b ^ key[i % len(key)] for i, b in enumerate(raw)])
-    return base64.urlsafe_b64encode(encrypted).decode("ascii")
+    key = base64.urlsafe_b64encode(_get_encryption_key())
+    return "fernet:v1:" + Fernet(key).encrypt(plain_token.encode()).decode()
 
 
 def decrypt_token(cipher_token: str) -> str:
-    """Decrypt a token previously encrypted with encrypt_token."""
-    key = _get_encryption_key()
-    encrypted = base64.urlsafe_b64decode(cipher_token.encode("ascii"))
-    decrypted = bytes([b ^ key[i % len(key)] for i, b in enumerate(encrypted)])
-    return decrypted.decode("utf-8")
+    if not cipher_token.startswith("fernet:v1:"):
+        raise ValueError("Calendar connection uses legacy encryption. Disconnect and reconnect Google Calendar.")
+    key = base64.urlsafe_b64encode(_get_encryption_key())
+    return Fernet(key).decrypt(cipher_token[len("fernet:v1:"):].encode()).decode()
 
 
 def generate_oauth_state(user_id: UUID, workspace_id: UUID) -> str:

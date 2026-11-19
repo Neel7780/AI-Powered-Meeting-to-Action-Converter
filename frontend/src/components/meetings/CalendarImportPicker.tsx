@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Calendar as CalendarIcon,
   CheckCircle2,
@@ -36,32 +36,36 @@ export function CalendarImportPicker({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStatusAndEvents = async () => {
+  const generation = useRef(0);
+  const fetchStatusAndEvents = useCallback(async () => {
+    const request = ++generation.current;
+    setEvents([]); setStatus(null);
     if (!workspaceId) return;
     try {
       setError(null);
       const st = await getCalendarStatus(workspaceId);
+      if (request !== generation.current) return;
       setStatus(st);
       if (st.connected) {
         const { events: evList } = await getUpcomingCalendarEvents(workspaceId);
-        setEvents(evList);
+        if (request === generation.current) setEvents(evList);
       } else {
         setEvents([]);
       }
     } catch (err: any) {
       console.warn('[ActionPulse] Calendar fetch note:', err.message);
       // If endpoint is unreachable or not yet configured, fail gracefully
-      setStatus({ connected: false });
+      if (request === generation.current) setError(err.message || "Unable to load calendar connection.");
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (request === generation.current) { setLoading(false); setRefreshing(false); }
     }
-  };
+  }, [workspaceId]);
 
   useEffect(() => {
     setLoading(true);
-    fetchStatusAndEvents();
-  }, [workspaceId]);
+    void fetchStatusAndEvents();
+    return () => { generation.current++; };
+  }, [fetchStatusAndEvents]);
 
   const handleConnect = async () => {
     setConnecting(true);

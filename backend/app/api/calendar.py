@@ -53,10 +53,10 @@ def get_connect_url(
     """Generate signed Google OAuth authorization URL for calendar read access."""
     require_role(workspace_id, WORKSPACE_ROLES, user)
 
-    if not settings.GOOGLE_CLIENT_ID:
+    if not settings.GOOGLE_CLIENT_ID or not settings.CALENDAR_ENCRYPTION_SECRET:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google Calendar integration is not configured (missing GOOGLE_CLIENT_ID)",
+            detail="Google Calendar integration is not configured (missing GOOGLE_CLIENT_ID or CALENDAR_ENCRYPTION_SECRET)",
         )
 
     auth_url = get_google_auth_url(user.id, workspace_id, redirect_uri)
@@ -111,7 +111,7 @@ async def oauth_callback(
             .eq("provider", "google")
             .execute()
         )
-        if existing.data and existing.data[0].get("encrypted_refresh_token"):
+        if existing.data and existing.data[0].get("encrypted_refresh_token", "").startswith("fernet:v1:"):
             encrypted_refresh_token = existing.data[0]["encrypted_refresh_token"]
         else:
             raise HTTPException(
@@ -177,7 +177,7 @@ def get_connection_status(
     client = get_supabase_client()
     resp = (
         client.table("calendar_connections")
-        .select("provider, account_email, last_synced_at, sync_enabled")
+        .select("provider, account_email, last_synced_at, sync_enabled, encrypted_refresh_token")
         .eq("user_id", str(user.id))
         .eq("workspace_id", str(workspace_id))
         .eq("provider", "google")
@@ -185,7 +185,7 @@ def get_connection_status(
     )
 
     rows = resp.data or []
-    if not rows or not rows[0].get("sync_enabled"):
+    if not rows or not rows[0].get("sync_enabled") or not rows[0].get("encrypted_refresh_token", "").startswith("fernet:v1:"):
         return CalendarConnectionStatus(connected=False)
 
     row = rows[0]
@@ -240,7 +240,7 @@ async def get_upcoming_events(
     )
 
     rows = resp.data or []
-    if not rows or not rows[0].get("sync_enabled"):
+    if not rows or not rows[0].get("sync_enabled") or not rows[0].get("encrypted_refresh_token", "").startswith("fernet:v1:"):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No connected Google Calendar found for this workspace",

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Calendar as CalendarIcon,
@@ -19,7 +19,7 @@ import {
   CalendarCheck2,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useWorkspace, type Workspace } from '../context/WorkspaceContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { Button } from '../components/ui/button';
 import { CreateMeetingModal } from '../components/meetings/CreateMeetingModal';
 import { FollowUpModal } from '../components/meetings/FollowUpModal';
@@ -114,117 +114,12 @@ function getWorkspacePalette(idx: number) {
   return WORKSPACE_PALETTES[idx % WORKSPACE_PALETTES.length];
 }
 
-// Generate realistic dynamic demo meetings relative to right now
-function generateDemoMeetings(workspaces: Workspace[]): CalendarMeeting[] {
-  const now = new Date();
-  const ws1 = workspaces[0]?.id || 'ws-team-10';
-  const ws1Name = workspaces[0]?.name || 'ActionPulse Engineering';
-  const ws2 = workspaces[1]?.id || 'ws-design-01';
-  const ws2Name = workspaces[1]?.name || 'Frontend & Product Design';
-
-  const makeDate = (offsetDays: number, hours: number, minutes: number = 0) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() + offsetDays);
-    d.setHours(hours, minutes, 0, 0);
-    return d.toISOString();
-  };
-
-  return [
-    {
-      id: 'mtg-sprint-102',
-      title: 'Sprint 2 Architecture & AI Staging Review',
-      starts_at: makeDate(-3, 10, 0),
-      ends_at: makeDate(-3, 11, 0),
-      timezone: 'Asia/Kolkata',
-      status: 'completed',
-      conference_url: 'https://meet.google.com/abc-defg-hij',
-      workspace_id: ws1,
-      workspace_name: ws1Name,
-      workspace_color_idx: 0,
-      tasks_count: 4,
-      description: 'Review Sprint 2 vertical slice, Supabase RLS security policies, and Gemini Flash-Lite token limits.',
-      source_excerpt: 'Bharat will verify transcript parser handles .vtt and .srt subtitle files properly by Friday.',
-    },
-    {
-      id: 'mtg-ds-01',
-      title: 'Design Sprint Review & Next Steps',
-      starts_at: makeDate(-1, 14, 30),
-      ends_at: makeDate(-1, 15, 30),
-      timezone: 'Asia/Kolkata',
-      status: 'completed',
-      conference_url: 'https://meet.google.com/xyz-uvwx-rst',
-      workspace_id: ws2,
-      workspace_name: ws2Name,
-      workspace_color_idx: 1,
-      tasks_count: 5,
-      description: 'Design system alignment, high-contrast dark theme verification, and mobile drawer accessibility review.',
-      source_excerpt: 'Vikram will finalize the PR for action item auto-tagger and chapter parser before Monday.',
-    },
-    {
-      id: 'mtg-sprint-103',
-      title: 'Sprint 3 Kickoff & Personal Calendar Sync',
-      starts_at: makeDate(0, 16, 0),
-      ends_at: makeDate(0, 17, 0),
-      timezone: 'Asia/Kolkata',
-      status: 'scheduled',
-      conference_url: 'https://meet.google.com/act-puls-s3k',
-      workspace_id: ws1,
-      workspace_name: ws1Name,
-      workspace_color_idx: 0,
-      tasks_count: 2,
-      description: 'Planning Sprint 3 epics: Multi-workspace personal calendar view, offline PWA caching, and WhatsApp link generator.',
-    },
-    {
-      id: 'mtg-security-audit',
-      title: 'Zero-Budget Security & Audit Policy Review',
-      starts_at: makeDate(2, 11, 0),
-      ends_at: makeDate(2, 12, 0),
-      timezone: 'Asia/Kolkata',
-      status: 'scheduled',
-      conference_url: 'https://meet.google.com/sec-audit-team',
-      workspace_id: ws1,
-      workspace_name: ws1Name,
-      workspace_color_idx: 0,
-      tasks_count: 3,
-      description: 'Audit audit_logs triggers, verify backend-only task mutation rules, and validate prompt injection XML fences.',
-    },
-    {
-      id: 'mtg-ux-walkthrough',
-      title: 'UX Walkthrough: Mobile Push & Web Notifications',
-      starts_at: makeDate(4, 15, 0),
-      ends_at: makeDate(4, 16, 0),
-      timezone: 'Asia/Kolkata',
-      status: 'scheduled',
-      conference_url: 'https://meet.google.com/ux-mobile-push',
-      workspace_id: ws2,
-      workspace_name: ws2Name,
-      workspace_color_idx: 1,
-      tasks_count: 1,
-      description: 'Review Web Push Notification permission flow and evaluate user experience for deadline reminder pings.',
-    },
-    {
-      id: 'mtg-stakeholder-sync',
-      title: 'Stakeholder Demo & User Feedback Session',
-      starts_at: makeDate(7, 10, 30),
-      ends_at: makeDate(7, 11, 30),
-      timezone: 'Asia/Kolkata',
-      status: 'scheduled',
-      conference_url: 'https://meet.google.com/stk-demo-feed',
-      workspace_id: ws1,
-      workspace_name: ws1Name,
-      workspace_color_idx: 0,
-      tasks_count: 0,
-      description: 'Present the Sprint 3 live release to course instructors and collect feedback on AI meeting extraction accuracy.',
-    },
-  ];
-}
-
 /** Downloads an RFC 5545 .ics iCalendar file for Google Calendar, Apple Calendar, or Outlook */
 function exportMeetingToIcs(meeting: CalendarMeeting) {
   const start = new Date(meeting.starts_at);
   const end = meeting.ends_at
     ? new Date(meeting.ends_at)
-    : new Date(start.getTime() + 45 * 60 * 1000);
+    : null;
 
   const formatDate = (date: Date) => {
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -240,17 +135,17 @@ function exportMeetingToIcs(meeting: CalendarMeeting) {
     `UID:${meeting.id}@actionpulse.io`,
     `DTSTAMP:${formatDate(new Date())}`,
     `DTSTART:${formatDate(start)}`,
-    `DTEND:${formatDate(end)}`,
+    end ? `DTEND:${formatDate(end)}` : '',
     `SUMMARY:${meeting.title}`,
     `DESCRIPTION:${(meeting.description || `ActionPulse Meeting for ${meeting.workspace_name || 'Workspace'}`).replace(/\n/g, '\\n')}`,
-    meeting.conference_url ? `LOCATION:${meeting.conference_url}` : 'LOCATION:Virtual Room',
+    meeting.conference_url ? `LOCATION:${meeting.conference_url}` : '',
     meeting.conference_url ? `URL:${meeting.conference_url}` : '',
     'STATUS:CONFIRMED',
     'END:VEVENT',
     'END:VCALENDAR',
   ];
 
-  const blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+  const blob = new Blob([icsLines.filter(Boolean).join('\r\n')], { type: 'text/calendar;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -267,6 +162,9 @@ export default function CalendarPage() {
 
   // State
   const [meetings, setMeetings] = useState<CalendarMeeting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const requestGeneration = useRef(0);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
@@ -306,6 +204,11 @@ export default function CalendarPage() {
 
   // Load meetings across ALL workspaces personal to the user
   const fetchAllWorkspaceMeetings = useCallback(async () => {
+    const request = ++requestGeneration.current;
+    setLoading(true);
+    setLoadError(null);
+    setMeetings([]);
+    setActiveMeeting(null);
     try {
       const workspaceIds = workspaces.map((w) => w.id);
       let loadedMeetings: CalendarMeeting[] = [];
@@ -318,14 +221,16 @@ export default function CalendarPage() {
           .in('workspace_id', workspaceIds)
           .order('starts_at', { ascending: false });
 
-        if (!mtgErr && dbMeetings && dbMeetings.length > 0) {
+        if (mtgErr) throw mtgErr;
+        if (dbMeetings && dbMeetings.length > 0) {
           // 2. Fetch tasks counts for these meetings
           const meetingIds = dbMeetings.map((m) => m.id);
-          const { data: taskData } = await supabase
+          const { data: taskData, error: taskError } = await supabase
             .from('tasks')
             .select('id, meeting_id')
             .in('meeting_id', meetingIds);
 
+          if (taskError) throw taskError;
           const taskCountMap = new Map<string, number>();
           taskData?.forEach((t) => {
             if (t.meeting_id) {
@@ -336,13 +241,10 @@ export default function CalendarPage() {
           loadedMeetings = dbMeetings.map((m) => {
             const wsIdx = workspaceColorMap.get(m.workspace_id) ?? 0;
             const wsName = workspaceNameMap.get(m.workspace_id) || 'Workspace';
-            const startD = new Date(m.starts_at);
-            const endD = new Date(startD.getTime() + 45 * 60 * 1000);
             return {
               id: m.id,
               title: m.title,
               starts_at: m.starts_at,
-              ends_at: endD.toISOString(),
               timezone: m.timezone || 'Asia/Kolkata',
               status: m.status || 'scheduled',
               organiser_id: m.organiser_id,
@@ -357,29 +259,17 @@ export default function CalendarPage() {
         }
       }
 
-      // If no meetings found in database (or demo workspace), merge with rich dynamic demo meetings
-      if (loadedMeetings.length === 0) {
-        loadedMeetings = generateDemoMeetings(workspaces);
-      } else {
-        // Also ensure demo meetings are included if user has only 1 or 2 meetings so the calendar is fully demonstrative
-        const demoOnes = generateDemoMeetings(workspaces);
-        const existingIds = new Set(loadedMeetings.map((m) => m.id));
-        demoOnes.forEach((dm) => {
-          if (!existingIds.has(dm.id)) {
-            loadedMeetings.push(dm);
-          }
-        });
-      }
-
-      setMeetings(loadedMeetings);
+      if (request === requestGeneration.current) setMeetings(loadedMeetings);
     } catch (err) {
-      console.warn('Error loading personal calendar meetings:', err);
-      setMeetings(generateDemoMeetings(workspaces));
+      if (request === requestGeneration.current) setLoadError(err instanceof Error ? err.message : 'Unable to load calendar. Please retry.');
+    } finally {
+      if (request === requestGeneration.current) setLoading(false);
     }
   }, [workspaces, workspaceColorMap, workspaceNameMap]);
 
   useEffect(() => {
-    fetchAllWorkspaceMeetings();
+    void fetchAllWorkspaceMeetings();
+    return () => { requestGeneration.current++; };
   }, [fetchAllWorkspaceMeetings]);
 
   // Check Google Calendar connection status for the current workspace
@@ -387,7 +277,7 @@ export default function CalendarPage() {
     if (!currentWorkspace?.id) return;
     getCalendarStatus(currentWorkspace.id)
       .then((status) => setCalendarStatus(status))
-      .catch(() => setCalendarStatus(null));
+      .catch((err) => { setCalendarStatus(null); setCalendarSyncNotice(err instanceof Error ? err.message : "Unable to load calendar connection."); });
   }, [currentWorkspace?.id]);
 
   const handleSyncGoogleCalendar = async () => {
@@ -401,7 +291,7 @@ export default function CalendarPage() {
         return;
       }
       const data = await getUpcomingCalendarEvents(currentWorkspace.id, 30);
-      setCalendarSyncNotice(`Synced ${data.events.length} Google Calendar event(s) successfully.`);
+      setCalendarSyncNotice(`Loaded ${data.events.length} Google Calendar event(s). Import an event to save it as a meeting.`);
       await fetchAllWorkspaceMeetings();
     } catch (err: any) {
       setCalendarSyncNotice(
@@ -678,6 +568,8 @@ export default function CalendarPage() {
       </div>
 
       {/* Google Calendar sync notification banner */}
+      {loading && <p role="status">Loading calendar…</p>}
+      {loadError && <p role="alert">{loadError} <button onClick={() => void fetchAllWorkspaceMeetings()}>Retry</button></p>}
       {calendarSyncNotice && (
         <div className="flex items-center justify-between rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-xs text-cyan-200">
           <div className="flex items-center gap-2">

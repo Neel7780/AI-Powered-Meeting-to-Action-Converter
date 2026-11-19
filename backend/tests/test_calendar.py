@@ -19,6 +19,11 @@ from main import app
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def calendar_encryption_secret(monkeypatch):
+    monkeypatch.setattr(settings, "CALENDAR_ENCRYPTION_SECRET", "test-calendar-secret")
+
+
 def test_token_encryption_decryption():
     """Verify symmetric token encryption and decryption."""
     raw_token = "1//04example_google_refresh_token_xyz_12345"
@@ -126,3 +131,18 @@ def test_disconnect_calendar():
         assert response.json()["success"] is True
 
     app.dependency_overrides.clear()
+
+
+def test_encrypted_token_tampering_and_legacy_format_are_rejected():
+    from cryptography.fernet import InvalidToken
+    token = encrypt_token("refresh-token")
+    with pytest.raises(InvalidToken):
+        decrypt_token(token[:-5] + "AAAAA")
+    with pytest.raises(ValueError, match="legacy"):
+        decrypt_token("old-xor-token")
+
+
+def test_missing_calendar_secret_has_no_default_key(monkeypatch):
+    monkeypatch.setattr(settings,"CALENDAR_ENCRYPTION_SECRET","")
+    with pytest.raises(ValueError,match="CALENDAR_ENCRYPTION_SECRET"):
+        encrypt_token("refresh-token")
