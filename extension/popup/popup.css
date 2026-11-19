@@ -221,6 +221,7 @@ h2 { margin-top: 8px; font-size: 19px; line-height: 1.25; font-weight: 740; lett
   font-size: 12px;
 }
 .settings-actions { margin-top: 4px; }
+#settingsStatus:empty { display: none; }
 #settingsStatus { color: var(--muted); font-size: 12px; }
 .message {
   margin-top: 8px;
