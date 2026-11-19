@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ActionPulse - Meeting Transcriber & AI Actions",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Live meeting captions capture & AI action item generator for Google Meet, Zoom, and Microsoft Teams. Manager-only sync to ActionPulse.",
   "permissions": [
     "storage",

@@ -8,6 +8,7 @@
 const DEFAULT_SETTINGS = {
   apiUrl: "http://localhost:8000",
   appUrl: "http://localhost:5173",
+  appUrlPinned: false,
   workspaceId: "",
   workspaceName: "",
   managerRole: "",
@@ -283,24 +284,54 @@ function readPageAuthContext() {
   };
 }
 
+let pendingSettingsUpdate = Promise.resolve();
+
+function queueSettingsUpdate(update) {
+  const pending = pendingSettingsUpdate.then(update);
+  pendingSettingsUpdate = pending.catch(() => {});
+  return pending;
+}
+
+function httpOrigin(value) {
+  try {
+    const url = new URL(value);
+    if (["https:", "http:"].includes(url.protocol) && !url.username && !url.password) return url.origin;
+  } catch {
+    // Missing or invalid origin.
+  }
+  return null;
+}
+
+async function saveAuthContext(settings, ctx) {
+  const origin = httpOrigin(ctx.appUrl);
+  if (!origin || (settings.appUrlPinned && settings.appUrl !== origin)) return null;
+  const updated = {
+    ...settings,
+    appUrl: origin,
+    accessToken: ctx.accessToken || "",
+    tokenExpiresAt: Number(ctx.tokenExpiresAt || 0),
+    userEmail: ctx.userEmail || "",
+    workspaceId: ctx.workspaceId || "",
+    workspaceName: ctx.workspaceName || "",
+    managerRole: ctx.managerRole || "",
+    lastSyncedAt: Date.now(),
+  };
+  await chrome.storage.local.set({ settings: updated });
+  return updated;
+}
+
 async function syncFromOpenActionPulseTabs(settings) {
   try {
-    const patterns = [
+    const patterns = settings.appUrlPinned ? [settings.appUrl + "/*"] : [
       "http://localhost:5173/*",
       "http://127.0.0.1:5173/*",
       "http://localhost:5174/*",
       "http://127.0.0.1:5174/*",
       "https://*.vercel.app/*",
     ];
-    if (settings.appUrl && /^https?:\/\//i.test(settings.appUrl)) {
-      const cleanOrigin = settings.appUrl.replace(/\/+$/, "");
-      if (!patterns.includes(`${cleanOrigin}/*`)) {
-        patterns.push(`${cleanOrigin}/*`);
-      }
-    }
 
     const tabs = await chrome.tabs.query({ url: patterns });
-    if (!tabs || tabs.length === 0) return settings;
+    if (!tabs || tabs.length === 0) return sanitizeSettings((await chrome.storage.local.get("settings")).settings);
 
     // Prefer active tab first so multi-tab users sync their focused ActionPulse tab
     const sortedTabs = [...tabs].sort((a, b) => Number(b.active) - Number(a.active));
@@ -313,19 +344,11 @@ async function syncFromOpenActionPulseTabs(settings) {
         });
         const ctx = results && results[0] && results[0].result;
         if (ctx && (ctx.accessToken || ctx.workspaceId)) {
-          const updated = sanitizeSettings({
-            ...settings,
-            appUrl: ctx.appUrl || settings.appUrl,
-            accessToken: ctx.accessToken || "",
-            tokenExpiresAt: Number(ctx.tokenExpiresAt || 0),
-            userEmail: ctx.userEmail || "",
-            workspaceId: ctx.workspaceId || "",
-            workspaceName: ctx.workspaceName || "",
-            managerRole: ctx.managerRole || "",
-            lastSyncedAt: Date.now(),
+          const updated = await queueSettingsUpdate(async () => {
+            const current = sanitizeSettings((await chrome.storage.local.get("settings")).settings);
+            return saveAuthContext(current, ctx);
           });
-          await chrome.storage.local.set({ settings: updated });
-          return updated;
+          if (updated) return updated;
         }
       } catch {
         // Skip tabs that cannot be scripted (e.g., unloading/restricted)
@@ -334,7 +357,7 @@ async function syncFromOpenActionPulseTabs(settings) {
   } catch (err) {
     console.debug("[ActionPulse] Open tab auth sync skipped:", err);
   }
-  return settings;
+  return sanitizeSettings((await chrome.storage.local.get("settings")).settings);
 }
 
 async function performBackendUpload(session, rawSettings) {
@@ -537,19 +560,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "SYNC_AUTH_CONTEXT": {
         const data = message.data || {};
-        settings = sanitizeSettings({
-          ...settings,
-          appUrl: data.appUrl || settings.appUrl,
-          accessToken: data.accessToken || "",
-          tokenExpiresAt: Number(data.tokenExpiresAt || 0),
-          userEmail: data.userEmail || "",
-          workspaceId: data.workspaceId || "",
-          workspaceName: data.workspaceName || "",
-          managerRole: data.managerRole || "",
-          lastSyncedAt: Date.now(),
-        });
-        await chrome.storage.local.set({ settings });
-        sendResponse({ status: "synced", hasAccessToken: Boolean(settings.accessToken) });
+        const updated = await saveAuthContext(settings, { ...data, appUrl: sender.url });
+        sendResponse(updated ? { status: "synced" } : { status: "ignored" });
         break;
       }
 
@@ -612,9 +624,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "UPDATE_SETTINGS": {
-        settings = sanitizeSettings({ ...settings, ...message.data });
+        const changes = message.data || {};
+        if ("appUrl" in changes) {
+          const appUrl = httpOrigin(changes.appUrl);
+          if (!appUrl) {
+            sendResponse({ status: "invalid_settings" });
+            break;
+          }
+          if (appUrl !== settings.appUrl) {
+            Object.assign(settings, {
+              accessToken: "", tokenExpiresAt: 0, userEmail: "", workspaceId: "",
+              workspaceName: "", managerRole: "", lastSyncedAt: 0,
+            });
+          }
+          settings.appUrl = appUrl;
+          settings.appUrlPinned = true;
+        }
+        if ("apiUrl" in changes) {
+          const apiUrl = httpOrigin(changes.apiUrl);
+          if (!apiUrl) {
+            sendResponse({ status: "invalid_settings" });
+            break;
+          }
+          settings.apiUrl = apiUrl;
+        }
+        for (const key of ["autoUploadOnEnd", "autoExtract"]) {
+          if (typeof changes[key] === "boolean") settings[key] = changes[key];
+        }
         await chrome.storage.local.set({ settings });
-        sendResponse({ status: "settings_updated", settings });
+        sendResponse({ status: "settings_updated" });
         break;
       }
 
@@ -641,7 +679,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   };
 
-  const handled = SESSION_MUTATIONS.has(message.type) ? queueSessionUpdate(handle) : handle();
+  let handled;
+  if (message.type === "SYNC_AUTH_CONTEXT" || message.type === "UPDATE_SETTINGS") {
+    handled = queueSettingsUpdate(handle);
+  } else if (SESSION_MUTATIONS.has(message.type)) {
+    handled = queueSessionUpdate(handle);
+  } else {
+    handled = handle();
+  }
   handled.catch((error) => {
     console.error("[ActionPulse] Extension request failed:", error);
     sendResponse({ success: false, error: error.message || "Extension request failed." });
