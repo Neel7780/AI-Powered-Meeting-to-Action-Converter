@@ -670,3 +670,98 @@ html {
   .rise-in, .skeleton, .dot-pulse { animation: none; }
   .card-hover:hover { transform: none; }
 }
+
+@keyframes shimmer-slide {
+  to {
+    transform: translate(calc(100cqw - 100%), 0);
+  }
+}
+
+@keyframes spin-around {
+  0% {
+    transform: translateZ(0) rotate(0);
+  }
+  15%, 35% {
+    transform: translateZ(0) rotate(90deg);
+  }
+  65%, 85% {
+    transform: translateZ(0) rotate(270deg);
+  }
+  100% {
+    transform: translateZ(0) rotate(360deg);
+  }
+}
+
+@keyframes shimmer-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-shimmer-slide {
+  animation: shimmer-slide var(--speed, 3s) ease-in-out infinite alternate;
+}
+
+.animate-spin-around {
+  animation: spin-around calc(var(--speed, 3s) * 2) infinite linear;
+}
+
+.hover-whitish {
+  color: #888888;
+  transition: color 0.15s ease;
+}
+.hover-whitish:hover {
+  color: #ffffff !important;
+}
+
+.hover-whitish-link {
+  color: #ffffff;
+  transition: color 0.15s ease;
+}
+.hover-whitish-link:hover {
+  color: #ffffff !important;
+  text-decoration: underline !important;
+}
+
+/* Auth input field styling - exact pitch black, override browser autofill blue */
+.auth-input {
+  background-color: #000000 !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+  border: 1px solid #333333 !important;
+}
+
+.auth-input:focus {
+  border-color: #555555 !important;
+  outline: none !important;
+}
+
+.auth-input:-webkit-autofill,
+.auth-input:-webkit-autofill:hover,
+.auth-input:-webkit-autofill:focus,
+.auth-input:-webkit-autofill:active,
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #000000 inset !important;
+  box-shadow: 0 0 0 1000px #000000 inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  color: #ffffff !important;
+  caret-color: #ffffff !important;
+  background-color: #000000 !important;
+  background: #000000 !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
