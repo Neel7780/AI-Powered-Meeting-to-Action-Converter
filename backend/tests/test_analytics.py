@@ -119,6 +119,7 @@ def test_get_analytics_as_organiser_includes_member_evaluations():
                     data=assignees_mock_data
                 )
             elif name == "meetings":
+                table_mock.select.return_value.eq.return_value.execute.return_value = MagicMock(data=meetings_mock_data)
                 m_mock = table_mock.select.return_value.eq.return_value.order.return_value.limit.return_value
                 m_mock.execute.return_value = MagicMock(data=meetings_mock_data)
             elif name == "workspace_members":
@@ -181,6 +182,7 @@ def test_get_analytics_as_member_restricts_employee_evaluations():
                 t_mock = table_mock.select.return_value.eq.return_value.gte.return_value
                 t_mock.execute.return_value = MagicMock(data=[])
             elif name == "meetings":
+                table_mock.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
                 m_mock = table_mock.select.return_value.eq.return_value.order.return_value.limit.return_value
                 m_mock.execute.return_value = MagicMock(data=[])
             return table_mock

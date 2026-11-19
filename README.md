@@ -33,4 +33,4 @@ The backend AI provider is Amazon Bedrock through LangChain, using a server-only
 Bedrock API key. See [`backend/README.md`](backend/README.md) for setup and migration
 from Gemini. Earlier planning documents describe the original Gemini architecture.
 
-Requirements elicitation and refinement complete; a throw-away prototype has been built. Next: Sprint 1 (auth + workspace, transcript ingestion, GenAI extraction, review gate, Kanban board) on a zero-budget stack (Vercel, Render, Supabase).
+The meeting-to-task implementation is under cleanup before new GitHub issue/PR notification automation. See [`doc/cleanup_status.md`](doc/cleanup_status.md) for implemented behavior, the required database migration, validation results, and the pending live readiness checks.

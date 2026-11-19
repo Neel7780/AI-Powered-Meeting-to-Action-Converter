@@ -114,3 +114,24 @@ When setting up a new Supabase project for this backend, you must manually confi
 
 Setup, migration, access-control behavior, local development and verification are documented in
 [the GitHub integration guide](../doc/github_integration.md).
+
+
+## Cleanup migration and verification
+
+The ordered SQL files under `supabase/migrations/` define the schema. Apply
+`20261113123000_cleanup_integrity.sql` after the existing migrations in a disposable
+test setup before releasing these backend changes. Review/approval now calls the
+service-role-only `review_meeting_items` RPC. Database triggers maintain task
+prerequisites/status cascading atomically. Carryovers preserve the original
+meeting/transcript rather than replacing the task's source meeting.
+
+Google Calendar requires an explicit `CALENDAR_ENCRYPTION_SECRET`. Keep it stable
+and private. Legacy XOR-encrypted connections are reported disconnected and must
+be reconnected. Browser roles cannot select credential records.
+
+Run `python -m pytest -q` for offline checks. Actual HTTP is blocked by default
+inside tests. Set `RUN_LIVE_SUPABASE_TESTS=1` only for a disposable configured test
+project; these tests create and remove test users/data. Run PostgreSQL assertions
+from `tests/cleanup_integration.sql` and `tests/github_integration.sql` on a fresh
+migrated test database. See `../doc/cleanup_status.md` for checks that could not be
+performed in the current sandbox.

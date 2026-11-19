@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, ShieldAlert, User, Bot } from 'lucide-react';
+import { AlertCircle, ShieldAlert } from 'lucide-react';
 import type { DiffTaskItem } from '../../types/velocity';
 
 interface ChronicSpilloverAlertProps {
@@ -35,7 +35,7 @@ export const ChronicSpilloverAlert: React.FC<ChronicSpilloverAlertProps> = ({ ta
             <div>
               <div className="flex items-center justify-between gap-2 mb-1.5">
                 <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-red-400 bg-red-500/15 px-2 py-0.5 rounded">
-                  Rolled Over {task.spillover_count || 2}x
+                  Rolled Over {task.spillover_count ?? 0}x
                 </span>
                 <span className="text-[10px] font-mono text-neutral-400 uppercase">
                   Status: {task.status}
@@ -56,15 +56,7 @@ export const ChronicSpilloverAlert: React.FC<ChronicSpilloverAlertProps> = ({ ta
 
             <div className="mt-3 flex items-center justify-between pt-2 border-t border-white/5 text-[11px]">
               <span className="text-neutral-400 flex items-center gap-1 text-[10px]">
-                {task.execution_type === 'agent' ? (
-                  <>
-                    <Bot className="size-3 text-purple-400" /> {task.assignee_name}
-                  </>
-                ) : (
-                  <>
-                    <User className="size-3 text-neutral-500" /> {task.assignee_name || 'Unassigned'}
-                  </>
-                )}
+                <span>Team task</span>
               </span>
 
               <span className="text-[10px] text-amber-400/90 font-mono">

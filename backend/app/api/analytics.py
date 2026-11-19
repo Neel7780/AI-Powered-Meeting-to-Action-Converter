@@ -11,7 +11,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.core.deps import ORGANISER_ROLES, CurrentUser, get_current_user, require_role
+from app.core.deps import ORGANISER_ROLES, CurrentUser, get_current_user, require_role, filter_visible_meetings
 from app.core.supabase import get_supabase_client
 from app.schemas.analytics import (
     BottleneckTask,
@@ -66,6 +66,8 @@ def get_workspace_analytics(
     can_view_employee_scorecards = user_role in ORGANISER_ROLES
 
     client = get_supabase_client()
+    visible_meetings = filter_visible_meetings(client, client.table("meetings").select("*").eq("workspace_id", str(workspace_id)).execute().data or [], user)
+    visible_ids = {str(m["id"]) for m in visible_meetings}
     now = datetime.now(UTC)
 
     # Calculate timeframe boundary
@@ -94,7 +96,7 @@ def get_workspace_analytics(
         tasks_query = tasks_query.gte("created_at", timeframe_start.isoformat())
 
     tasks_resp = tasks_query.execute()
-    tasks_data = tasks_resp.data or []
+    tasks_data = [t for t in (tasks_resp.data or []) if str(t.get("meeting_id")) in visible_ids]
 
     # Map of all tasks in workspace for dependency lookups (by task ID)
     task_map: dict[str, dict] = {t["id"]: t for t in tasks_data}
@@ -242,6 +244,8 @@ def get_workspace_analytics(
     )
     meeting_yield: list[MeetingYieldItem] = []
     for m in (meetings_resp.data or []):
+        if str(m["id"]) not in visible_ids:
+            continue
         mid = m["id"]
         m_tasks = [t for t in tasks_data if t.get("meeting_id") == mid]
         m_total = len(m_tasks)

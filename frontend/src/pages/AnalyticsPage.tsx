@@ -1,10 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { BarChart3, RefreshCw, AlertCircle, LoaderCircle } from 'lucide-react';
 import { useWorkspace } from '../context/WorkspaceContext';
 import {
   fetchWorkspaceAnalytics,
   type WorkspaceAnalyticsResponse,
-  DEMO_ANALYTICS_DATA,
 } from '../services/analyticsApi';
 import { KpiCards } from '../components/analytics/KpiCards';
 import { MemberEvaluationTable } from '../components/analytics/MemberEvaluationTable';
@@ -14,36 +13,45 @@ import { Button } from '../components/ui/button';
 
 export default function AnalyticsPage() {
   const { currentWorkspace, currentRole } = useWorkspace();
-  const workspaceId = currentWorkspace?.id || 'default-workspace';
+  const workspaceId = currentWorkspace?.id || '';
 
   const [timeframe, setTimeframe] = useState<string>('30d');
-  const [data, setData] = useState<WorkspaceAnalyticsResponse>(DEMO_ANALYTICS_DATA);
+  const [data, setData] = useState<WorkspaceAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const generation = useRef(0);
   const loadAnalytics = useCallback(async (isManual = false) => {
-    if (isManual) setRefreshing(true);
+    const request = ++generation.current;
+      if (!isManual) setData(null);
+      if (isManual) setRefreshing(true);
     else setLoading(true);
     setError(null);
 
     try {
       const resp = await fetchWorkspaceAnalytics(workspaceId, timeframe);
+        if (request !== generation.current) return;
       setData(resp);
     } catch (err: any) {
+      if (request !== generation.current) return;
       console.error('Failed to load analytics:', err);
       setError(err?.message || 'Failed to fetch workspace analytics');
-      setData(DEMO_ANALYTICS_DATA);
+      setData(null);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (request === generation.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [workspaceId, timeframe]);
 
   useEffect(() => {
-    loadAnalytics();
+    void loadAnalytics();
+    return () => { generation.current++; };
   }, [loadAnalytics]);
 
+  if (!data) return <div className="p-6" role={error ? "alert" : "status"}>{error || 'Loading…'}{error && <Button onClick={() => loadAnalytics()}>Retry</Button>}</div>;
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* Page Header */}

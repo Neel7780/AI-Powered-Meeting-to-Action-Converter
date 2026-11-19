@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrendingUp, AlertTriangle, CheckCircle2, CalendarDays, ArrowUpRight } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle2, CalendarDays } from 'lucide-react';
 import type { MeetingProgressDiff, SprintVelocityData } from '../../types/velocity';
 
 interface VelocityKpiCardsProps {
@@ -34,13 +34,9 @@ export const VelocityKpiCards: React.FC<VelocityKpiCardsProps> = ({ diff, overal
 
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-2xl font-bold tracking-tight text-white">{velocityScore}%</span>
-          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-400">
-            <ArrowUpRight className="size-3" />
-            +4.2%
-          </span>
         </div>
         <p className="mt-1 text-[11px] text-neutral-400">
-          Tasks completed between consecutive meetings
+          Current completion of tasks from the baseline meeting
         </p>
       </div>
 
@@ -60,7 +56,7 @@ export const VelocityKpiCards: React.FC<VelocityKpiCardsProps> = ({ diff, overal
           <span className="text-xs text-neutral-400 font-mono">({spilloverCount} tasks)</span>
         </div>
         <p className="mt-1 text-[11px] text-neutral-400">
-          Unfinished tasks carried forward to next sprint
+          Unfinished tasks from the baseline meeting
         </p>
       </div>
 

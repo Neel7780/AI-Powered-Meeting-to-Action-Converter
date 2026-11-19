@@ -4,7 +4,6 @@ import {
   Clock,
   AlertTriangle,
   PlusCircle,
-  Bot,
   User,
   Quote,
   ArrowRight,
@@ -107,15 +106,7 @@ export const MeetingProgressDiffView: React.FC<MeetingProgressDiffViewProps> = (
                     <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 uppercase tracking-wider font-mono">
                       <CheckCircle2 className="size-2.5" /> Done
                     </span>
-                    {task.execution_type === 'agent' ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-purple-300 bg-purple-500/15 px-1.5 py-0.5 rounded">
-                        <Bot className="size-3" /> Agent
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-neutral-300 bg-white/5 px-1.5 py-0.5 rounded">
-                        <User className="size-3" /> {task.assignee_name || 'Human'}
-                      </span>
-                    )}
+                    <span>Team task</span>
                   </div>
 
                   <h5 className="text-xs font-semibold text-white leading-snug line-clamp-2">

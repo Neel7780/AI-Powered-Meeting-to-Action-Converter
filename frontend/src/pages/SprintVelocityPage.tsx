@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   TrendingUp,
   RefreshCw,
@@ -12,7 +12,6 @@ import { useNavigate } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import {
   fetchSprintVelocity,
-  DEMO_VELOCITY_DATA,
 } from '../services/velocityApi';
 import type { SprintVelocityData } from '../types/velocity';
 import { VelocityKpiCards } from '../components/velocity/VelocityKpiCards';
@@ -25,36 +24,46 @@ import { Button } from '../components/ui/button';
 export default function SprintVelocityPage() {
   const navigate = useNavigate();
   const { currentWorkspace } = useWorkspace();
-  const workspaceId = currentWorkspace?.id || 'default-workspace';
+  const workspaceId = currentWorkspace?.id || '';
 
-  const [data, setData] = useState<SprintVelocityData>(DEMO_VELOCITY_DATA);
+  const [data, setData] = useState<SprintVelocityData | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedBaseId, setSelectedBaseId] = useState<string | undefined>();
   const [selectedCurrentId, setSelectedCurrentId] = useState<string | undefined>();
   const [activeTab, setActiveTab] = useState<'diff' | 'trend' | 'chronic'>('diff');
 
+  const generation = useRef(0);
   const loadData = useCallback(
     async (isManual = false) => {
+      const request = ++generation.current;
+      if (!isManual) setData(null);
       if (isManual) setRefreshing(true);
       else setLoading(true);
 
-      try {
+      setError(null);
+    try {
         const resp = await fetchSprintVelocity(workspaceId, selectedBaseId, selectedCurrentId);
+        if (request !== generation.current) return;
         setData(resp);
       } catch (err) {
-        console.error('Error in SprintVelocityPage:', err);
-        setData(DEMO_VELOCITY_DATA);
-      } finally {
+      if (request !== generation.current) return;
+      setData(null);
+      setError(err instanceof Error ? err.message : 'Unable to load velocity.');
+    } finally {
+        if (request === generation.current) {
         setLoading(false);
         setRefreshing(false);
+      }
       }
     },
     [workspaceId, selectedBaseId, selectedCurrentId]
   );
 
   useEffect(() => {
-    loadData();
+    void loadData();
+    return () => { generation.current++; };
   }, [loadData]);
 
   const handleSelectMeetings = (baseId: string, currentId: string) => {
@@ -62,8 +71,9 @@ export default function SprintVelocityPage() {
     setSelectedCurrentId(currentId);
   };
 
-  const isDemo = data.workspace_id === 'demo-workspace';
 
+
+  if (!data) return <div className="p-6" role={error ? "alert" : "status"}>{error || 'Loading…'}{error && <Button onClick={() => loadData()}>Retry</Button>}</div>;
   return (
     <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* 1. Header Bar */}
@@ -78,16 +88,7 @@ export default function SprintVelocityPage() {
                 <h1 className="text-xl font-bold tracking-tight text-white">
                   Sprint Velocity & Meeting Progress
                 </h1>
-                {isDemo ? (
-                  <span className="rounded border border-white/15 bg-white/5 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-neutral-400">
-                    Sample Dataset
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-emerald-400">
-                    <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
-                    Live Data
-                  </span>
-                )}
+                <span className="text-xs text-neutral-400">Saved records</span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
                 Meeting-to-meeting delta tracking, carryover spillover rates, and velocity burnup
