@@ -5,6 +5,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { Notice } from "../components/ui/notice";
 import { DotMatrixBackground } from "../components/ui/dot-matrix-background";
+import Brand from "../components/layout/Brand";
 import logoImg from "../assets/logo.png";
 
 export default function Signup() {
@@ -110,6 +111,11 @@ export default function Signup() {
         fontFamily: "'Inter', -apple-system, sans-serif",
       }}
     >
+      {/* Top-left brand icon linking to dashboard */}
+      <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10">
+        <Brand to="/dashboard" />
+      </div>
+
       {/* WebGL Dot canvas background */}
       <DotMatrixBackground />
 

@@ -11,6 +11,7 @@ import { supabase } from "../lib/supabase";
 import { requestApi } from "../lib/api";
 import { Notice } from "../components/ui/notice";
 import { DotMatrixBackground } from "../components/ui/dot-matrix-background";
+import Brand from "../components/layout/Brand";
 import logoImg from "../assets/logo.png";
 
 type AuthView = "login" | "forgot_email" | "link_sent" | "new_password" | "reset_success";
@@ -302,6 +303,11 @@ export default function Login() {
         fontFamily: "'Inter', -apple-system, sans-serif",
       }}
     >
+      {/* Top-left brand icon linking to dashboard */}
+      <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-10">
+        <Brand to="/dashboard" />
+      </div>
+
       {/* WebGL Dot canvas background */}
       <DotMatrixBackground />
 
