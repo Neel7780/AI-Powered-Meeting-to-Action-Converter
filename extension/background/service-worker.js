@@ -5,10 +5,12 @@
  * automatic meeting start/end detection, and auto-upload on meeting end.
  */
 
-const DEFAULT_SETTINGS = {
-  apiUrl: "http://localhost:8000",
-  appUrl: "http://localhost:5173",
-  appUrlPinned: false,
+const DEFAULT_CONNECTION = {
+  apiUrl: "https://ai-powered-meeting-to-action-converter-9k2z.onrender.com",
+  appUrl: "https://ai-powered-meeting-to-action-conver.vercel.app",
+};
+
+const SIGNED_OUT_CONTEXT = {
   workspaceId: "",
   workspaceName: "",
   managerRole: "",
@@ -16,12 +18,26 @@ const DEFAULT_SETTINGS = {
   tokenExpiresAt: 0,
   userEmail: "",
   lastSyncedAt: 0,
+};
+
+const DEFAULT_SETTINGS = {
+  ...DEFAULT_CONNECTION,
+  ...SIGNED_OUT_CONTEXT,
+  appUrlPinned: true,
   autoExtract: true,
   autoUploadOnEnd: true,
 };
 
 function sanitizeSettings(rawSettings) {
   const merged = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
+  // Previous versions used localhost and could select an origin from any open
+  // tab. Preserve a site explicitly saved in Connection settings.
+  if (rawSettings && rawSettings.appUrlPinned !== true) {
+    if (httpOrigin(rawSettings.appUrl) !== DEFAULT_CONNECTION.appUrl) {
+      Object.assign(merged, SIGNED_OUT_CONTEXT);
+    }
+    Object.assign(merged, DEFAULT_CONNECTION, { appUrlPinned: true });
+  }
   // Clear legacy demo workspace placeholder if no real auth token was ever synced
   if (
     merged.workspaceId === "00000000-0000-0000-0000-000000000002" &&
@@ -304,7 +320,7 @@ function httpOrigin(value) {
 
 async function saveAuthContext(settings, ctx) {
   const origin = httpOrigin(ctx.appUrl);
-  if (!origin || (settings.appUrlPinned && settings.appUrl !== origin)) return null;
+  if (!origin || settings.appUrl !== origin) return null;
   const updated = {
     ...settings,
     appUrl: origin,
@@ -322,15 +338,7 @@ async function saveAuthContext(settings, ctx) {
 
 async function syncFromOpenActionPulseTabs(settings) {
   try {
-    const patterns = settings.appUrlPinned ? [settings.appUrl + "/*"] : [
-      "http://localhost:5173/*",
-      "http://127.0.0.1:5173/*",
-      "http://localhost:5174/*",
-      "http://127.0.0.1:5174/*",
-      "https://*.vercel.app/*",
-    ];
-
-    const tabs = await chrome.tabs.query({ url: patterns });
+    const tabs = await chrome.tabs.query({ url: settings.appUrl + "/*" });
     if (!tabs || tabs.length === 0) return sanitizeSettings((await chrome.storage.local.get("settings")).settings);
 
     // Prefer active tab first so multi-tab users sync their focused ActionPulse tab
@@ -464,8 +472,11 @@ async function performBackendUpload(session, rawSettings) {
 
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.local.get(["settings", "session"]);
-  if (!current.settings) {
-    await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
+  if (current.settings?.appUrlPinned !== true) {
+    await queueSettingsUpdate(async () => {
+      const { settings } = await chrome.storage.local.get("settings");
+      await chrome.storage.local.set({ settings: sanitizeSettings(settings) });
+    });
   }
   if (!current.session) {
     await chrome.storage.local.set({ session: createIdleSession() });
@@ -553,6 +564,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             hasAccessToken: Boolean(settings.accessToken),
             accessToken: undefined,
           },
+          defaultConnection: DEFAULT_CONNECTION,
           cueCount: session.cues ? session.cues.length : 0,
         });
         break;
@@ -632,10 +644,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             break;
           }
           if (appUrl !== settings.appUrl) {
-            Object.assign(settings, {
-              accessToken: "", tokenExpiresAt: 0, userEmail: "", workspaceId: "",
-              workspaceName: "", managerRole: "", lastSyncedAt: 0,
-            });
+            Object.assign(settings, SIGNED_OUT_CONTEXT);
           }
           settings.appUrl = appUrl;
           settings.appUrlPinned = true;

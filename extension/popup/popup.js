@@ -4,6 +4,7 @@ const managerRoles = { owner: "Owner", admin: "Admin", organiser: "Organiser" };
 const providerNames = { google_meet: "Google Meet", zoom: "Zoom Web", teams: "Microsoft Teams" };
 const appUrlInput = el("appUrlInput");
 const apiUrlInput = el("apiUrlInput");
+const defaultsButton = el("useDeployedDefaultsBtn");
 const editedSettings = new Set();
 const feed = el("transcriptFeed");
 const transcriptPanel = el("transcriptPanel");
@@ -12,6 +13,8 @@ const reviewLink = el("reviewGateLink");
 
 let session;
 let settings;
+let defaultConnection;
+let savingSettings = false;
 let tabStatus;
 let isUploading = false;
 let submittingUpload = false;
@@ -185,7 +188,8 @@ async function refresh() {
     const [state, tab] = await Promise.all([getState(), getMeetingTabStatus().catch(() => null)]);
     if (!state?.settings) throw new Error("No extension state");
     if (session?.id !== state.session?.id) localUploadError = "";
-    ({ session, settings, isUploading } = state);
+    ({ session, settings, isUploading, defaultConnection } = state);
+    defaultsButton.disabled = savingSettings || !defaultConnection;
     tabStatus = tab;
     if (!editedSettings.has(appUrlInput)) appUrlInput.value = settings.appUrl || "";
     if (!editedSettings.has(apiUrlInput)) apiUrlInput.value = settings.apiUrl || "";
@@ -275,8 +279,18 @@ el("clearBufferBtn").addEventListener("click", async () => {
     setText("settingsStatus", "");
   });
 });
+defaultsButton.addEventListener("click", () => {
+  if (!defaultConnection || savingSettings) return;
+  appUrlInput.value = defaultConnection.appUrl;
+  apiUrlInput.value = defaultConnection.apiUrl;
+  editedSettings.add(appUrlInput);
+  editedSettings.add(apiUrlInput);
+  el("settingsForm").requestSubmit();
+});
+
 el("settingsForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (savingSettings) return;
   const site = webUrl(appUrlInput.value);
   const api = webUrl(apiUrlInput.value);
   if (!site || !api) {
@@ -285,7 +299,9 @@ el("settingsForm").addEventListener("submit", async (event) => {
   }
 
   const saveButton = el("saveSettingsBtn");
+  savingSettings = true;
   saveButton.disabled = true;
+  defaultsButton.disabled = true;
   setText("settingsStatus", "Saving…");
   try {
     const result = await chrome.runtime.sendMessage({
@@ -299,7 +315,9 @@ el("settingsForm").addEventListener("submit", async (event) => {
   } catch {
     setText("settingsStatus", "Couldn't save. Try again.");
   } finally {
+    savingSettings = false;
     saveButton.disabled = false;
+    defaultsButton.disabled = !defaultConnection;
   }
 });
 
