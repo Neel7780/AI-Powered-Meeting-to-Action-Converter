@@ -5,7 +5,15 @@ on:
     branches: [main]
     paths:
       - 'supabase/migrations/**'
+      - '.github/workflows/supabase-migrations.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production-migrations
+  cancel-in-progress: false
 
 jobs:
   deploy-migrations:
@@ -18,14 +26,15 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: '2.121.0'
+          github-token: ${{ github.token }}
 
       - name: Push migrations
         if: env.SUPABASE_DB_URL != '' || env.SUPABASE_DB_PASSWORD != ''
         run: |
           if [ -n "$SUPABASE_DB_URL" ]; then
             supabase migration repair --status applied --db-url "$SUPABASE_DB_URL" --yes 0001 0002 0003 0004 0005 || true
-            supabase db push --remote "$SUPABASE_DB_URL" --yes --include-all
+            supabase db push --db-url "$SUPABASE_DB_URL" --yes --include-all
           else
             supabase link --project-ref "$PROJECT_REF"
             supabase migration repair --status applied --yes 0001 0002 0003 0004 0005 || true

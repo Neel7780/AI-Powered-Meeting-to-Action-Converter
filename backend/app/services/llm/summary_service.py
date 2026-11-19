@@ -56,6 +56,7 @@ class LLMSummaryAndChapters(BaseModel):
     key_discussion_points: list[LLMDiscussionPoint] = Field(default_factory=list)
     outcomes: list[str] = Field(default_factory=list)
     next_steps: list[str] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
     takeaways: list[str] = Field(default_factory=list)
     chapters: list[LLMChapter] = Field(default_factory=list)
 
@@ -75,7 +76,8 @@ Rules:
    - start_seconds: approximate start time in seconds based on timestamps in the transcript
    - duration_seconds: approximate duration in seconds
    - speakers: list of speakers active in that section
-6. Do not fabricate facts, people, or decisions not grounded in the transcript."""
+6. open_questions: explicitly raised questions left unresolved. Leave empty if the transcript does not establish any.
+7. Do not fabricate facts, people, or decisions not grounded in the transcript."""
 
 SUMMARY_HUMAN_PROMPT = """Meeting Title: {title}
 Scheduled Date: {starts_at}
@@ -267,6 +269,7 @@ def generate_meeting_summary(
             decisions=decisions_items,
             outcomes=llm_result.outcomes,
             next_steps=llm_result.next_steps,
+            open_questions=llm_result.open_questions,
             takeaways=takeaways,
             speaker_insights=speaker_insights,
             generated_at=datetime.now(timezone.utc).isoformat(),

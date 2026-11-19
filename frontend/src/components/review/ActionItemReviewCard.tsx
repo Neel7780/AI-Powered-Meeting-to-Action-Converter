@@ -1,358 +1,126 @@
-import React, { useState } from 'react';
-import {
-  Check,
-  X,
-  User,
-  Calendar,
-  Clock,
-  AlertTriangle,
-  Edit3,
-  Sparkles,
-  RotateCcw,
-  Save,
-  ExternalLink,
-  Tag,
-  GitFork
-} from 'lucide-react';
+import { useState, type FormEvent } from 'react';
+import { ArrowUpRight, Check, ChevronDown, GitFork, LoaderCircle, Pencil, Quote, X } from 'lucide-react';
 import type { ActionItemCandidate, WorkspaceMember } from '../../types/review';
 import { Button } from '../ui/button';
 
 interface ActionItemReviewCardProps {
   item: ActionItemCandidate;
   members: WorkspaceMember[];
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
-  onRevert?: (id: string) => void;
-  onUpdate: (id: string, updates: Partial<ActionItemCandidate>) => void;
-  onJumpToTranscript?: (timestamp: string, segmentId?: string) => void;
-  isSelected?: boolean;
+  disabled: boolean;
+  busy: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+  onUpdate: (changes: Partial<ActionItemCandidate>) => void;
+  onOpenSource: () => void;
 }
 
-export const ActionItemReviewCard: React.FC<ActionItemReviewCardProps> = ({
-  item,
-  members,
-  onApprove,
-  onReject,
-  onRevert,
-  onUpdate,
-  onJumpToTranscript,
-  isSelected = false
-}) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(item.title);
-  const [editDescription, setEditDescription] = useState(item.description);
-  const [editDueDate, setEditDueDate] = useState(item.due_date || '');
-  const [assigneeError, setAssigneeError] = useState(false);
+export function ActionItemReviewCard({
+  item, members, disabled, busy, onApprove, onReject, onUpdate, onOpenSource,
+}: ActionItemReviewCardProps) {
+  const [editing, setEditing] = useState(false);
+  const pending = item.status === 'pending';
+  const source = item.source_excerpt;
+  const description = item.description !== source ? item.description : '';
+  const titleId = `review-title-${item.id}`;
+  const missingOwner = pending && !item.assignee_id;
 
-  React.useEffect(() => {
-    setEditTitle(item.title);
-    setEditDescription(item.description);
-    setEditDueDate(item.due_date || '');
-  }, [item.title, item.description, item.due_date]);
-
-  const isUnassigned = !item.assignee_id;
-
-  const handleSaveInlineEdit = () => {
-    if (!editTitle.trim()) return;
-    onUpdate(item.id, {
-      title: editTitle.trim(),
-      description: editDescription.trim(),
-      due_date: editDueDate || null
-    });
-    setIsEditing(false);
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const fields = new FormData(event.currentTarget);
+    const title = String(fields.get('title') || '').trim();
+    if (!title) return;
+    const note = String(fields.get('description') || '').trim();
+    onUpdate({ title, description: note || source || '' });
+    setEditing(false);
   };
-
-  const handleCancelEdit = () => {
-    setEditTitle(item.title);
-    setEditDescription(item.description);
-    setEditDueDate(item.due_date || '');
-    setIsEditing(false);
-  };
-
-  const handleOwnerChange = (memberId: string) => {
-    setAssigneeError(false);
-    onUpdate(item.id, {
-      assignee_id: memberId === 'unassigned' || !memberId ? null : memberId
-    });
-  };
-
-  const handleApproveClick = () => {
-    if (isUnassigned) {
-      setAssigneeError(true);
-      return;
-    }
-    onApprove(item.id);
-  };
-
-  const confidencePercent = Math.round(item.confidence_score * 100);
-
-  const cardState =
-    item.status === 'approved'
-      ? 'border-emerald-500/30 bg-emerald-500/[0.04]'
-      : item.status === 'rejected'
-      ? 'border-white/10 bg-transparent opacity-60'
-      : isSelected
-      ? 'border-white/30 bg-white/[0.04] ring-1 ring-white/15'
-      : 'border-white/10 bg-[#08080c] hover:border-white/20';
 
   return (
-    <div className={`rounded-lg border p-4 transition-all duration-200 ${cardState}`}>
-      <div className="mb-2.5 flex items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] text-neutral-300"
-            title={`AI extraction confidence: ${confidencePercent}%`}
-          >
-            <Sparkles className="size-3 text-white" />
-            {confidencePercent}% AI confidence
-          </span>
-
-          <button
-            type="button"
-            onClick={() => onJumpToTranscript?.(item.transcript_timestamp, item.transcript_segment_id)}
-            className="inline-flex items-center gap-1 rounded border border-white/10 bg-black px-2 py-0.5 font-mono text-[11px] text-neutral-400 transition-colors hover:border-white/25 hover:text-white"
-            title="Click to locate this exact segment in the transcript"
-          >
-            <Clock className="size-3" />
-            <span>Transcript @ {item.transcript_timestamp}</span>
-            <ExternalLink className="ml-0.5 size-2.5 opacity-60" />
-          </button>
-
-          {item.status === 'approved' && (
-            <span className="inline-flex items-center gap-1 rounded border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400">
-              <Check className="size-3" />
-              Approved
-            </span>
-          )}
-          {item.status === 'rejected' && (
-            <span className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-neutral-400">
-              <X className="size-3" />
-              Rejected
-            </span>
-          )}
+    <article aria-labelledby={titleId} aria-busy={busy || undefined} className="dashboard-surface rounded-xl border border-white/10 bg-white/[0.025] p-4 sm:p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1.5">
+          <h3 id={titleId} className="break-words text-sm font-semibold leading-6 text-white sm:text-base">{item.title}</h3>
+          {description && <p className="whitespace-pre-wrap break-words text-sm text-neutral-400">{description}</p>}
+          {item.blocked_by_id && <p className="flex items-center gap-1.5 text-xs text-amber-300"><GitFork className="size-3" /> Has a prerequisite</p>}
         </div>
-
-        {item.status === 'pending' && !isEditing && (
-          <button
-            type="button"
-            onClick={() => setIsEditing(true)}
-            className="rounded-md p-1 text-neutral-500 transition-colors hover:bg-white/10 hover:text-white"
-            title="Inline edit action item title, description or date"
-            aria-label="Edit action item"
-          >
-            <Edit3 className="size-3.5" />
-          </button>
+        {pending && !editing && (
+          <Button type="button" variant="ghost" size="sm" disabled={disabled} onClick={() => setEditing(true)} aria-label="Edit action">
+            <Pencil /> <span className="hidden sm:inline">Edit</span>
+          </Button>
         )}
       </div>
 
-      {isEditing ? (
-        <div className="my-2 space-y-3 rounded-md border border-white/10 bg-black p-3">
-          <div>
-            <label htmlFor={`title-${item.id}`} className="field-label text-[11px]">
-              Title <span className="text-red-400">*</span>
+      {editing && (
+        <form onSubmit={save} className="mt-3 space-y-3 rounded-lg border border-white/10 bg-black/40 p-3">
+          <fieldset disabled={disabled} className="space-y-3">
+            <label className="block space-y-1 text-xs text-neutral-300">
+              <span>Title</span><input name="title" required defaultValue={item.title} className="field text-sm" />
             </label>
-            <input
-              id={`title-${item.id}`}
-              type="text"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              placeholder="Action item title..."
-              className="field py-1.5 text-xs font-medium"
-            />
-          </div>
-
-          <div>
-            <label htmlFor={`description-${item.id}`} className="field-label text-[11px]">
-              Description & context
+            <label className="block space-y-1 text-xs text-neutral-300">
+              <span>Task description</span><textarea name="description" rows={2} defaultValue={description} className="field text-sm" />
             </label>
-            <textarea
-              id={`description-${item.id}`}
-              value={editDescription}
-              onChange={(e) => setEditDescription(e.target.value)}
-              rows={2}
-              placeholder="Detailed description..."
-              className="field py-1.5 text-xs"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <div>
-              <label htmlFor={`due-${item.id}`} className="field-label text-[11px]">
-                Due date
-              </label>
-              <input
-                id={`due-${item.id}`}
-                type="date"
-                value={editDueDate}
-                onChange={(e) => setEditDueDate(e.target.value)}
-                className="field py-1 text-xs"
-              />
+            <div className="flex justify-end gap-2">
+              <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+              <Button size="sm" type="submit">Save changes</Button>
             </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 border-t border-white/10 pt-3">
-            <Button type="button" variant="ghost" size="sm" onClick={handleCancelEdit}>
-              Cancel
-            </Button>
-            <Button type="button" size="sm" onClick={handleSaveInlineEdit} disabled={!editTitle.trim()}>
-              <Save />
-              Save changes
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="my-1 space-y-1.5">
-          <h4
-            onClick={() => item.status === 'pending' && setIsEditing(true)}
-            className={`text-sm font-medium leading-snug text-white ${
-              item.status === 'pending' ? 'cursor-pointer hover:text-neutral-300' : ''
-            }`}
-            title={item.status === 'pending' ? 'Click to inline edit title' : undefined}
-          >
-            {item.title}
-          </h4>
-
-          {item.description && (
-            <p className="text-xs leading-relaxed text-neutral-400">
-              {item.description}
-            </p>
-          )}
-
-          {item.blocked_by_id && (
-            <div className="flex items-center gap-1.5 pt-1">
-              <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[11px] font-medium text-amber-300">
-                <GitFork className="size-3 text-amber-400" />
-                <span>Prerequisite Requirement: Depends on preceding task</span>
-              </span>
-            </div>
-          )}
-
-          {item.suggested_tags && item.suggested_tags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              {item.suggested_tags.map(tag => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 rounded border border-white/10 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500"
-                >
-                  <Tag className="size-2.5" />
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+          </fieldset>
+        </form>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor={`owner-${item.id}`} className="flex items-center gap-1 text-xs text-neutral-500">
-            <User className="size-3.5" />
-            <span>Owner:</span>
-          </label>
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+        {pending ? (
+          <fieldset disabled={disabled} className="flex min-w-0 flex-wrap items-end gap-3">
+            <label className="flex min-w-0 flex-col gap-1 text-xs text-neutral-400">
+              <span>Owner</span>
+              <select value={item.assignee_id || ''} onChange={(event) => onUpdate({ assignee_id: event.target.value || null })}
+                className={`field h-9 max-w-full py-0 text-sm sm:w-48 ${missingOwner ? 'border-amber-500/35 text-amber-200' : ''}`}>
+                <option value="">Unassigned</option>
+                {item.assignee_id && !members.some((member) => member.user_id === item.assignee_id) && (
+                  <option value={item.assignee_id}>{item.assignee?.full_name || 'Assigned member'}</option>
+                )}
+                {members.map((member) => <option key={member.user_id} value={member.user_id}>{member.full_name}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs text-neutral-400">
+              <span>Due date</span>
+              <input type="date" value={item.due_date || ''} onChange={(event) => onUpdate({ due_date: event.target.value || null })}
+                className="field h-9 w-auto py-0 text-sm" />
+            </label>
+          </fieldset>
+        ) : (
+          <p className="text-xs text-neutral-400">
+            {item.assignee?.full_name || (item.assignee_id ? 'Assigned member' : 'Unassigned')} · {item.due_date
+              ? new Date(`${item.due_date}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }) : 'No due date'}
+          </p>
+        )}
 
-          <select
-            id={`owner-${item.id}`}
-            value={item.assignee_id || 'unassigned'}
-            disabled={item.status !== 'pending'}
-            onChange={(e) => handleOwnerChange(e.target.value)}
-            className={`field h-7 w-auto cursor-pointer py-0 pl-2 text-xs font-medium ${
-              isUnassigned ? 'border-amber-500/40 text-amber-300' : ''
-            }`}
-          >
-            <option value="unassigned">-- Unassigned --</option>
-            {item.assignee_id && !members.some(m => (m.user_id || m.id) === item.assignee_id) && (
-              <option value={item.assignee_id}>
-                {item.assignee?.full_name || 'Assigned Member'}
-              </option>
-            )}
-            {members.map(m => {
-              const val = m.user_id || m.id;
-              return (
-                <option key={val} value={val}>
-                  {m.full_name} ({m.role.replace('_', ' ')})
-                </option>
-              );
-            })}
-          </select>
-
-          {isUnassigned && (
-            <span
-              className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] font-medium ${
-                assigneeError
-                  ? 'animate-bounce border-red-500/30 bg-red-500/10 text-red-400'
-                  : 'border-amber-500/25 bg-amber-500/10 text-amber-400'
-              }`}
-              title="This candidate item cannot be approved without assigning an owner"
-            >
-              <AlertTriangle className="size-3" />
-              Assignee required
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5 text-xs text-neutral-400">
-          <Calendar className="size-3.5 text-neutral-500" />
-          {item.status === 'pending' ? (
-            <input
-              type="date"
-              aria-label="Due date"
-              value={item.due_date || ''}
-              onChange={(e) => onUpdate(item.id, { due_date: e.target.value || null })}
-              className="field h-7 w-auto cursor-pointer px-2 py-0 text-xs"
-              title="Change due date"
-            />
-          ) : (
-            <span className="font-medium text-neutral-300">
-              {item.due_date ? new Date(item.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No due date'}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-2.5">
-        <div className="font-mono text-[10px] uppercase tracking-wider text-neutral-500">
-          {item.status === 'pending' ? 'Awaiting review' : `Status: ${item.status}`}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {item.status === 'pending' ? (
-            <>
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                onClick={() => onReject(item.id)}
-                title="Reject and dismiss this candidate action item"
-              >
-                <X />
-                Reject
-              </Button>
-
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleApproveClick}
-                className={isUnassigned ? 'opacity-60' : ''}
-                title={isUnassigned ? 'Please select an assignee first' : 'Approve and publish to the task board'}
-              >
-                <Check />
-                Approve
-              </Button>
-            </>
-          ) : (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onRevert?.(item.id)}
-              title="Revert back to pending staging review"
-            >
-              <RotateCcw />
-              Undo status
+        {pending && !editing && (
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {busy ? <span className="inline-flex items-center gap-1.5 text-xs text-neutral-400">
+              <LoaderCircle className="size-3.5 animate-spin" /> Saving…
+            </span> : missingOwner && <span className="text-xs text-amber-300">Owner required</span>}
+            <Button type="button" size="sm" variant="ghost" disabled={disabled} onClick={onReject}>
+              <X /> Reject
             </Button>
-          )}
-        </div>
+            <Button type="button" size="sm" disabled={disabled || missingOwner} onClick={onApprove}>
+              <Check /> Approve
+            </Button>
+          </div>
+        )}
       </div>
-    </div>
+
+      {source && (
+        <details className="group mt-3">
+          <summary className="inline-flex min-h-7 cursor-pointer list-none items-center gap-1.5 rounded-md border border-white/10 px-2 text-xs text-neutral-400 hover:border-white/25 hover:text-white [&::-webkit-details-marker]:hidden">
+            <Quote className="size-3" /> Source quote <ChevronDown className="size-3 group-open:rotate-180" />
+          </summary>
+          <div className="mt-2 space-y-2 rounded-lg border border-white/10 bg-black/40 p-3">
+            <blockquote className="whitespace-pre-wrap break-words border-l-2 border-indigo-500/40 pl-3 text-sm text-neutral-300">{source}</blockquote>
+            <button type="button" onClick={onOpenSource} className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:underline">
+              Open in transcript <ArrowUpRight className="size-3" />
+            </button>
+          </div>
+        </details>
+      )}
+    </article>
   );
-};
+}

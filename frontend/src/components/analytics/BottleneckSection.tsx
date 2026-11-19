@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
 import type { BottleneckTask } from '../../services/analyticsApi';
 
@@ -21,9 +22,9 @@ export const BottleneckSection: React.FC<BottleneckSectionProps> = ({ bottleneck
             </p>
           </div>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-400 border border-amber-500/20">
-          {bottlenecks.length} Blocked
-        </span>
+        {bottlenecks.length > 0 && <Link to="/meetings?view=all&tasks=blocked" className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/20">
+          View blocked meetings <ArrowRight className="size-3" />
+        </Link>}
       </div>
 
       {bottlenecks.length === 0 ? (

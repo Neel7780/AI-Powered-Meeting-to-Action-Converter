@@ -27,6 +27,13 @@ All requirement documents live in [`doc/`](doc/):
 - [`doc/stakeholder_elicitation_interview_1.md`](doc/stakeholder_elicitation_interview_1.md)
 - [`doc/ai-infra/01-ai-llm.md`](doc/ai-infra/01-ai-llm.md) — LLM provider research
 
+## Backend deployment
+
+Production uses the [existing Render service](https://ai-powered-meeting-to-action-converter-9k2z.onrender.com/health).
+The [Render Blueprint](render.yaml) tracks `main` and deploys backend changes after GitHub CI passes.
+
+For an existing service that isn't managed by this Blueprint, open that service in the [Render Dashboard](https://dashboard.render.com/). In **Settings**, make sure its source is this GitHub repository, its branch is `main`, and **Auto-Deploy** is set to **After CI Checks Pass**. Keep the root directory set to `backend` so frontend and extension changes don't trigger a backend build. Render requires a [connected GitHub repository](https://render.com/docs/deploys#automatic-deploys) for auto-deploys.
+
 ## Status
 
 The backend AI provider is Amazon Bedrock through LangChain, using a server-only

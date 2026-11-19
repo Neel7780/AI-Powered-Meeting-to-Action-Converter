@@ -9,6 +9,11 @@ export interface GitHubInstallation {
   permissions: Record<string, string>;
   observed_at: string;
 }
+export interface GitHubDiscovery {
+  workspace_id: string;
+  github_login: string;
+  installations: Pick<GitHubInstallation, 'id' | 'account_login' | 'account_type'>[];
+}
 export interface GitHubRepository {
   repository_id: number;
   installation_id: number;
@@ -51,10 +56,16 @@ const json = (method: string, body: unknown) => ({ method, body: JSON.stringify(
 export const githubApi = {
   settings: (workspace: string) => requestApi<GitHubSettingsData>(base(workspace)),
   connect: (workspace: string) => requestApi<{ url: string }>(`${base(workspace)}/connect`, { method: 'POST' }),
+  discover: (workspace: string) => requestApi<{ url: string }>(
+    `${base(workspace)}/discover`, { method: 'POST' },
+  ),
+  connectExisting: (workspace: string, installation_id: number) => requestApi<{ url: string }>(
+    `${base(workspace)}/connect-existing`, json('POST', { installation_id }),
+  ),
   installCallback: (state: string, installation_id: number) => requestApi<{ url: string }>(
     '/api/github/install-callback', json('POST', { state, installation_id }),
   ),
-  callback: (state: string, code: string) => requestApi<{ workspace_id: string; account: string }>(
+  callback: (state: string, code: string) => requestApi<GitHubDiscovery | { workspace_id: string; account: string }>(
     '/api/github/callback', json('POST', { state, code }),
   ),
   map: (workspace: string, repo: number, connected: boolean) => requestApi(

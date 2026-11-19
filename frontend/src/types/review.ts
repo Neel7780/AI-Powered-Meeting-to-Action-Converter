@@ -32,6 +32,7 @@ export interface ActionItemCandidate {
   workspace_id?: string;
   title: string;
   description: string;
+  source_excerpt?: string;
   due_date: string | null; // ISO YYYY-MM-DD
   extracted_due_date?: string | null;
   assignee_id: string | null;

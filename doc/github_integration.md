@@ -4,6 +4,23 @@ GitHub is an external integration. Google/email sign-in and existing Supabase au
 Workspace Settings → GitHub connects accounts and organizations, maps multiple repositories and installations,
 and manages member access. Members see only repositories shared with them.
 
+## Connect a GitHub account
+
+1. In the target workspace, click **Connect GitHub** and choose your GitHub account on GitHub. The backend
+   requests the account picker, including when the browser already has an active GitHub session.
+2. Back in ActionPulse, check the displayed GitHub username and select an existing installation. The list comes
+   from GitHub for the authorizing account, so a new ActionPulse user can reuse an installation if GitHub allows it.
+   Use **Switch GitHub account** to choose another login, or **Install GitHub App** for a new installation.
+3. When you select an installation, ActionPulse starts a fresh authorization for that installation and verifies
+   GitHub repository administrator access before linking it to the workspace. Then connect the repositories
+   you want and assign member permissions in ActionPulse.
+
+The discovery callback returns account names and installation IDs. It saves no workspace links or tokens.
+The same installation can serve multiple workspaces, each with its own repository connections and member grants.
+After changing selected repositories on GitHub, run **Connect GitHub** again to verify newly added repositories.
+Discovery uses an OAuth state with a null installation ID, supported by the existing state table and RPCs.
+The flow reuses the existing GitHub App callback and setup URLs.
+
 ## Manual GitHub configuration
 
 Register a **GitHub App**, not an OAuth App or personal access token. Use a separate App for local development.
@@ -140,8 +157,9 @@ Organization approval and SAML policies may require approval or an active organi
    production service-role credentials.
 4. Sign in through a real Google/email account, create/select a workspace, and open Workspace Settings. The
    existing one-click demo identity is explicitly rejected by the GitHub API, even in development.
-5. Connect as a workspace owner (or legacy admin) with GitHub admin access to a selected repository. Verify both redirects, map
-   the repository, grant a member Read Only, and confirm the member sees only that repository.
+5. Connect as a workspace owner (or legacy admin) with GitHub admin access to a selected repository. Try the account
+   picker with a different ActionPulse login and the same GitHub account. Select the existing installation, map
+   the repository, and confirm a member sees it only after a grant.
 6. Revoke the member, remove a repository from the GitHub installation, suspend/uninstall the App, and replay a
    webhook delivery. Verify grants disappear and a second workspace sharing the installation stays isolated.
 

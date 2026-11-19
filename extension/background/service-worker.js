@@ -5,9 +5,12 @@
  * automatic meeting start/end detection, and auto-upload on meeting end.
  */
 
-const DEFAULT_SETTINGS = {
-  apiUrl: "http://localhost:8000",
-  appUrl: "http://localhost:5173",
+const DEFAULT_CONNECTION = {
+  apiUrl: "https://ai-powered-meeting-to-action-converter-9k2z.onrender.com",
+  appUrl: "https://ai-powered-meeting-to-action-conver.vercel.app",
+};
+
+const SIGNED_OUT_CONTEXT = {
   workspaceId: "",
   workspaceName: "",
   managerRole: "",
@@ -15,12 +18,26 @@ const DEFAULT_SETTINGS = {
   tokenExpiresAt: 0,
   userEmail: "",
   lastSyncedAt: 0,
+};
+
+const DEFAULT_SETTINGS = {
+  ...DEFAULT_CONNECTION,
+  ...SIGNED_OUT_CONTEXT,
+  appUrlPinned: true,
   autoExtract: true,
   autoUploadOnEnd: true,
 };
 
 function sanitizeSettings(rawSettings) {
   const merged = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
+  // Previous versions used localhost and could select an origin from any open
+  // tab. Preserve a site explicitly saved in Connection settings.
+  if (rawSettings && rawSettings.appUrlPinned !== true) {
+    if (httpOrigin(rawSettings.appUrl) !== DEFAULT_CONNECTION.appUrl) {
+      Object.assign(merged, SIGNED_OUT_CONTEXT);
+    }
+    Object.assign(merged, DEFAULT_CONNECTION, { appUrlPinned: true });
+  }
   // Clear legacy demo workspace placeholder if no real auth token was ever synced
   if (
     merged.workspaceId === "00000000-0000-0000-0000-000000000002" &&
@@ -283,22 +300,46 @@ function readPageAuthContext() {
   };
 }
 
+let pendingSettingsUpdate = Promise.resolve();
+
+function queueSettingsUpdate(update) {
+  const pending = pendingSettingsUpdate.then(update);
+  pendingSettingsUpdate = pending.catch(() => {});
+  return pending;
+}
+
+function httpOrigin(value) {
+  try {
+    const url = new URL(value);
+    if (["https:", "http:"].includes(url.protocol) && !url.username && !url.password) return url.origin;
+  } catch {
+    // Missing or invalid origin.
+  }
+  return null;
+}
+
+async function saveAuthContext(settings, ctx) {
+  const origin = httpOrigin(ctx.appUrl);
+  if (!origin || settings.appUrl !== origin) return null;
+  const updated = {
+    ...settings,
+    appUrl: origin,
+    accessToken: ctx.accessToken || "",
+    tokenExpiresAt: Number(ctx.tokenExpiresAt || 0),
+    userEmail: ctx.userEmail || "",
+    workspaceId: ctx.workspaceId || "",
+    workspaceName: ctx.workspaceName || "",
+    managerRole: ctx.managerRole || "",
+    lastSyncedAt: Date.now(),
+  };
+  await chrome.storage.local.set({ settings: updated });
+  return updated;
+}
+
 async function syncFromOpenActionPulseTabs(settings) {
   try {
-    const patterns = [
-      "http://localhost:5173/*",
-      "http://127.0.0.1:5173/*",
-      "https://*.vercel.app/*",
-    ];
-    if (settings.appUrl && /^https?:\/\//i.test(settings.appUrl)) {
-      const cleanOrigin = settings.appUrl.replace(/\/+$/, "");
-      if (!patterns.includes(`${cleanOrigin}/*`)) {
-        patterns.push(`${cleanOrigin}/*`);
-      }
-    }
-
-    const tabs = await chrome.tabs.query({ url: patterns });
-    if (!tabs || tabs.length === 0) return settings;
+    const tabs = await chrome.tabs.query({ url: settings.appUrl + "/*" });
+    if (!tabs || tabs.length === 0) return sanitizeSettings((await chrome.storage.local.get("settings")).settings);
 
     // Prefer active tab first so multi-tab users sync their focused ActionPulse tab
     const sortedTabs = [...tabs].sort((a, b) => Number(b.active) - Number(a.active));
@@ -311,19 +352,11 @@ async function syncFromOpenActionPulseTabs(settings) {
         });
         const ctx = results && results[0] && results[0].result;
         if (ctx && (ctx.accessToken || ctx.workspaceId)) {
-          const updated = sanitizeSettings({
-            ...settings,
-            appUrl: ctx.appUrl || settings.appUrl,
-            accessToken: ctx.accessToken || "",
-            tokenExpiresAt: Number(ctx.tokenExpiresAt || 0),
-            userEmail: ctx.userEmail || "",
-            workspaceId: ctx.workspaceId || "",
-            workspaceName: ctx.workspaceName || "",
-            managerRole: ctx.managerRole || "",
-            lastSyncedAt: Date.now(),
+          const updated = await queueSettingsUpdate(async () => {
+            const current = sanitizeSettings((await chrome.storage.local.get("settings")).settings);
+            return saveAuthContext(current, ctx);
           });
-          await chrome.storage.local.set({ settings: updated });
-          return updated;
+          if (updated) return updated;
         }
       } catch {
         // Skip tabs that cannot be scripted (e.g., unloading/restricted)
@@ -332,7 +365,7 @@ async function syncFromOpenActionPulseTabs(settings) {
   } catch (err) {
     console.debug("[ActionPulse] Open tab auth sync skipped:", err);
   }
-  return settings;
+  return sanitizeSettings((await chrome.storage.local.get("settings")).settings);
 }
 
 async function performBackendUpload(session, rawSettings) {
@@ -356,9 +389,9 @@ async function performBackendUpload(session, rawSettings) {
   }
 
   const normalizedRole = String(settings.managerRole || "").toLowerCase();
-  if (!["admin", "organiser"].includes(normalizedRole)) {
+  if (!["owner", "admin", "organiser"].includes(normalizedRole)) {
     throw new Error(
-      `Manager access required: current role is "${normalizedRole || "none"}". Only Admin or Organiser can upload.`
+      `Manager access required: current role is "${normalizedRole || "none"}". Only workspace owners, admins, or organisers can upload.`
     );
   }
 
@@ -439,8 +472,11 @@ async function performBackendUpload(session, rawSettings) {
 
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.local.get(["settings", "session"]);
-  if (!current.settings) {
-    await chrome.storage.local.set({ settings: DEFAULT_SETTINGS });
+  if (current.settings?.appUrlPinned !== true) {
+    await queueSettingsUpdate(async () => {
+      const { settings } = await chrome.storage.local.get("settings");
+      await chrome.storage.local.set({ settings: sanitizeSettings(settings) });
+    });
   }
   if (!current.session) {
     await chrome.storage.local.set({ session: createIdleSession() });
@@ -448,37 +484,68 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log("[ActionPulse] Service worker initialized.");
 });
 
-// Watch tab closures to finalize and auto-upload
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
-  if (store.meetingTabId === tabId && store.session && store.session.isRecording) {
-    const session = store.session;
-    const settings = store.settings || DEFAULT_SETTINGS;
-    session.isRecording = false;
-    session.isCompleted = true;
-    session.endTime = new Date().toISOString();
-    if (session.startTime) {
-      session.durationSeconds = Math.max(0, Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000));
-    }
+// Session mutations read, modify, and write the same stored transcript.
+const SESSION_MUTATIONS = new Set([
+  "MEETING_STARTED", "MEETING_ENDED", "CAPTION_CUE", "CLEAR_BUFFER", "UPLOAD_TO_BACKEND",
+]);
+let pendingSessionUpdate = Promise.resolve();
+let uploadingSessionId = null;
 
-    if (session.cues && session.cues.length > 0 && !session.uploaded) {
-      try {
-        const uploadRes = await performBackendUpload(session, settings);
-        session.uploaded = true;
-        session.uploadResult = uploadRes;
-        session.reviewUrl = uploadRes.reviewUrl;
-        console.log("[ActionPulse] Auto-uploaded on tab close. Review URL:", uploadRes.reviewUrl);
-      } catch (err) {
-        console.warn("[ActionPulse] Auto-upload on tab close failed (cues preserved in local storage):", err);
-      }
-    }
+function queueSessionUpdate(update) {
+  const pending = pendingSessionUpdate.then(update);
+  pendingSessionUpdate = pending.catch(() => {});
+  return pending;
+}
 
-    await chrome.storage.local.set({ session, meetingTabId: null });
+async function uploadAndSave(session, settings) {
+  if (session.uploaded && session.uploadResult) return session.uploadResult;
+
+  uploadingSessionId = session.id;
+  try {
+    const result = await performBackendUpload(session, settings);
+    session.uploaded = true;
+    session.uploadResult = result;
+    session.reviewUrl = result.reviewUrl;
+    session.uploadError = "";
+    await chrome.storage.local.set({ session });
+    return result;
+  } catch (error) {
+    session.uploadError = error.message || "The upload could not be completed.";
+    await chrome.storage.local.set({ session });
+    return { success: false, error: session.uploadError };
+  } finally {
+    uploadingSessionId = null;
   }
+}
+
+async function finishCapture(session, settings) {
+  session.isRecording = false;
+  session.isCompleted = true;
+  session.endTime = new Date().toISOString();
+  if (session.startTime) {
+    session.durationSeconds = Math.max(
+      0,
+      Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000)
+    );
+  }
+
+  await chrome.storage.local.set({ session, meetingTabId: null });
+  if (session.cues.length && !session.uploaded && settings.autoUploadOnEnd !== false) {
+    await uploadAndSave(session, settings);
+  }
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  queueSessionUpdate(async () => {
+    const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
+    if (store.meetingTabId === tabId && store.session?.isRecording) {
+      await finishCapture(store.session, sanitizeSettings(store.settings));
+    }
+  }).catch((error) => console.warn("[ActionPulse] Could not finish capture:", error));
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  (async () => {
+  const handle = async () => {
     const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
     let session = store.session || createIdleSession();
     let settings = sanitizeSettings(store.settings);
@@ -491,11 +558,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         sendResponse({
           session,
+          isUploading: uploadingSessionId === session.id,
           settings: {
             ...settings,
             hasAccessToken: Boolean(settings.accessToken),
             accessToken: undefined,
           },
+          defaultConnection: DEFAULT_CONNECTION,
           cueCount: session.cues ? session.cues.length : 0,
         });
         break;
@@ -503,19 +572,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "SYNC_AUTH_CONTEXT": {
         const data = message.data || {};
-        settings = sanitizeSettings({
-          ...settings,
-          appUrl: data.appUrl || settings.appUrl,
-          accessToken: data.accessToken || "",
-          tokenExpiresAt: Number(data.tokenExpiresAt || 0),
-          userEmail: data.userEmail || "",
-          workspaceId: data.workspaceId || "",
-          workspaceName: data.workspaceName || "",
-          managerRole: data.managerRole || "",
-          lastSyncedAt: Date.now(),
-        });
-        await chrome.storage.local.set({ settings });
-        sendResponse({ status: "synced", hasAccessToken: Boolean(settings.accessToken) });
+        const updated = await saveAuthContext(settings, { ...data, appUrl: sender.url });
+        sendResponse(updated ? { status: "synced" } : { status: "ignored" });
         break;
       }
 
@@ -536,31 +594,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "MEETING_ENDED": {
-        if (session && session.isRecording) {
-          session.isRecording = false;
-          session.isCompleted = true;
-          session.endTime = new Date().toISOString();
-          if (session.startTime) {
-            session.durationSeconds = Math.max(
-              0,
-              Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000)
-            );
-          }
-
-          // Auto-trigger upload if captions are present
-          if (session.cues && session.cues.length > 0 && !session.uploaded && settings.autoUploadOnEnd !== false) {
-            try {
-              const uploadRes = await performBackendUpload(session, settings);
-              session.uploaded = true;
-              session.uploadResult = uploadRes;
-              session.reviewUrl = uploadRes.reviewUrl;
-              console.log("[ActionPulse] Auto-upload on meeting ended succeeded! Review URL:", uploadRes.reviewUrl);
-            } catch (uploadErr) {
-              console.warn("[ActionPulse] Auto-upload on meeting end failed (cues preserved locally):", uploadErr);
-            }
-          }
-
-          await chrome.storage.local.set({ session, meetingTabId: null });
+        if (session.isRecording) {
+          await finishCapture(session, settings);
         }
         sendResponse({ status: "ended", session });
         break;
@@ -601,27 +636,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "UPDATE_SETTINGS": {
-        settings = sanitizeSettings({ ...settings, ...message.data });
+        const changes = message.data || {};
+        if ("appUrl" in changes) {
+          const appUrl = httpOrigin(changes.appUrl);
+          if (!appUrl) {
+            sendResponse({ status: "invalid_settings" });
+            break;
+          }
+          if (appUrl !== settings.appUrl) {
+            Object.assign(settings, SIGNED_OUT_CONTEXT);
+          }
+          settings.appUrl = appUrl;
+          settings.appUrlPinned = true;
+        }
+        if ("apiUrl" in changes) {
+          const apiUrl = httpOrigin(changes.apiUrl);
+          if (!apiUrl) {
+            sendResponse({ status: "invalid_settings" });
+            break;
+          }
+          settings.apiUrl = apiUrl;
+        }
+        for (const key of ["autoUploadOnEnd", "autoExtract"]) {
+          if (typeof changes[key] === "boolean") settings[key] = changes[key];
+        }
         await chrome.storage.local.set({ settings });
-        sendResponse({ status: "settings_updated", settings });
+        sendResponse({ status: "settings_updated" });
         break;
       }
 
       case "UPLOAD_TO_BACKEND": {
-        try {
-          const uploadRes = await performBackendUpload(session, settings);
-          session.uploaded = true;
-          session.uploadResult = uploadRes;
-          session.reviewUrl = uploadRes.reviewUrl;
-          await chrome.storage.local.set({ session });
-          sendResponse(uploadRes);
-        } catch (uploadError) {
-          console.error("[ActionPulse] Upload failed:", uploadError);
-          sendResponse({
-            success: false,
-            error: uploadError.message || "Failed to reach backend server. Use Save Backup (.VTT) locally.",
-          });
-        }
+        sendResponse(await uploadAndSave(session, settings));
         break;
       }
 
@@ -641,7 +686,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       default:
         sendResponse({ error: "Unknown message type: " + message.type });
     }
-  })();
+  };
+
+  let handled;
+  if (message.type === "SYNC_AUTH_CONTEXT" || message.type === "UPDATE_SETTINGS") {
+    handled = queueSettingsUpdate(handle);
+  } else if (SESSION_MUTATIONS.has(message.type)) {
+    handled = queueSessionUpdate(handle);
+  } else {
+    handled = handle();
+  }
+  handled.catch((error) => {
+    console.error("[ActionPulse] Extension request failed:", error);
+    sendResponse({ success: false, error: error.message || "Extension request failed." });
+  });
 
   return true;
 });

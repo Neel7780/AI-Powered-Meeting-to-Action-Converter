@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowRight, Building2, LoaderCircle } from "lucide-react";
 
@@ -9,24 +9,61 @@ import CreateWorkspaceModal from "../components/workspace/CreateWorkspaceModal";
 import FloatingChatWidget from "../components/chat/FloatingChatWidget";
 import Overview from "../components/dashboard/Overview";
 import { Button } from "../components/ui/button";
+import { DashboardLightContext } from "../context/DashboardThemeContext";
+import "@fontsource-variable/dm-sans";
+import "@fontsource-variable/manrope";
+import "../dashboard-theme.css";
+import "../dashboard-layout.css";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { supabase } from "../lib/supabase";
+import { canAdministerWorkspace, canOrganise } from "../lib/workspaceRoles";
 import ChatPage from "../pages/ChatPage";
 import TeamPage from "../pages/TeamPage";
 import AnalyticsPage from "../pages/AnalyticsPage";
 import SprintVelocityPage from "../pages/SprintVelocityPage";
 import GitHubSettings from "./GitHubSettings";
 import MeetingsPage from "../pages/MeetingsPage";
-import MeetingsList from "../pages/MeetingsList";
+import MeetingDetailsPage from "./MeetingDetailsPage";
 import CalendarPage from "./CalendarPage";
 import { postApi } from "../services/reviewApi";
 import KanbanBoard from "./KanbanBoard";
 import { FollowUpModal } from "../components/meetings/FollowUpModal";
 
+const DASHBOARD_THEME_KEY = "actionpulse.dashboard-theme";
+
+function readDashboardLight() {
+  try {
+    return localStorage.getItem(DASHBOARD_THEME_KEY) === "light";
+  } catch {
+    return false;
+  }
+}
+
 export default function Dashboard() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [light, setLight] = useState(readDashboardLight);
+
+  // The document starts dark for public pages. Let Tailwind's existing dark
+  // variants switch off inside the light dashboard and restore them on exit.
+  useLayoutEffect(() => {
+    if (!light) return;
+    const root = document.documentElement;
+    const wasDark = root.classList.contains("dark");
+    root.classList.remove("dark");
+    return () => { root.classList.toggle("dark", wasDark); };
+  }, [light]);
+
+  const toggleTheme = () => {
+    const next = !light;
+    setLight(next);
+    try {
+      localStorage.setItem(DASHBOARD_THEME_KEY, next ? "light" : "dark");
+    } catch {
+      // The toggle still works for the current session when storage is unavailable.
+    }
+  };
 
   const {
     workspaces,
@@ -38,7 +75,7 @@ export default function Dashboard() {
   const isChatPage = location.pathname === "/chat";
   const isTasksPage = location.pathname === "/tasks" || location.pathname === "/kanban";
   const isMeetingsPage = location.pathname === "/meetings";
-  const isMeetingsListPage = location.pathname === "/meetings-list";
+  const isMeetingDetails = location.pathname.startsWith("/meetings/");
   const isCalendarPage = location.pathname === "/calendar";
   const isTeamPage = location.pathname === "/team";
   const isAnalyticsPage = location.pathname === "/analytics";
@@ -51,7 +88,7 @@ export default function Dashboard() {
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [latestMeeting, setLatestMeeting] = useState<{ id: string; title: string } | null>(null);
 
-  const isAdmin = currentRole === "admin" || currentRole === "owner";
+  const isAdmin = canAdministerWorkspace(currentRole);
   const workspaceId = currentWorkspace?.id;
   const { user } = useAuth();
   const displayName = user?.user_metadata?.display_name || user?.user_metadata?.full_name || "there";
@@ -87,16 +124,16 @@ export default function Dashboard() {
   };
 
 
-  return (
-    <div className="app-canvas flex min-h-screen text-white">
+  const content = (
+    <div className="app-canvas flex min-h-screen text-white" data-dashboard-theme={light ? "light" : "dark"}>
       {/* Desktop Sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-white/[0.06] lg:block">
+      <aside className="sticky top-0 hidden h-dvh w-[236px] shrink-0 border-r border-white/[0.06] lg:block">
         <Sidebar />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <Navbar onMenuClick={() => setShowMobileSidebar(true)} />
+        <Navbar onMenuClick={() => setShowMobileSidebar(true)} dashboardTheme={{ light, toggle: toggleTheme }} />
 
         {/* Mobile Sidebar */}
         {showMobileSidebar && (
@@ -104,7 +141,7 @@ export default function Dashboard() {
             <button
               type="button"
               aria-label="Close navigation"
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              className="dashboard-scrim absolute inset-0 bg-black/70 backdrop-blur-sm"
               onClick={() => setShowMobileSidebar(false)}
             />
 
@@ -122,18 +159,16 @@ export default function Dashboard() {
             <ChatPage />
           ) : isTasksPage ? (
             <KanbanBoard workspaceId={currentWorkspace?.id} />
-          ) : isMeetingsListPage ? (
-            <div className="p-6">
-              <MeetingsList />
-            </div>
           ) : isMeetingsPage ? (
-            <MeetingsPage />
+            <MeetingsPage key={currentWorkspace?.id} />
+          ) : isMeetingDetails ? (
+            <MeetingDetailsPage />
           ) : isCalendarPage ? (
             <CalendarPage />
           ) : isTeamPage ? (
             <TeamPage />
           ) : isAnalyticsPage ? (
-            <AnalyticsPage />
+            <AnalyticsPage key={workspaceId} />
           ) : isVelocityPage ? (
             <SprintVelocityPage />
           ) : loading ? (
@@ -165,7 +200,7 @@ export default function Dashboard() {
               workspaces={workspaces}
               displayName={displayName}
               isAdmin={isAdmin}
-              canCreate={currentRole === "owner" || currentRole === "admin" || currentRole === "organiser"}
+              canCreate={canOrganise(currentRole)}
               latestMeetingTitle={latestMeeting?.title}
               onAddMember={() => setShowAddMember(true)}
               onFollowUp={() => (latestMeeting ? setShowFollowUp(true) : navigate("/meetings"))}
@@ -203,4 +238,6 @@ export default function Dashboard() {
       </div>
     </div>
   );
+
+  return <DashboardLightContext.Provider value={light}>{content}</DashboardLightContext.Provider>;
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Lock, ShieldCheck, UserCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { MemberPerformanceItem } from '../../services/analyticsApi';
+import { canOrganise } from '../../lib/workspaceRoles';
 
 interface MemberEvaluationTableProps {
   memberEvaluations: MemberPerformanceItem[] | null;
@@ -11,7 +12,7 @@ export const MemberEvaluationTable: React.FC<MemberEvaluationTableProps> = ({
   memberEvaluations,
   userRole,
 }) => {
-  const isManager = userRole === 'admin' || userRole === 'organiser';
+  const isManager = canOrganise(userRole);
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-5 backdrop-blur-sm">

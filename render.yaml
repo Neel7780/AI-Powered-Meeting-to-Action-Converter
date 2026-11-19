@@ -5,6 +5,8 @@ services:
     name: actionpulse-backend
     runtime: python
     plan: free
+    branch: main
+    autoDeployTrigger: checksPass
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     # FastAPI is ASGI: Render's default `gunicorn your_application.wsgi` is a placeholder
@@ -22,6 +24,23 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # GitHub App receiver runs in this FastAPI service, with Supabase for persistence.
+      # Webhook URL: https://ai-powered-meeting-to-action-converter-9k2z.onrender.com/api/github/webhook
+      # Existing Render services must also set these in their Environment settings.
+      - key: GITHUB_APP_ID
+        sync: false
+      - key: GITHUB_APP_SLUG
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_PRIVATE_KEY
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+      - key: GITHUB_REDIRECT_URI
+        value: https://ai-powered-meeting-to-action-conver.vercel.app/github/callback
       - key: AWS_BEARER_TOKEN_BEDROCK
         sync: false
       - key: GEMINI_API_KEY

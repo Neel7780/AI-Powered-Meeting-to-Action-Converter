@@ -42,7 +42,9 @@ def test_audio_upload_diarizes_with_participant_count(world, worker):  # noqa: F
     # Aman, Rahul and the external vendor
     assert r.json()["num_speakers"] == 3 and worker[0]["num_speakers"] == 3
 
-    assert world.db.rows("meetings", id=mid)[0]["status"] == "draft"
+    meeting = world.db.rows("meetings", id=mid)[0]
+    assert meeting["status"] == "draft"
+    assert meeting["speaker_mapping_required"]
     assert f"meeting-transcripts/{world.workspace}/{mid}/recording.webm" in world.db.uploads
     t = world.db.rows("transcripts", meeting_id=mid)[0]
     assert t["source"] == "audio"
@@ -68,6 +70,7 @@ def test_speaker_mapping_renames_transcript(world, worker):  # noqa: F811
         {"speaker_label": "SPEAKER_01", "participant_id": None},
     ]})
     assert r.status_code == 200, r.text
+    assert not world.db.rows("meetings", id=mid)[0]["speaker_mapping_required"]
     text = world.db.rows("transcripts", meeting_id=mid)[0]["canonical_text"].splitlines()
     assert text[1] == "Rahul Mehta: I will fix the login bug on Safari by Wednesday."
     assert text[2].startswith("Aman Shah: ")

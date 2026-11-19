@@ -40,6 +40,9 @@ def start_extraction(
     if not meeting.get("ai_processing"):
         raise HTTPException(status.HTTP_409_CONFLICT, "AI processing is disabled for this meeting")
 
+    if meeting.get("speaker_mapping_required"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Map the meeting speakers before extracting action items")
+
     if meeting.get("status") == "processing":
         updated_at = datetime.fromisoformat(meeting["updated_at"])
         if datetime.now(UTC) - updated_at < STALE_JOB_AFTER:

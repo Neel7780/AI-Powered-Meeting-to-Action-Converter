@@ -1,0 +1,304 @@
+/* The signed-in dashboard shell owns these tokens. Portalled workspace
+   dialogs receive the same scope from React context. */
+[data-dashboard-theme="dark"] {
+  --dashboard-canvas: #17151a;
+  --dashboard-sidebar: #231b25;
+  --dashboard-paper: #211e24;
+  --dashboard-ink: #f4eef3;
+  --dashboard-copy: #d4c8d3;
+  --dashboard-muted: #b4a6b3;
+  --dashboard-line: #3c333e;
+  --dashboard-subtle: #2b252e;
+  --dashboard-inset: #28222a;
+  --dashboard-hover: #302733;
+  --dashboard-accent: #e2b3d5;
+  --dashboard-accent-soft: #3b293b;
+  --dashboard-action: #ddb1d2;
+  --dashboard-action-hover: #ecc5e1;
+  --dashboard-action-ink: #321d2f;
+  --dashboard-focus: #d19ac3;
+  --dashboard-shadow: 0 1px 2px rgb(0 0 0 / 16%);
+  --dashboard-success-bg: #20352b;
+  --dashboard-success: #9cd1b1;
+  --dashboard-danger-bg: #3e262d;
+  --dashboard-danger: #f2adb9;
+  --ring: 314 38% 71%;
+  --border: 290 9% 23%;
+  color: var(--dashboard-ink);
+  color-scheme: dark;
+}
+
+[data-dashboard-theme="light"] {
+  --dashboard-canvas: #f8f7f5;
+  --dashboard-sidebar: #f5f0f3;
+  --dashboard-paper: #fff;
+  --dashboard-ink: #29232b;
+  --dashboard-copy: #514654;
+  --dashboard-muted: #6b5e6b;
+  --dashboard-line: #e5dce3;
+  --dashboard-subtle: #f4f0f3;
+  --dashboard-inset: #fbf9fa;
+  --dashboard-hover: #f2eaf0;
+  --dashboard-accent: #784262;
+  --dashboard-accent-soft: #f0e3ed;
+  --dashboard-action: #76425f;
+  --dashboard-action-hover: #62354d;
+  --dashboard-action-ink: #fff;
+  --dashboard-focus: #956388;
+  --dashboard-shadow: 0 1px 2px rgb(50 27 47 / 4%);
+  --dashboard-success-bg: #eaf4ec;
+  --dashboard-success: #2b6142;
+  --dashboard-danger-bg: #f9eaee;
+  --dashboard-danger: #8d3b50;
+  --ring: 318 20% 49%;
+  --border: 313 15% 88%;
+  color-scheme: light;
+  color: var(--dashboard-ink);
+}
+
+html:has(.app-canvas[data-dashboard-theme="light"]) {
+  background: #f8f7f5;
+  color-scheme: light;
+}
+
+html:has(.app-canvas[data-dashboard-theme="dark"]) {
+  background: #17151a;
+}
+
+[data-dashboard-theme="dark"] :is(.card, .panel, .dashboard-surface, .dashboard-chat-launcher) {
+  background-color: var(--dashboard-paper);
+  border-color: var(--dashboard-line);
+}
+
+[data-dashboard-theme="dark"] :is(.text-white, .text-neutral-100, .text-neutral-200) {
+  color: var(--dashboard-ink);
+}
+
+[data-dashboard-theme="dark"] :is(.text-neutral-300, .text-neutral-400, .field-label) {
+  color: var(--dashboard-copy);
+}
+
+[data-dashboard-theme="dark"] :is(.text-neutral-500, .text-neutral-600, .eyebrow) {
+  color: var(--dashboard-muted);
+}
+
+[data-dashboard-theme="dark"] :is(.text-indigo-200, .text-indigo-300, .text-indigo-400) {
+  color: var(--dashboard-accent);
+}
+
+[data-dashboard-theme="dark"] :is(.field, .dashboard-control) {
+  background-color: var(--dashboard-inset);
+  border-color: var(--dashboard-line);
+  color: var(--dashboard-ink);
+}
+
+[data-dashboard-theme] :is(input, select, textarea, button, a):focus-visible {
+  outline: 2px solid var(--dashboard-focus);
+  outline-offset: 2px;
+}
+
+[data-dashboard-theme="light"] :is(.card, .panel, .dashboard-surface, .dashboard-chat-launcher, .bg-black, .bg-neutral-900, .bg-neutral-950, [class~="bg-black/90"], [class~="bg-black/95"], [class~="bg-neutral-900/50"], [class~="bg-neutral-900/80"]) {
+  background-color: var(--dashboard-paper);
+}
+
+[data-dashboard-theme="light"] .dashboard-page {
+  background-color: transparent;
+}
+
+[data-dashboard-theme="light"] .dashboard-chart-tooltip {
+  background-color: rgb(255 255 255 / 96%);
+}
+
+[data-dashboard-theme="light"] .dashboard-tinted-gradient {
+  background: linear-gradient(to right, #e9f6f2, #f9fbff);
+}
+
+[data-dashboard-theme="light"] :is(.card, .dashboard-line) {
+  border-color: var(--dashboard-line);
+}
+
+[data-dashboard-theme="light"] .card {
+  box-shadow: 0 1px 2px #18253d0a;
+}
+
+[data-dashboard-theme="light"] .card-hover:hover {
+  border-color: #cebdc9;
+  background-color: var(--dashboard-inset);
+  box-shadow: 0 8px 22px -12px #452d4140;
+}
+
+[data-dashboard-theme="light"] .dashboard-avatar-dot {
+  border-color: var(--dashboard-paper);
+}
+
+[data-dashboard-theme="light"] :is(.text-white, .text-neutral-100, .text-neutral-200, .text-slate-100, .text-slate-200) {
+  color: var(--dashboard-ink);
+}
+
+[data-dashboard-theme="light"] :is(.text-neutral-300, .text-neutral-400, .text-slate-300, .field-label) {
+  color: var(--dashboard-copy);
+}
+
+[data-dashboard-theme="light"] :is(.text-neutral-500, .text-neutral-600, .text-slate-400, .eyebrow) {
+  color: var(--dashboard-muted);
+}
+
+/* Keep small labels legible on their tinted backgrounds. */
+[data-dashboard-theme="light"] :is(.text-indigo-200, .text-indigo-300, .text-indigo-400) { color: var(--dashboard-accent); }
+[data-dashboard-theme="light"] :is(.text-amber-200, .text-amber-300, .text-amber-400, [class~="text-amber-400/90"]) { color: #824806; }
+[data-dashboard-theme="light"] :is(.text-emerald-200, .text-emerald-300, .text-emerald-400) { color: #08644a; }
+[data-dashboard-theme="light"] :is(.text-red-300, .text-red-400, .text-rose-200, .text-rose-300, .text-rose-400) { color: #a92642; }
+[data-dashboard-theme="light"] :is(.text-sky-200, .text-sky-300, .text-sky-400, .text-cyan-100, .text-cyan-200, .text-cyan-300, .text-cyan-400) { color: #075778; }
+[data-dashboard-theme="light"] :is(.text-blue-300, .text-blue-400) { color: #244ba1; }
+[data-dashboard-theme="light"] :is(.text-teal-200, .text-teal-300, .text-teal-400) { color: #095c57; }
+[data-dashboard-theme="light"] :is(.text-violet-300, .text-purple-200, .text-purple-300, .text-purple-400) { color: #6632a0; }
+
+[data-dashboard-theme] :is(.bg-indigo-500, .bg-indigo-600).text-white,
+[data-dashboard-theme] .bg-white.text-black {
+  background-color: var(--dashboard-action);
+  border-color: transparent;
+  color: var(--dashboard-action-ink);
+}
+
+[data-dashboard-theme] :is(.bg-indigo-500, .bg-indigo-600).text-white:hover,
+[data-dashboard-theme] :is(button, a).bg-white.text-black:hover {
+  background-color: var(--dashboard-action-hover);
+}
+[data-dashboard-theme="light"] .bg-cyan-600.text-white { background-color: #07627a; color: #fff; }
+[data-dashboard-theme="light"] .bg-amber-600.text-white { background-color: #8a4a12; color: #fff; }
+[data-dashboard-theme] .dashboard-on-accent { color: #fff; }
+
+
+[data-dashboard-theme="light"] :is(
+  [class~="border-white/5"],
+  [class~="border-white/[0.04]"],
+  [class~="border-white/[0.05]"],
+  [class~="border-white/[0.06]"],
+  [class~="border-white/[0.08]"],
+  [class~="border-white/10"],
+  [class~="border-white/15"],
+  [class~="border-white/20"],
+  [class~="border-white/25"],
+  .border-neutral-700
+) {
+  border-color: var(--dashboard-line);
+}
+
+[data-dashboard-theme="light"] :is(
+  [class~="divide-white/5"],
+  [class~="divide-white/[0.06]"],
+  [class~="divide-white/[0.08]"],
+  [class~="divide-white/10"]
+) > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--dashboard-line);
+}
+
+[data-dashboard-theme="light"] :is([class~="bg-black/40"], [class~="bg-black/50"], [class~="bg-neutral-950/40"]) {
+  background-color: var(--dashboard-inset);
+}
+
+[data-dashboard-theme="light"] [class~="bg-neutral-950/80"] {
+  background-color: var(--dashboard-hover);
+}
+
+[data-dashboard-theme="light"] :is(.bg-teal-950, [class~="bg-teal-950/40"], [class~="bg-teal-950/60"], [class~="bg-teal-950/70"], [class~="bg-teal-950/80"]) {
+  background-color: #e4f5f0;
+}
+[data-dashboard-theme="light"] :is([class~="bg-amber-950/20"], [class~="bg-amber-950/70"], [class~="bg-amber-950/80"]) {
+  background-color: #fdf2da;
+}
+[data-dashboard-theme="light"] :is([class~="bg-indigo-950/20"], [class~="bg-indigo-950/70"], [class~="bg-purple-950/70"]) {
+  background-color: #eeebff;
+}
+[data-dashboard-theme="light"] :is([class~="bg-red-950/40"], [class~="bg-rose-950/70"]) {
+  background-color: #fcecf0;
+}
+[data-dashboard-theme="light"] [class~="bg-emerald-950/70"] { background-color: #e6f6ed; }
+[data-dashboard-theme="light"] :is([class~="bg-sky-950/70"], [class~="bg-cyan-950/20"]) { background-color: #e4f4fa; }
+
+/* Dark-mode glass fills become muted surfaces or visible hover states. */
+[data-dashboard-theme="light"] :is(
+  [class~="bg-white/[0.01]"],
+  [class~="bg-white/[0.015]"],
+  [class~="bg-white/[0.02]"],
+  [class~="bg-white/[0.03]"],
+  [class~="bg-white/[0.04]"],
+  [class~="bg-white/5"],
+  [class~="bg-white/10"],
+  [class~="bg-white/15"],
+  [class~="bg-neutral-900/40"],
+  [class~="bg-neutral-900/60"],
+  [class~="bg-neutral-800/80"],
+  .bg-neutral-800
+) {
+  background-color: var(--dashboard-subtle);
+}
+
+[data-dashboard-theme="light"] :is(
+  .list-row,
+  .dashboard-chat-launcher,
+  .dashboard-surface-hover,
+  [class~="hover:bg-neutral-900"],
+  [class~="hover:bg-neutral-800"],
+  [class~="hover:bg-neutral-700"],
+  [class~="hover:bg-teal-950"],
+  [class~="hover:bg-teal-900"],
+  [class~="hover:bg-indigo-950/70"],
+  [class~="hover:bg-white/[0.02]"],
+  [class~="hover:bg-white/[0.03]"],
+  [class~="hover:bg-white/[0.04]"],
+  [class~="hover:bg-white/[0.07]"],
+  [class~="hover:bg-white/5"],
+  [class~="hover:bg-white/10"]
+):hover {
+  background-color: var(--dashboard-hover);
+}
+
+[data-dashboard-theme="light"] :is([class~="hover:text-white"]:hover, .group:hover [class~="group-hover:text-white"]) {
+  color: var(--dashboard-ink);
+}
+
+[data-dashboard-theme="light"] :is(.field, .dashboard-control) {
+  background: var(--dashboard-paper);
+  color: var(--dashboard-ink);
+  border-color: #d7cbd3;
+}
+
+[data-dashboard-theme="light"] .field[class~="border-amber-500/35"] {
+  border-color: #b78644;
+}
+
+[data-dashboard-theme="light"] .accent-white {
+  accent-color: var(--dashboard-accent);
+}
+
+[data-dashboard-theme="light"] :is(input, textarea)::placeholder {
+  color: var(--dashboard-muted);
+}
+
+[data-dashboard-theme="light"] .bg-black.text-white {
+  background-color: var(--dashboard-paper);
+  color: var(--dashboard-ink);
+}
+
+[data-dashboard-theme="light"] .bg-black.text-white:hover {
+  background-color: var(--dashboard-hover);
+}
+
+.dashboard-scrim[data-dashboard-theme="light"],
+[data-dashboard-theme="light"] :is(.dashboard-scrim, .fixed[class~="bg-black/70"], .fixed[class~="bg-black/75"], .fixed[class~="bg-black/80"]) {
+  background-color: rgb(20 27 49 / 42%);
+}
+
+[data-dashboard-theme="light"] dialog::backdrop {
+  background-color: rgb(20 27 49 / 42%);
+}
+
+[data-dashboard-theme="light"] .skeleton {
+  background-image: linear-gradient(90deg, #eee7ec 25%, #fbf8fa 50%, #eee7ec 75%);
+}
+
+[data-dashboard-theme="light"] ::selection {
+  color: var(--dashboard-ink);
+  background: var(--dashboard-accent-soft);
+}

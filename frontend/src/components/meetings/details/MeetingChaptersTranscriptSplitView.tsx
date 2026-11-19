@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bookmark, Mic, SplitSquareVertical } from 'lucide-react';
+import { Bookmark, Mic } from 'lucide-react';
 import { MeetingChaptersTab } from './MeetingChaptersTab';
 import { MeetingTranscriptTab } from './MeetingTranscriptTab';
 import type { MeetingChapter } from '../../../types/meetingDetails';
@@ -8,6 +8,7 @@ import type { TranscriptSegment, ActionItemCandidate } from '../../../types/revi
 interface SplitViewProps {
   chapters: MeetingChapter[];
   segments: TranscriptSegment[];
+  readOnly?: boolean;
   playbackSeconds: number;
   highlightedTimestamp?: string | null;
   highlightedSegmentId?: string | null;
@@ -20,6 +21,7 @@ interface SplitViewProps {
 export const MeetingChaptersTranscriptSplitView: React.FC<SplitViewProps> = ({
   chapters,
   segments,
+  readOnly,
   playbackSeconds,
   highlightedTimestamp,
   highlightedSegmentId,
@@ -96,30 +98,14 @@ export const MeetingChaptersTranscriptSplitView: React.FC<SplitViewProps> = ({
 
   return (
     <div className="flex flex-col h-full space-y-3">
-      {/* Split View Header */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <SplitSquareVertical className="size-4 text-teal-400" />
-          <h3 className="text-xs sm:text-sm font-semibold text-white">
-            Combined Chapters & Transcript Split View
-          </h3>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-300 border border-teal-500/30">
-            Interactive Sync
-          </span>
-        </div>
-        <span className="text-[11px] text-neutral-400 hidden sm:inline">
-          Click any chapter node on the left to scrub dialogue on the right
-        </span>
-      </div>
-
       {/* Two-Pane Responsive Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-[560px]">
         {/* Left Panel: Meeting Chapters */}
-        <div className="lg:col-span-5 flex flex-col rounded-2xl border border-white/10 bg-[#0c0e14] overflow-hidden shadow-xl">
-          <div className="px-4 py-3 border-b border-white/10 bg-[#10131a] flex items-center justify-between">
+        <div className="dashboard-surface lg:col-span-5 flex flex-col rounded-2xl border border-white/10 overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
             <span className="flex items-center gap-2 text-xs font-semibold text-teal-300">
               <Bookmark className="size-3.5 text-teal-400" />
-              Meeting Chapters Timeline
+              Chapters
             </span>
             <span className="text-[10px] font-mono text-neutral-400">
               {chapters.length} topics
@@ -138,11 +124,11 @@ export const MeetingChaptersTranscriptSplitView: React.FC<SplitViewProps> = ({
         </div>
 
         {/* Right Panel: Meeting Transcript */}
-        <div className="lg:col-span-7 flex flex-col rounded-2xl border border-white/10 bg-[#0c0e14] overflow-hidden shadow-xl">
-          <div className="px-4 py-3 border-b border-white/10 bg-[#10131a] flex items-center justify-between">
+        <div className="dashboard-surface lg:col-span-7 flex flex-col rounded-2xl border border-white/10 overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
             <span className="flex items-center gap-2 text-xs font-semibold text-teal-300">
               <Mic className="size-3.5 text-teal-400" />
-              Synchronized Transcript Dialogue
+              Transcript
             </span>
             <span className="text-[10px] font-mono text-neutral-400">
               {segments.length} segments
@@ -151,6 +137,7 @@ export const MeetingChaptersTranscriptSplitView: React.FC<SplitViewProps> = ({
 
           <div className="flex-1 overflow-hidden">
             <MeetingTranscriptTab
+              readOnly={readOnly}
               segments={segments}
               playbackSeconds={playbackSeconds}
               highlightedTimestamp={currentHighlightedTimestamp}

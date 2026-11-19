@@ -1,4 +1,4 @@
-import { API_BASE_URL, getApiUrl } from '../lib/api';
+import { getApiUrl } from '../lib/api';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import type { 
   RichMeetingDetails, 
@@ -116,12 +116,8 @@ export const meetingDetailsService = {
     }
 
     try {
-      const summaryEndpoint = API_BASE_URL
-        ? `${API_BASE_URL}/api/meetings/${meetingId}/summary`
-        : getApiUrl(`/api/meetings/${meetingId}/summary`);
-      const chaptersEndpoint = API_BASE_URL
-        ? `${API_BASE_URL}/api/meetings/${meetingId}/chapters`
-        : getApiUrl(`/api/meetings/${meetingId}/chapters`);
+      const summaryEndpoint = getApiUrl(`/api/meetings/${meetingId}/summary`);
+      const chaptersEndpoint = getApiUrl(`/api/meetings/${meetingId}/chapters`);
 
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       const headers: Record<string, string> = {
