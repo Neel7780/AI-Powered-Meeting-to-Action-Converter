@@ -172,7 +172,7 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
       <ol className="space-y-4 text-sm text-neutral-300 list-decimal pl-5">
         <li>Install and pin the ActionPulse extension. Keep this workspace open in the same browser.</li>
         <li>Open the call and turn on captions. Open the extension to check that the caption count is increasing.</li>
-        <li>After the call, use the extension to open the review. If upload did not start, choose Upload &amp; Generate AI Tasks.</li>
+        <li>After the call, choose Review tasks in the extension. If upload did not start, choose Upload captions.</li>
       </ol>
       <p className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-neutral-400">The extension is required for live capture. You can also upload an exported transcript to this meeting afterward.</p>
       <div className="flex flex-wrap gap-3">

@@ -455,6 +455,7 @@ const SESSION_MUTATIONS = new Set([
   "MEETING_STARTED", "MEETING_ENDED", "CAPTION_CUE", "CLEAR_BUFFER", "UPLOAD_TO_BACKEND",
 ]);
 let pendingSessionUpdate = Promise.resolve();
+let uploadingSessionId = null;
 
 function queueSessionUpdate(update) {
   const pending = pendingSessionUpdate.then(update);
@@ -462,33 +463,49 @@ function queueSessionUpdate(update) {
   return pending;
 }
 
-// Watch tab closures to finalize and auto-upload
+async function uploadAndSave(session, settings) {
+  if (session.uploaded && session.uploadResult) return session.uploadResult;
+
+  uploadingSessionId = session.id;
+  try {
+    const result = await performBackendUpload(session, settings);
+    session.uploaded = true;
+    session.uploadResult = result;
+    session.reviewUrl = result.reviewUrl;
+    session.uploadError = "";
+    await chrome.storage.local.set({ session });
+    return result;
+  } catch (error) {
+    session.uploadError = error.message || "The upload could not be completed.";
+    await chrome.storage.local.set({ session });
+    return { success: false, error: session.uploadError };
+  } finally {
+    uploadingSessionId = null;
+  }
+}
+
+async function finishCapture(session, settings) {
+  session.isRecording = false;
+  session.isCompleted = true;
+  session.endTime = new Date().toISOString();
+  if (session.startTime) {
+    session.durationSeconds = Math.max(
+      0,
+      Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000)
+    );
+  }
+
+  await chrome.storage.local.set({ session, meetingTabId: null });
+  if (session.cues.length && !session.uploaded && settings.autoUploadOnEnd !== false) {
+    await uploadAndSave(session, settings);
+  }
+}
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   queueSessionUpdate(async () => {
     const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
-    if (store.meetingTabId === tabId && store.session && store.session.isRecording) {
-      const session = store.session;
-      const settings = sanitizeSettings(store.settings);
-      session.isRecording = false;
-      session.isCompleted = true;
-      session.endTime = new Date().toISOString();
-      if (session.startTime) {
-        session.durationSeconds = Math.max(0, Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000));
-      }
-
-      if (session.cues && session.cues.length > 0 && !session.uploaded && settings.autoUploadOnEnd !== false) {
-        try {
-          const uploadRes = await performBackendUpload(session, settings);
-          session.uploaded = true;
-          session.uploadResult = uploadRes;
-          session.reviewUrl = uploadRes.reviewUrl;
-          console.log("[ActionPulse] Auto-uploaded on tab close. Review URL:", uploadRes.reviewUrl);
-        } catch (err) {
-          console.warn("[ActionPulse] Auto-upload on tab close failed (cues preserved in local storage):", err);
-        }
-      }
-
-      await chrome.storage.local.set({ session, meetingTabId: null });
+    if (store.meetingTabId === tabId && store.session?.isRecording) {
+      await finishCapture(store.session, sanitizeSettings(store.settings));
     }
   }).catch((error) => console.warn("[ActionPulse] Could not finish capture:", error));
 });
@@ -507,6 +524,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         sendResponse({
           session,
+          isUploading: uploadingSessionId === session.id,
           settings: {
             ...settings,
             hasAccessToken: Boolean(settings.accessToken),
@@ -552,31 +570,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "MEETING_ENDED": {
-        if (session && session.isRecording) {
-          session.isRecording = false;
-          session.isCompleted = true;
-          session.endTime = new Date().toISOString();
-          if (session.startTime) {
-            session.durationSeconds = Math.max(
-              0,
-              Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000)
-            );
-          }
-
-          // Auto-trigger upload if captions are present
-          if (session.cues && session.cues.length > 0 && !session.uploaded && settings.autoUploadOnEnd !== false) {
-            try {
-              const uploadRes = await performBackendUpload(session, settings);
-              session.uploaded = true;
-              session.uploadResult = uploadRes;
-              session.reviewUrl = uploadRes.reviewUrl;
-              console.log("[ActionPulse] Auto-upload on meeting ended succeeded! Review URL:", uploadRes.reviewUrl);
-            } catch (uploadErr) {
-              console.warn("[ActionPulse] Auto-upload on meeting end failed (cues preserved locally):", uploadErr);
-            }
-          }
-
-          await chrome.storage.local.set({ session, meetingTabId: null });
+        if (session.isRecording) {
+          await finishCapture(session, settings);
         }
         sendResponse({ status: "ended", session });
         break;
@@ -624,24 +619,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
 
       case "UPLOAD_TO_BACKEND": {
-        if (session.uploaded && session.uploadResult) {
-          sendResponse(session.uploadResult);
-          break;
-        }
-        try {
-          const uploadRes = await performBackendUpload(session, settings);
-          session.uploaded = true;
-          session.uploadResult = uploadRes;
-          session.reviewUrl = uploadRes.reviewUrl;
-          await chrome.storage.local.set({ session });
-          sendResponse(uploadRes);
-        } catch (uploadError) {
-          console.error("[ActionPulse] Upload failed:", uploadError);
-          sendResponse({
-            success: false,
-            error: uploadError.message || "Failed to reach backend server. Use Save Backup (.VTT) locally.",
-          });
-        }
+        sendResponse(await uploadAndSave(session, settings));
         break;
       }
 
