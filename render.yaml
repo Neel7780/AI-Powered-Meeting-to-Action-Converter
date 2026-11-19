@@ -11,6 +11,8 @@ services:
     # and gunicorn isn't installed, so the service exits with status 127.
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: ENVIRONMENT
+        value: production
       # New Render services default to Python 3.14; CI tests on 3.11.
       - key: PYTHON_VERSION
         value: 3.11.16

@@ -24,7 +24,7 @@ import { Button } from "../components/ui/button";
 import { Notice } from "../components/ui/notice";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspace, type AppRole } from "../context/WorkspaceContext";
-import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { supabase } from "../lib/supabase";
 import { postApi } from "../services/reviewApi";
 
 export interface TeamMember {
@@ -86,45 +86,6 @@ function formatDate(isoString: string): string {
   }
 }
 
-const DEMO_MEMBERS: TeamMember[] = [
-  {
-    userId: "00000000-0000-0000-0000-000000000001",
-    role: "admin",
-    joinedAt: "2026-10-15T10:00:00.000Z",
-    displayName: "Neel Khatri",
-    email: "neelkhatri7780@gmail.com",
-    avatarUrl: null,
-    isCurrentUser: true,
-  },
-  {
-    userId: "demo-user-2",
-    role: "organiser",
-    joinedAt: "2026-10-18T14:30:00.000Z",
-    displayName: "Manali Malani",
-    email: "manali.malani@actionpulse.io",
-    avatarUrl: null,
-    isCurrentUser: false,
-  },
-  {
-    userId: "demo-user-3",
-    role: "member",
-    joinedAt: "2026-10-22T09:15:00.000Z",
-    displayName: "Krishna Parmar",
-    email: "krishna.parmar@actionpulse.io",
-    avatarUrl: null,
-    isCurrentUser: false,
-  },
-  {
-    userId: "demo-user-4",
-    role: "member",
-    joinedAt: "2026-10-25T11:45:00.000Z",
-    displayName: "Devansh Rathod",
-    email: "devansh.rathod@actionpulse.io",
-    avatarUrl: null,
-    isCurrentUser: false,
-  },
-];
-
 export default function TeamPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -150,14 +111,6 @@ export default function TeamPage() {
   const loadTeamData = useCallback(async () => {
     if (!workspaceId) {
       setMembers([]);
-      setPendingInvites([]);
-      setLoading(false);
-      return;
-    }
-
-    // Dev test user gets demo members directly
-    if (user?.id === "00000000-0000-0000-0000-000000000001" || !isSupabaseConfigured) {
-      setMembers(DEMO_MEMBERS);
       setPendingInvites([]);
       setLoading(false);
       return;
@@ -241,7 +194,8 @@ export default function TeamPage() {
           .gt("expires_at", new Date().toISOString())
           .order("created_at", { ascending: false });
 
-        if (!inviteErr && inviteRows) {
+        if (inviteErr) throw inviteErr;
+        if (inviteRows) {
           setPendingInvites(
             inviteRows.map((inv) => ({
               id: inv.id,

@@ -12,7 +12,6 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from app.core.config import settings
 from app.core.supabase import get_supabase_client
 
 security = HTTPBearer(auto_error=True)
@@ -41,14 +40,10 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # In development mode, allow instant one-click dev testing token
-    if settings.ENVIRONMENT == "development" and token.startswith("dev-token"):
-        return CurrentUser(
-            id=DEV_USER_ID,
-            email="dev@actionpulse.app"
-        )
-
-    client = get_supabase_client()
+    try:
+        client = get_supabase_client()
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(503, "Authentication service is not configured") from exc
     try:
         user_response = client.auth.get_user(token)
         user = getattr(user_response, "user", None)
@@ -83,10 +78,6 @@ def require_role(
     Raises 404 if not a member (avoids leaking workspace existence).
     Raises 403 if role is not allowed.
     """
-    # In development mode, bypass role check for dev testing user
-    if settings.ENVIRONMENT == "development" and user.id == DEV_USER_ID:
-        return "admin"
-
     client = get_supabase_client()
     resp = (
         client.table("workspace_members")
@@ -121,14 +112,6 @@ def require_meeting_role(
     Raises 404 if meeting doesn't exist or user is not in workspace.
     Raises 403 if user doesn't have an allowed role.
     """
-    if settings.ENVIRONMENT == "development" and user.id == DEV_USER_ID:
-        return {
-            "id": str(meeting_id),
-            "workspace_id": "00000000-0000-0000-0000-000000000002",
-            "title": "Sprint 1 Architecture Review",
-            "status": "ready"
-        }
-
     client = get_supabase_client()
     resp = (
         client.table("meetings")
@@ -145,4 +128,24 @@ def require_meeting_role(
     meeting = meetings[0]
     workspace_id = UUID(str(meeting["workspace_id"]))
     require_role(workspace_id, allowed, user)
+    if not filter_visible_meetings(client, [meeting], user):
+        raise HTTPException(status_code=404, detail="Meeting not found")
     return meeting
+
+
+def filter_visible_meetings(client, meetings: list[dict], user: CurrentUser) -> list[dict]:
+    """Match private.user_can_view_meeting without trusting a service-role read."""
+    private_ids = [str(m["id"]) for m in meetings if m.get("visibility") == "private"]
+    visible_private = set()
+    if private_ids:
+        participants = (client.table("meeting_participants").select("meeting_id").in_("meeting_id", private_ids)
+                        .eq("user_id", str(user.id)).execute().data or [])
+        visible_private.update(str(p["meeting_id"]) for p in participants)
+        assignments = client.table("task_assignees").select("task_id").eq("user_id", str(user.id)).execute().data or []
+        if assignments:
+            tasks = (client.table("tasks").select("meeting_id").in_("id", [a["task_id"] for a in assignments])
+                     .in_("meeting_id", private_ids).execute().data or [])
+            visible_private.update(str(t["meeting_id"]) for t in tasks)
+    return [m for m in meetings if m.get("lifecycle") != "deleted" and (
+        m.get("visibility") != "private" or str(m.get("organiser_id")) == str(user.id)
+        or str(m["id"]) in visible_private)]

@@ -5,7 +5,7 @@ from supabase import create_client
 from app.core.supabase import get_supabase_client
 
 pytestmark = pytest.mark.skipif(
-    not os.getenv("SUPABASE_ANON_KEY"),
+    os.getenv("RUN_LIVE_SUPABASE_TESTS") != "1" or not os.getenv("SUPABASE_ANON_KEY"),
     reason="SUPABASE_ANON_KEY is required for RLS tests"
 )
 

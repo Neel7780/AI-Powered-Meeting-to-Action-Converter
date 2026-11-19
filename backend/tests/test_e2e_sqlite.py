@@ -264,3 +264,8 @@ def test_full_flow_live_bedrock(world):
     print(f"--- approved {len(actions)} actions -> emails to: {world.emailed()}")
     assert {"aman@example.com", "rahul@example.com"} <= set(world.emailed())
     assert "priya@example.com" not in world.emailed()
+
+
+def test_development_tokens_are_rejected(world):
+    response = world.client.get(f"/api/workspaces/{world.workspace}/analytics",headers={"Authorization":"Bearer dev-token-actionpulse"})
+    assert response.status_code == 401

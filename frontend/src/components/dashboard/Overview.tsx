@@ -188,14 +188,17 @@ export default function Overview({
   const meetingRows = meetings?.ws === workspaceId ? meetings.rows : null;
   const taskRows = tasks?.ws === workspaceId ? tasks.rows : null;
 
+  const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
+    setLoadError(null);
     const count = (table: string) =>
       supabase.from(table).select("*", { count: "exact", head: true }).eq("workspace_id", workspaceId);
 
     Promise.all([count("meetings"), count("tasks").neq("status", "done"), count("workspace_members")]).then(
       ([m, t, mem]) => {
         if (!cancelled) {
+          if (m.error || t.error || mem.error) { setLoadError("Unable to load workspace counts."); return; }
           setStats({ workspaceId, meetings: m.count ?? 0, openTasks: t.count ?? 0, members: mem.count ?? 0 });
         }
       }
@@ -207,7 +210,7 @@ export default function Overview({
       .eq("workspace_id", workspaceId)
       .order("starts_at", { ascending: false })
       .limit(5)
-      .then(({ data }) => !cancelled && setMeetings({ ws: workspaceId, rows: (data as MeetingRow[]) ?? [] }));
+      .then(({ data, error }) => { if (cancelled) return; if (error) setLoadError(error.message); else setMeetings({ ws: workspaceId, rows: (data as MeetingRow[]) ?? [] }); });
 
     supabase
       .from("tasks")
@@ -216,7 +219,7 @@ export default function Overview({
       .neq("status", "done")
       .order("deadline_utc", { ascending: true, nullsFirst: false })
       .limit(5)
-      .then(({ data }) => !cancelled && setTasks({ ws: workspaceId, rows: (data as TaskRow[]) ?? [] }));
+      .then(({ data, error }) => { if (cancelled) return; if (error) setLoadError(error.message); else setTasks({ ws: workspaceId, rows: (data as TaskRow[]) ?? [] }); });
 
     return () => {
       cancelled = true;
@@ -237,7 +240,7 @@ export default function Overview({
     ...(canCreate
       ? [{ label: "Record meeting", hint: "In-person, with speaker detection", icon: Mic, tint: tints.indigo, onClick: () => navigate("/meetings") }]
       : []),
-    { label: "Meeting Studio", hint: "Summaries & chapters", icon: Video, tint: tints.sky, onClick: () => navigate("/meeting-details") },
+    { label: "Meeting Studio", hint: "Summaries & chapters", icon: Video, tint: tints.sky, onClick: () => navigate("/meetings") },
     { label: "Ask AI Copilot", hint: "Query decisions & tasks", icon: Sparkles, tint: tints.violet, onClick: () => navigate("/chat") },
     { label: "Analytics", hint: "Bottlenecks & turnaround", icon: BarChart3, tint: tints.emerald, onClick: () => navigate("/analytics") },
     {
@@ -257,6 +260,7 @@ export default function Overview({
     <div className="relative">
       <div aria-hidden="true" className="app-grid pointer-events-none absolute inset-x-0 top-0 h-96" />
 
+      {loadError && <p role="alert" className="p-6">{loadError}</p>}
       <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10">
         {/* Greeting */}
         <header className="rise-in flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

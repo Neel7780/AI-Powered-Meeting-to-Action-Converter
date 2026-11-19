@@ -1,3 +1,4 @@
+import { isSupabaseConfigured } from "./lib/supabase";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import ActionPulseLanding from "./components/landing/ActionPulseLanding";
@@ -13,6 +14,7 @@ import MeetingDetailsPage from "./pages/MeetingDetailsPage";
 import SpeakerMapping from "./pages/SpeakerMapping";
 
 function App() {
+  if (!isSupabaseConfigured) return <main role="alert" className="p-8 text-white">Authentication is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to enable the application.</main>;
   return (
     <BrowserRouter>
       <Routes>
@@ -21,16 +23,13 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/create-meeting" element={<Navigate to="/meetings" replace />} />
-        <Route path="/meeting-review" element={<MeetingReview />} />
         <Route path="/invite/:token" element={<ProtectedRoute><AcceptInvite /></ProtectedRoute>} />
         <Route path="/calendar/callback" element={<ProtectedRoute><CalendarCallback /></ProtectedRoute>} />
         <Route path="/github/callback" element={<ProtectedRoute><GitHubCallback /></ProtectedRoute>} />
         <Route path="/settings/github" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/meetings/:id/review" element={<MeetingReview />} />
+        <Route path="/meetings/:id/review" element={<ProtectedRoute><MeetingReview /></ProtectedRoute>} />
         <Route path="/meetings/:id/speakers" element={<ProtectedRoute><SpeakerMapping /></ProtectedRoute>} />
-        <Route path="/meeting-details" element={<MeetingDetailsPage />} />
-        <Route path="/meetings/:id" element={<MeetingDetailsPage />} />
-        <Route path="/meetings/design-sprint-review" element={<MeetingDetailsPage />} />
+        <Route path="/meetings/:id" element={<ProtectedRoute><MeetingDetailsPage /></ProtectedRoute>} />
 
         <Route
           path="/dashboard"

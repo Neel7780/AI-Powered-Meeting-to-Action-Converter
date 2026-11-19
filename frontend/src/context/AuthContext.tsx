@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "../lib/supabase";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 
 interface AuthContextType {
   user: User | null;
@@ -19,7 +19,6 @@ interface AuthContextType {
     displayName: string
   ) => Promise<void>;
   signOut: () => Promise<void>;
-  devSignIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,26 +36,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
     let mounted = true;
 
     const loadSession = async () => {
-      // Check for local dev session first
-      const devSessionRaw = localStorage.getItem("actionpulse_dev_session");
-      if (devSessionRaw) {
-        try {
-          const parsed = JSON.parse(devSessionRaw);
-          if (mounted) {
-            setSession(parsed);
-            setUser(parsed.user);
-            setLoading(false);
-          }
-          return;
-        } catch {
-          // ignore parsing error
-        }
+      localStorage.removeItem("actionpulse_dev_session");
+      localStorage.removeItem("staging_gate_candidate_items");
+      if (!isSupabaseConfigured) {
+        setLoading(false);
+        return;
       }
 
       try {
         const { data, error } = await supabase.auth.getSession();
         if (error) {
-          console.debug("Remote session check bypassed:", error.message);
+          throw error;
         }
         if (mounted) {
           setSession(data?.session ?? null);
@@ -74,7 +64,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (localStorage.getItem("actionpulse_dev_session")) return;
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -85,33 +74,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       subscription.unsubscribe();
     };
   }, []);
-
-  const devSignIn = () => {
-    const mockUser: User = {
-      id: "00000000-0000-0000-0000-000000000001",
-      app_metadata: {},
-      user_metadata: { full_name: "Developer Admin" },
-      aud: "authenticated",
-      created_at: new Date().toISOString(),
-      email: "dev@actionpulse.app",
-      role: "authenticated",
-      updated_at: new Date().toISOString(),
-    } as unknown as User;
-
-    const mockSession: Session = {
-      access_token: "dev-token-actionpulse",
-      token_type: "bearer",
-      expires_in: 86400,
-      refresh_token: "dev-refresh-token",
-      user: mockUser,
-      expires_at: Math.floor(Date.now() / 1000) + 86400,
-    };
-
-    localStorage.setItem("actionpulse_dev_session", JSON.stringify(mockSession));
-    setUser(mockUser);
-    setSession(mockSession);
-    setLoading(false);
-  };
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -164,7 +126,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         signIn,
         signUp,
         signOut,
-        devSignIn,
       }}
     >
       {children}

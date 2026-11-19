@@ -32,6 +32,8 @@ export default function Dashboard() {
     currentWorkspace,
     currentRole,
     loading,
+    error: workspaceError,
+    refreshWorkspaces,
   } = useWorkspace();
 
   const isChatPage = location.pathname === "/chat";
@@ -114,23 +116,7 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <main className="min-w-0 flex-1">
-          {isGitHubPage ? (
-            <GitHubSettings key={currentWorkspace?.id} />
-          ) : isChatPage ? (
-            <ChatPage />
-          ) : isTasksPage ? (
-            <KanbanBoard workspaceId={currentWorkspace?.id} />
-          ) : isMeetingsPage ? (
-            <MeetingsPage />
-          ) : isCalendarPage ? (
-            <CalendarPage />
-          ) : isTeamPage ? (
-            <TeamPage />
-          ) : isAnalyticsPage ? (
-            <AnalyticsPage />
-          ) : isVelocityPage ? (
-            <SprintVelocityPage />
-          ) : loading ? (
+          {workspaceError ? <div role="alert" className="p-8">{workspaceError}<Button onClick={() => refreshWorkspaces()}>Retry</Button></div> : loading ? (
             <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-neutral-500">
               <LoaderCircle className="size-4 animate-spin" />
               Loading workspace…
@@ -153,6 +139,22 @@ export default function Dashboard() {
                 </Button>
               </div>
             </div>
+          ) : isGitHubPage ? (
+            <GitHubSettings key={currentWorkspace?.id} />
+          ) : isChatPage ? (
+            <ChatPage key={workspaceId} />
+          ) : isTasksPage ? (
+            <KanbanBoard key={workspaceId} workspaceId={currentWorkspace?.id} />
+          ) : isMeetingsPage ? (
+            <MeetingsPage key={workspaceId} />
+          ) : isCalendarPage ? (
+            <CalendarPage key={workspaceId} />
+          ) : isTeamPage ? (
+            <TeamPage key={workspaceId} />
+          ) : isAnalyticsPage ? (
+            <AnalyticsPage key={workspaceId} />
+          ) : isVelocityPage ? (
+            <SprintVelocityPage key={workspaceId} />
           ) : (
             <Overview
               workspace={currentWorkspace}
@@ -191,7 +193,7 @@ export default function Dashboard() {
 
           {/* Global Floating Chat Widget (available across all workspace views except /chat) */}
           {!isChatPage && currentWorkspace && (
-            <FloatingChatWidget workspaceId={currentWorkspace.id} />
+            <FloatingChatWidget key={currentWorkspace.id} workspaceId={currentWorkspace.id} />
           )}
         </main>
       </div>

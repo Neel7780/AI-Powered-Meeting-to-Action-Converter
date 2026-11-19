@@ -7,7 +7,9 @@ export const isSupabaseConfigured = Boolean(
   rawUrl &&
   rawAnonKey &&
   rawUrl !== 'https://your-project-id.supabase.co' &&
-  !rawUrl.includes('placeholder')
+  !rawUrl.includes('placeholder') &&
+  !rawAnonKey.includes('your-') &&
+  !rawAnonKey.startsWith('sb_secret_')
 );
 
 if (!isSupabaseConfigured) {
@@ -21,4 +23,7 @@ if (!isSupabaseConfigured) {
 const effectiveUrl = isSupabaseConfigured && rawUrl ? rawUrl : 'https://placeholder.supabase.co';
 const effectiveKey = isSupabaseConfigured && rawAnonKey ? rawAnonKey : 'placeholder-anon-key';
 
-export const supabase = createClient(effectiveUrl, effectiveKey);
+export const supabase = createClient(effectiveUrl, effectiveKey, {
+  auth: { persistSession: isSupabaseConfigured, autoRefreshToken: isSupabaseConfigured },
+  ...(!isSupabaseConfigured ? { global: { fetch: async () => { throw new Error('Authentication is not configured.'); } } } : {}),
+});
