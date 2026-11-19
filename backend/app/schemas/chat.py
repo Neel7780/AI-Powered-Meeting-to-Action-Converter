@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
     meeting_id: UUID | None = Field(default=None, description="Optional meeting ID to scope search")
     query: str = Field(..., min_length=1, max_length=2000, description="User question")
     history: list[ChatMessage] = Field(default_factory=list, description="Prior conversation turns in current session")
+    session_id: UUID | None = Field(default=None, description="Optional chat session ID for persistent history")
 
 
 class ChatCitation(BaseModel):
@@ -32,3 +33,44 @@ class ChatResponse(BaseModel):
     citations: list[ChatCitation] = Field(default_factory=list, description="Supporting citations and excerpts")
     suggested_followups: list[str] = Field(default_factory=list, description="Suggested follow-up questions")
     meeting_context_count: int = Field(default=0, description="Number of meetings included in context")
+    session_id: UUID | None = Field(default=None, description="Active session ID if persisted")
+
+
+class ChatSessionSummary(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    title: str
+    selected_meeting_id: UUID | None = None
+    created_at: str
+    updated_at: str
+
+
+class ChatMessageRecord(BaseModel):
+    id: UUID
+    session_id: UUID
+    role: str
+    content: str
+    citations: list[ChatCitation] = Field(default_factory=list)
+    suggested_followups: list[str] = Field(default_factory=list)
+    created_at: str
+
+
+class ChatSessionDetail(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    title: str
+    selected_meeting_id: UUID | None = None
+    created_at: str
+    updated_at: str
+    messages: list[ChatMessageRecord] = Field(default_factory=list)
+
+
+class CreateSessionRequest(BaseModel):
+    workspace_id: UUID
+    title: str = "New Conversation"
+    selected_meeting_id: UUID | None = None
+
+
+class UpdateSessionRequest(BaseModel):
+    title: str | None = None
+    selected_meeting_id: UUID | None = None

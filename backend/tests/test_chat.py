@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage
 
 from app.core.config import settings
 from app.core.deps import CurrentUser, get_current_user
+from app.schemas.chat import ChatResponse
 from app.services.llm.chat_assistant import StructuredChatOutput, answer_workspace_chat
 from main import app
 
@@ -198,6 +199,7 @@ def test_chat_message_pending_tasks_grounded():
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
         with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.chat.get_supabase_client", return_value=db), \
              patch("app.services.llm.chat_assistant.get_supabase_client", return_value=db), \
              patch("app.services.llm.chat_assistant.llm_is_configured", return_value=False):
             res = client.post("/api/chat/message", json={
@@ -341,5 +343,297 @@ def test_chat_invalid_meeting_id_returns_404():
             })
             assert res.status_code == 404
             assert "Meeting not found" in res.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_chat_session_rejected_access_regressions():
+    """Verify regressions for rejected access: cross-user, cross-workspace, non-existent, and non-member access."""
+    workspace_a = uuid4()
+    workspace_b = uuid4()
+    user_a = CurrentUser(id=uuid4(), email="user_a@example.com")
+    user_b = CurrentUser(id=uuid4(), email="user_b@example.com")
+    session_a = uuid4()
+
+    db = MagicMock()
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+
+    cs_mock = MagicMock()
+    cs_mock.select.return_value = cs_mock
+    cs_mock.eq.return_value = cs_mock
+
+    def table_router(table_name: str):
+        if table_name == "workspace_members":
+            return wm_mock
+        if table_name == "chat_sessions":
+            return cs_mock
+        return MagicMock()
+
+    db.table.side_effect = table_router
+
+    app.dependency_overrides[get_current_user] = lambda: user_a
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.chat.get_supabase_client", return_value=db):
+            
+            # 1. Non-existent session_id in POST /api/chat/message returns 404
+            cs_mock.execute.return_value = MagicMock(data=[])
+            res = client.post("/api/chat/message", json={
+                "workspace_id": str(workspace_a),
+                "query": "What are our deliverables?",
+                "session_id": str(session_a),
+            })
+            assert res.status_code == 404
+            assert "Chat session not found" in res.json()["detail"]
+
+            # 2. Session owned by another user (user_b) returns 403 Forbidden
+            cs_mock.execute.return_value = MagicMock(data=[{
+                "id": str(session_a),
+                "workspace_id": str(workspace_a),
+                "user_id": str(user_b.id),
+                "title": "Other user chat"
+            }])
+            res = client.post("/api/chat/message", json={
+                "workspace_id": str(workspace_a),
+                "query": "Can I hijack this session?",
+                "session_id": str(session_a),
+            })
+            assert res.status_code == 403
+            assert "Access denied" in res.json()["detail"]
+
+            # 3. Session belongs to a different workspace (workspace_b) returns 403 Forbidden
+            cs_mock.execute.return_value = MagicMock(data=[{
+                "id": str(session_a),
+                "workspace_id": str(workspace_b),
+                "user_id": str(user_a.id),
+                "title": "Cross-workspace chat"
+            }])
+            res = client.post("/api/chat/message", json={
+                "workspace_id": str(workspace_a),
+                "query": "Cross-workspace query?",
+                "session_id": str(session_a),
+            })
+            assert res.status_code == 403
+            assert "Access denied" in res.json()["detail"]
+
+            # 4. GET /api/chat/sessions/{session_id} for another user's session returns 403 Forbidden
+            cs_mock.execute.return_value = MagicMock(data=[{
+                "id": str(session_a),
+                "workspace_id": str(workspace_a),
+                "user_id": str(user_b.id),
+                "title": "Private Chat"
+            }])
+            res = client.get(f"/api/chat/sessions/{session_a}")
+            assert res.status_code == 403
+            assert "Access denied" in res.json()["detail"]
+
+            # 5. DELETE /api/chat/sessions/{session_id} for another user's session returns 403 Forbidden
+            res = client.delete(f"/api/chat/sessions/{session_a}")
+            assert res.status_code == 403
+            assert "Access denied" in res.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_chat_session_authorized_persistence_regressions():
+    """Verify regressions for authorized persistence: create session, save turn with citations, get detail, delete."""
+    workspace_id = uuid4()
+    caller = CurrentUser(id=uuid4(), email="owner@example.com")
+    session_id = uuid4()
+
+    db = MagicMock()
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "owner"}])
+
+    cs_mock = MagicMock()
+    cs_mock.select.return_value = cs_mock
+    cs_mock.eq.return_value = cs_mock
+    cs_mock.order.return_value = cs_mock
+    cs_mock.limit.return_value = cs_mock
+    cs_mock.delete.return_value = cs_mock
+    cs_mock.update.return_value = cs_mock
+
+    # Initial session row
+    cs_mock.execute.return_value = MagicMock(data=[{
+        "id": str(session_id),
+        "workspace_id": str(workspace_id),
+        "user_id": str(caller.id),
+        "title": "New Conversation",
+        "selected_meeting_id": None,
+        "created_at": "2026-11-18T12:00:00Z",
+        "updated_at": "2026-11-18T12:00:00Z",
+    }])
+
+    cm_mock = MagicMock()
+    cm_mock.select.return_value = cm_mock
+    cm_mock.eq.return_value = cm_mock
+    cm_mock.order.return_value = cm_mock
+    cm_mock.insert.return_value = cm_mock
+    cm_mock.execute.return_value = MagicMock(data=[{
+        "id": str(uuid4()),
+        "session_id": str(session_id),
+        "role": "user",
+        "content": "What did we decide?",
+        "citations": [],
+        "suggested_followups": [],
+        "created_at": "2026-11-18T12:01:00Z"
+    }])
+
+    def table_router(table_name: str):
+        if table_name == "workspace_members":
+            return wm_mock
+        if table_name == "chat_sessions":
+            return cs_mock
+        if table_name == "chat_messages":
+            return cm_mock
+        return MagicMock()
+
+    db.table.side_effect = table_router
+
+    mock_chat_response = ChatResponse(
+        answer="The team decided to use PostgreSQL and Docker.",
+        citations=[],
+        suggested_followups=["Who will setup Docker?"],
+        meeting_context_count=2,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: caller
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.chat.get_supabase_client", return_value=db), \
+             patch("app.api.chat.answer_workspace_chat", return_value=mock_chat_response):
+
+            # 1. POST /api/chat/message with valid session_id persists and returns answer + session_id
+            res = client.post("/api/chat/message", json={
+                "workspace_id": str(workspace_id),
+                "query": "What did we decide?",
+                "session_id": str(session_id)
+            })
+            assert res.status_code == 200
+            data = res.json()
+            assert data["answer"] == "The team decided to use PostgreSQL and Docker."
+            assert data["session_id"] == str(session_id)
+            assert cm_mock.insert.call_count >= 2
+
+            # 2. GET /api/chat/sessions/{session_id} returns session and its messages
+            res = client.get(f"/api/chat/sessions/{session_id}")
+            assert res.status_code == 200
+            detail = res.json()
+            assert detail["id"] == str(session_id)
+            assert len(detail["messages"]) >= 1
+
+            # 3. DELETE /api/chat/sessions/{session_id} successfully deletes
+            res = client.delete(f"/api/chat/sessions/{session_id}")
+            assert res.status_code == 204
+            cs_mock.delete.assert_called()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_chat_migration_grants_for_service_role_and_authenticated():
+    """Regression test: migration must grant table privileges to service_role and authenticated."""
+    from pathlib import Path
+    migration_path = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "20261118151500_chat_history_sessions.sql"
+    assert migration_path.exists(), f"Migration file missing at {migration_path}"
+    content = migration_path.read_text(encoding="utf-8").upper()
+
+    assert "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE PUBLIC.CHAT_SESSIONS TO AUTHENTICATED, SERVICE_ROLE;" in content or \
+           ("GRANT SELECT" in content and "CHAT_SESSIONS" in content and "SERVICE_ROLE" in content)
+    assert "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE PUBLIC.CHAT_MESSAGES TO AUTHENTICATED, SERVICE_ROLE;" in content or \
+           ("GRANT SELECT" in content and "CHAT_MESSAGES" in content and "SERVICE_ROLE" in content)
+
+
+def test_chat_session_creation_failure_returns_500():
+    """Regression test: Session creation failure surfaces 500 and does not return fallback fake UUID."""
+    workspace_id = uuid4()
+    caller = CurrentUser(id=uuid4(), email="member@example.com")
+
+    db = MagicMock()
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+
+    cs_mock = MagicMock()
+    cs_mock.insert.return_value.execute.side_effect = Exception("Database connection failed")
+
+    def table_router(table_name: str):
+        if table_name == "workspace_members":
+            return wm_mock
+        if table_name == "chat_sessions":
+            return cs_mock
+        return MagicMock()
+
+    db.table.side_effect = table_router
+
+    app.dependency_overrides[get_current_user] = lambda: caller
+    try:
+        with patch("app.core.supabase.get_supabase_client", return_value=db), \
+             patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.chat.get_supabase_client", return_value=db):
+
+            res = client.post(
+                "/api/chat/sessions",
+                headers={"Authorization": "Bearer dev-token"},
+                json={
+                    "workspace_id": str(workspace_id),
+                    "title": "Should Fail"
+                }
+            )
+            assert res.status_code == 500
+            assert "database error" in res.json()["detail"].lower() or "failed" in res.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_chat_session_deletion_failure_returns_500():
+    """Regression test: Session deletion failure surfaces 500 instead of reporting 204 success."""
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    caller = CurrentUser(id=caller_id, email="member@example.com")
+    session_id = uuid4()
+
+    db = MagicMock()
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "member"}])
+
+    cs_mock = MagicMock()
+    cs_mock.select.return_value = cs_mock
+    cs_mock.eq.return_value = cs_mock
+    cs_mock.execute.return_value = MagicMock(data=[{
+        "id": str(session_id),
+        "workspace_id": str(workspace_id),
+        "user_id": str(caller_id)
+    }])
+    cs_mock.delete.return_value.eq.return_value.execute.side_effect = Exception("DB delete lock error")
+
+    def table_router(table_name: str):
+        if table_name == "workspace_members":
+            return wm_mock
+        if table_name == "chat_sessions":
+            return cs_mock
+        return MagicMock()
+
+    db.table.side_effect = table_router
+
+    app.dependency_overrides[get_current_user] = lambda: caller
+    try:
+        with patch("app.core.supabase.get_supabase_client", return_value=db), \
+             patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.chat.get_supabase_client", return_value=db):
+
+            res = client.delete(
+                f"/api/chat/sessions/{session_id}",
+                headers={"Authorization": "Bearer dev-token"}
+            )
+            assert res.status_code == 500
+            assert "database error" in res.json()["detail"].lower() or "failed" in res.json()["detail"].lower()
     finally:
         app.dependency_overrides.clear()
