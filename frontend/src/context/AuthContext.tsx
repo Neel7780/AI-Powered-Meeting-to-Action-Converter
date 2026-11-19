@@ -19,6 +19,7 @@ interface AuthContextType {
     displayName: string
   ) => Promise<void>;
   signOut: () => Promise<void>;
+  devSignIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -106,6 +107,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, []);
 
+  const devSignIn = () => {
+    const mockUser: User = {
+      id: "00000000-0000-0000-0000-000000000001",
+      app_metadata: {},
+      user_metadata: { full_name: "Developer Admin" },
+      aud: "authenticated",
+      created_at: new Date().toISOString(),
+      email: "dev@actionpulse.app",
+      role: "authenticated",
+      updated_at: new Date().toISOString(),
+    } as unknown as User;
+
+    const mockSession: Session = {
+      access_token: "dev-token-actionpulse",
+      token_type: "bearer",
+      expires_in: 86400,
+      refresh_token: "dev-refresh-token",
+      user: mockUser,
+      expires_at: Math.floor(Date.now() / 1000) + 86400,
+    };
+
+    localStorage.setItem("actionpulse_dev_session", JSON.stringify(mockSession));
+    setUser(mockUser);
+    setSession(mockSession);
+    setLoading(false);
+  };
+
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -164,6 +192,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         signIn,
         signUp,
         signOut,
+        devSignIn,
       }}
     >
       {children}
