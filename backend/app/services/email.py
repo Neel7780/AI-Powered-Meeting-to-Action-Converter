@@ -2,7 +2,7 @@
 
 Zero-Budget Tech Stack: Brevo free HTTPS API when BREVO_API_KEY is set (Render's
 free tier blocks outbound SMTP ports), else standard smtplib with TLS (port 587).
-No paid APIs (Resend, SendGrid, etc. are strictly forbidden).
+No paid commercial APIs or proprietary email SDKs are allowed.
 """
 from __future__ import annotations
 

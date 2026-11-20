@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   Calendar,
   CalendarCheck,
@@ -8,11 +8,8 @@ import {
   Clock,
   Download,
   ExternalLink,
-  Globe,
   LoaderCircle,
   Mail,
-  MapPin,
-  Sparkles,
   Users,
   Video,
   X,
@@ -21,7 +18,6 @@ import { Button } from '../ui/button';
 import { ParticipantPicker } from './ParticipantPicker';
 import { TimezoneSelector } from './TimezoneSelector';
 import { postApi } from '../../services/reviewApi';
-import type { WorkspaceMember } from '../../types/review';
 
 export interface ScheduledMeetingResult {
   id: string;
@@ -31,6 +27,8 @@ export interface ScheduledMeetingResult {
   duration_minutes: number;
   timezone: string;
   conference_url?: string | null;
+  description?: string | null;
+  ai_processing?: boolean;
   notifications_sent: number;
   notified_recipients: string[];
   google_calendar_url?: string | null;
@@ -178,8 +176,9 @@ export function ScheduleMeetingModal({
   const [description, setDescription] = useState('');
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [externals, setExternals] = useState<string[]>([]);
-  const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [notifyViaEmail, setNotifyViaEmail] = useState(true);
+  const [aiProcessing, setAiProcessing] = useState(true);
+  const [aiAttested, setAiAttested] = useState(true);
 
   // Status & outcome states
   const [busy, setBusy] = useState(false);
@@ -246,7 +245,7 @@ export function ScheduleMeetingModal({
     }
   }, [date, time, duration]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy) return;
     setError('');
@@ -258,6 +257,11 @@ export function ScheduleMeetingModal({
     }
     if (!workspaceId) {
       setError('Workspace is required to schedule a meeting.');
+      return;
+    }
+
+    if (aiProcessing && !aiAttested) {
+      setError('Please confirm that participants have been informed about AI processing.');
       return;
     }
 
@@ -284,6 +288,8 @@ export function ScheduleMeetingModal({
         conference_url: conferenceUrl.trim() || undefined,
         description: description.trim() || undefined,
         notify_via_email: notifyViaEmail,
+        ai_processing: aiProcessing,
+        ai_attestation: aiProcessing && aiAttested,
       };
 
       const result = (await postApi(
@@ -606,12 +612,50 @@ export function ScheduleMeetingModal({
                 onSelectedMemberIdsChange={setMemberIds}
                 externalParticipants={externals}
                 onExternalParticipantsChange={setExternals}
-                onMembersLoaded={setMembers}
               />
             </div>
           </details>
 
-          {/* 6. Email Notification Card */}
+          {/* 6. AI Processing & Participant Notice */}
+          <div className="rounded-xl border border-indigo-500/25 bg-indigo-950/20 p-4 space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={aiProcessing}
+                onChange={(e) => {
+                  setAiProcessing(e.target.checked);
+                  if (!e.target.checked) setAiAttested(false);
+                  else setAiAttested(true);
+                }}
+                className="mt-0.5 size-4 rounded border-indigo-500/50 bg-neutral-900 text-indigo-500 focus:ring-indigo-500/40"
+              />
+              <div className="space-y-1">
+                <span className="block text-sm font-semibold text-white">
+                  Enable AI action item extraction for this meeting
+                </span>
+                <span className="block text-xs text-neutral-400">
+                  Allows capturing live captions via the browser extension or uploading audio/transcripts for automatic task extraction.
+                </span>
+              </div>
+            </label>
+
+            {aiProcessing && (
+              <label className="flex items-start gap-3 cursor-pointer select-none pt-2 border-t border-white/5">
+                <input
+                  type="checkbox"
+                  required
+                  checked={aiAttested}
+                  onChange={(e) => setAiAttested(e.target.checked)}
+                  className="mt-0.5 size-4 rounded border-indigo-500/50 bg-neutral-900 text-indigo-500 focus:ring-indigo-500/40"
+                />
+                <span className="text-xs leading-5 text-neutral-300">
+                  I confirm that participants will be informed that meeting audio, transcript or captions will be processed by AI. Suggested tasks require organiser approval.
+                </span>
+              </label>
+            )}
+          </div>
+
+          {/* 7. Email Notification Card */}
           <div className="rounded-xl border border-cyan-500/30 bg-gradient-to-r from-cyan-950/30 via-indigo-950/20 to-neutral-900/50 p-4">
             <label className="flex items-start gap-3 cursor-pointer select-none">
               <input

@@ -42,6 +42,7 @@ export interface CalendarMeeting {
   title: string;
   starts_at: string;
   ends_at?: string | null;
+  duration_minutes?: number | null;
   timezone: string;
   organiser_id?: string;
   conference_url?: string | null;
@@ -155,9 +156,10 @@ const STATUS_BADGES: Record<string, string> = {
 /** Downloads an RFC 5545 .ics iCalendar file for Google Calendar, Apple Calendar, or Outlook */
 function exportMeetingToIcs(meeting: CalendarMeeting) {
   const start = new Date(meeting.starts_at);
+  const durationMin = meeting.duration_minutes || 30;
   const end = meeting.ends_at
     ? new Date(meeting.ends_at)
-    : new Date(start.getTime() + 45 * 60 * 1000);
+    : new Date(start.getTime() + durationMin * 60 * 1000);
 
   const formatDate = (date: Date) => {
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -281,7 +283,7 @@ export default function CalendarPage() {
         // 1. Fetch real meetings from Supabase for all user's workspaces
         const { data: dbMeetings, error: mtgErr } = await supabase
           .from('meetings')
-          .select('id, title, starts_at, timezone, organiser_id, conference_url, workspace_id, calendar_event_id, calendar_provider, created_at')
+          .select('id, title, starts_at, timezone, organiser_id, conference_url, workspace_id, calendar_event_id, calendar_provider, created_at, duration_minutes, description')
           .in('workspace_id', workspaceIds)
           .order('starts_at', { ascending: false });
 
@@ -302,13 +304,16 @@ export default function CalendarPage() {
           loadedMeetings = dbMeetings.map((m) => {
             const wsIdx = workspaceColorMap.get(m.workspace_id) ?? 0;
             const wsName = workspaceNameMap.get(m.workspace_id) || 'Workspace';
+            const durationMin = m.duration_minutes ?? 30;
             const startD = new Date(m.starts_at);
-            const endD = new Date(startD.getTime() + 45 * 60 * 1000);
+            const endD = new Date(startD.getTime() + durationMin * 60 * 1000);
             return {
               id: m.id,
               title: m.title,
               starts_at: m.starts_at,
               ends_at: endD.toISOString(),
+              duration_minutes: durationMin,
+              description: m.description,
               timezone: m.timezone || 'Asia/Kolkata',
               organiser_id: m.organiser_id,
               conference_url: m.conference_url,
@@ -1513,7 +1518,7 @@ export default function CalendarPage() {
                   })}
                 </span>
                 <div className="text-neutral-300 mt-0.5">
-                  {formatTime(activeMeeting.starts_at)} ({activeMeeting.timezone})
+                  {formatTime(activeMeeting.starts_at)} ({activeMeeting.timezone}){activeMeeting.duration_minutes ? ` • ${activeMeeting.duration_minutes}m` : ''}
                 </div>
               </div>
 
@@ -1605,7 +1610,7 @@ export default function CalendarPage() {
                   }
                 }}
                 className="text-xs border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
-                title="Send or resend email invitations with calendar .ics to all meeting participants"
+                title="Dispatch email invitations with calendar .ics to all meeting participants"
               >
                 <Mail className="size-3.5 text-cyan-400 mr-1.5" />
                 {sendingInvitesMeetingId === activeMeeting.id ? 'Sending invites...' : 'Send Email Invites'}

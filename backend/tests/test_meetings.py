@@ -163,13 +163,15 @@ def test_schedule_meeting_success():
         "workspace_id": str(workspace_id),
         "title": "Future Strategy Session",
         "starts_at": "2026-11-25T14:00:00Z",
+        "duration_minutes": 45,
         "timezone": "Asia/Kolkata",
         "organiser_id": str(caller_id),
-        "ai_processing": False,
+        "ai_processing": True,
         "visibility": "workspace",
         "status": "draft",
         "lifecycle": "active",
         "conference_url": "https://meet.google.com/abc-defg-hij",
+        "description": "Align on Q1 priorities and review roadmap",
         "created_at": "2026-11-20T00:00:00Z",
     }
     meetings_mock = MagicMock()
@@ -180,6 +182,10 @@ def test_schedule_meeting_success():
     mp_mock.insert.return_value = mp_mock
     mp_mock.execute.return_value = MagicMock(data=[])
 
+    consents_mock = MagicMock()
+    consents_mock.insert.return_value = consents_mock
+    consents_mock.execute.return_value = MagicMock(data=[])
+
     def table_router(name):
         if name == "workspace_members":
             return wm_mock
@@ -187,6 +193,8 @@ def test_schedule_meeting_success():
             return meetings_mock
         if name == "meeting_participants":
             return mp_mock
+        if name == "consents":
+            return consents_mock
         return MagicMock()
 
     db.table.side_effect = table_router
@@ -207,18 +215,199 @@ def test_schedule_meeting_success():
                 "conference_url": "https://meet.google.com/abc-defg-hij",
                 "description": "Align on Q1 priorities and review roadmap",
                 "notify_via_email": True,
+                "ai_processing": True,
+                "ai_attestation": True,
             }
             resp = client.post(f"/api/workspaces/{workspace_id}/meetings/schedule", json=payload)
             assert resp.status_code == 201
             data = resp.json()
             assert data["title"] == "Future Strategy Session"
             assert data["duration_minutes"] == 45
+            assert data["ai_processing"] is True
+            assert data["description"] == "Align on Q1 priorities and review roadmap"
             assert data["conference_url"] == "https://meet.google.com/abc-defg-hij"
             assert data["notifications_sent"] == 2
             assert "guest@example.com" in data["notified_recipients"]
             assert data["google_calendar_url"] is not None
             assert "calendar.google.com" in data["google_calendar_url"]
             assert mock_send_invites.called
+            assert consents_mock.insert.called
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_schedule_meeting_requires_attestation_when_ai_enabled():
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="admin@example.com")
+
+    db = MagicMock()
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.execute.return_value = MagicMock(data=[{"role": "admin"}])
+    db.table.return_value = wm_mock
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+
+            payload = {
+                "title": "Future Strategy Session",
+                "starts_at": "2026-11-25T14:00:00Z",
+                "timezone": "Asia/Kolkata",
+                "ai_processing": True,
+                "ai_attestation": False,
+            }
+            resp = client.post(f"/api/workspaces/{workspace_id}/meetings/schedule", json=payload)
+            assert resp.status_code == 422
+            assert "attestation required" in resp.json()["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_send_invites_reuses_persisted_duration_and_agenda():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    participant_id = uuid4()
+
+    mock_user = CurrentUser(id=caller_id, email="admin@example.com")
+
+    db = MagicMock()
+
+    meeting_record = {
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Product Roadmap Sync",
+        "starts_at": "2026-11-25T14:00:00Z",
+        "timezone": "Asia/Kolkata",
+        "duration_minutes": 45,
+        "description": "Review Q1 deliverables and milestones",
+        "organiser_id": str(caller_id),
+        "visibility": "workspace",
+        "conference_url": "https://meet.google.com/abc-defg-hij",
+    }
+
+    m_query = MagicMock()
+    m_query.select.return_value = m_query
+    m_query.eq.return_value = m_query
+    m_query.limit.return_value = m_query
+    m_query.execute.return_value = MagicMock(data=[meeting_record])
+
+    wm_query = MagicMock()
+    wm_query.select.return_value = wm_query
+    wm_query.eq.return_value = wm_query
+    wm_query.execute.return_value = MagicMock(data=[{"role": "organiser"}])
+
+    mp_query = MagicMock()
+    mp_query.select.return_value = mp_query
+    mp_query.eq.return_value = mp_query
+    mp_query.execute.return_value = MagicMock(data=[
+        {"user_id": str(participant_id), "external_name": None},
+        {"user_id": None, "external_name": "contractor@example.com"},
+    ])
+
+    def table_router(name):
+        if name == "meetings":
+            return m_query
+        if name == "workspace_members":
+            return wm_query
+        if name == "meeting_participants":
+            return mp_query
+        return MagicMock()
+
+    db.table.side_effect = table_router
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.send_meeting_schedule_invitations", return_value=(2, ["participant@example.com", "contractor@example.com"])) as mock_send_invites:
+
+            resp = client.post(f"/api/meetings/{meeting_id}/send-invites")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["meeting_id"] == str(meeting_id)
+            assert data["notifications_sent"] == 2
+            assert mock_send_invites.called
+
+            kwargs = mock_send_invites.call_args.kwargs
+            assert kwargs["duration_minutes"] == 45
+            assert kwargs["description"] == "Review Q1 deliverables and milestones"
+            assert kwargs["title"] == "Product Roadmap Sync"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_send_invites_blocks_private_meeting_for_unauthorized_user():
+    meeting_id = uuid4()
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    other_organiser_id = uuid4()
+
+    mock_user = CurrentUser(id=caller_id, email="other-organiser@example.com")
+
+    db = MagicMock()
+
+    meeting_record = {
+        "id": str(meeting_id),
+        "workspace_id": str(workspace_id),
+        "title": "Private 1-on-1",
+        "starts_at": "2026-11-25T14:00:00Z",
+        "timezone": "Asia/Kolkata",
+        "duration_minutes": 30,
+        "description": "Confidential discussion",
+        "organiser_id": str(other_organiser_id),
+        "visibility": "private",
+        "conference_url": None,
+    }
+
+    m_query = MagicMock()
+    m_query.select.return_value = m_query
+    m_query.eq.return_value = m_query
+    m_query.limit.return_value = m_query
+    m_query.execute.return_value = MagicMock(data=[meeting_record])
+
+    wm_query = MagicMock()
+    wm_query.select.return_value = wm_query
+    wm_query.eq.return_value = wm_query
+    wm_query.execute.return_value = MagicMock(data=[{"role": "organiser"}])
+
+    mp_query = MagicMock()
+    mp_query.select.return_value = mp_query
+    mp_query.eq.return_value = mp_query
+    mp_query.limit.return_value = mp_query
+    mp_query.execute.return_value = MagicMock(data=[])
+
+    ta_query = MagicMock()
+    ta_query.select.return_value = ta_query
+    ta_query.eq.return_value = ta_query
+    ta_query.limit.return_value = ta_query
+    ta_query.execute.return_value = MagicMock(data=[])
+
+    def table_router(name):
+        if name == "meetings":
+            return m_query
+        if name == "workspace_members":
+            return wm_query
+        if name == "meeting_participants":
+            return mp_query
+        if name == "task_assignees":
+            return ta_query
+        return MagicMock()
+
+    db.table.side_effect = table_router
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db):
+
+            resp = client.post(f"/api/meetings/{meeting_id}/send-invites")
+            assert resp.status_code == 404
+            assert resp.json()["detail"] == "Meeting not found"
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

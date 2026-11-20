@@ -126,6 +126,7 @@ def create_meeting(
         "workspace_id": str(workspace_id),
         "title": clean_title,
         "starts_at": payload.starts_at.isoformat(),
+        "duration_minutes": payload.duration_minutes or 30,
         "timezone": payload.timezone.strip(),
         "organiser_id": str(user.id),
         "ai_processing": payload.ai_processing,
@@ -135,6 +136,7 @@ def create_meeting(
         "calendar_event_id": payload.calendar_event_id,
         "calendar_provider": payload.calendar_provider,
         "conference_url": payload.conference_url,
+        "description": payload.description.strip() if payload.description else None,
     }
 
     try:
@@ -188,6 +190,22 @@ def create_meeting(
     return MeetingResponse(**created_meeting)
 
 
+def _check_private_meeting_access(db, meeting: dict, user: CurrentUser) -> None:
+    """Match the meeting SELECT policy for service-role reads."""
+    uid = str(user.id)
+    if meeting.get("visibility") != "private" or meeting["organiser_id"] == uid:
+        return
+    mid = str(meeting["id"])
+    participants = db.table("meeting_participants").select("id").eq("meeting_id", mid) \
+        .eq("user_id", uid).limit(1).execute()
+    if participants.data:
+        return
+    assignments = db.table("task_assignees").select("task_id, tasks!inner(meeting_id)") \
+        .eq("user_id", uid).eq("tasks.meeting_id", mid).limit(1).execute()
+    if not assignments.data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Meeting not found")
+
+
 @router.post(
     "/workspaces/{workspace_id}/meetings/schedule",
     response_model=ScheduleMeetingResponse,
@@ -222,6 +240,12 @@ def schedule_meeting(
             detail=f"Invalid timezone: '{payload.timezone}'"
         )
 
+    if payload.ai_processing and not payload.ai_attestation:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Consent attestation required when AI processing is enabled"
+        )
+
     client = get_supabase_client()
 
     # 3. Validate participant workspace membership
@@ -247,15 +271,17 @@ def schedule_meeting(
         "workspace_id": str(workspace_id),
         "title": clean_title,
         "starts_at": payload.starts_at.isoformat(),
+        "duration_minutes": payload.duration_minutes,
         "timezone": payload.timezone.strip(),
         "organiser_id": str(user.id),
-        "ai_processing": False,  # Scheduled future meetings start with ai_processing=False
+        "ai_processing": payload.ai_processing,
         "visibility": "workspace",
         "status": "draft",
         "lifecycle": "active",
         "calendar_event_id": payload.calendar_event_id,
         "calendar_provider": payload.calendar_provider,
         "conference_url": payload.conference_url.strip() if payload.conference_url else None,
+        "description": payload.description.strip() if payload.description else None,
     }
 
     try:
@@ -271,7 +297,7 @@ def schedule_meeting(
             detail=f"Failed to schedule meeting: {exc}"
         ) from exc
 
-    # 5. Insert participants
+    # 5. Insert participants & consent in transaction-like rollback boundary
     try:
         participant_rows = []
         for pid in payload.participant_user_ids:
@@ -283,15 +309,25 @@ def schedule_meeting(
 
         if participant_rows:
             client.table("meeting_participants").insert(participant_rows).execute()
+
+        # Insert consent row if AI processing is enabled
+        if payload.ai_processing and payload.ai_attestation:
+            consent_insert = {
+                "meeting_id": meeting_id,
+                "attested_by": str(user.id),
+                "notice_version": settings.AI_NOTICE_VERSION,
+                "status": "attested",
+            }
+            client.table("consents").insert(consent_insert).execute()
     except Exception as exc:
-        logger.error("Failed to insert meeting participants for %s: %s", meeting_id, exc)
+        logger.error("Failed to insert meeting participants or consent for %s: %s", meeting_id, exc)
         try:
             client.table("meetings").delete().eq("id", meeting_id).execute()
         except Exception:
             pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to record meeting participants: {exc}"
+            detail=f"Failed to record meeting participants or consent: {exc}"
         ) from exc
 
     # 6. Send email notifications if requested
@@ -330,14 +366,15 @@ def schedule_meeting(
         workspace_id=UUID(created_meeting["workspace_id"]),
         title=created_meeting["title"],
         starts_at=datetime.fromisoformat(created_meeting["starts_at"]),
-        duration_minutes=payload.duration_minutes,
+        duration_minutes=created_meeting.get("duration_minutes") or payload.duration_minutes,
         timezone=created_meeting["timezone"],
         organiser_id=UUID(created_meeting["organiser_id"]),
-        ai_processing=created_meeting.get("ai_processing", False),
+        ai_processing=created_meeting.get("ai_processing", payload.ai_processing),
         visibility=created_meeting.get("visibility", "workspace"),
         lifecycle=created_meeting.get("lifecycle", "active"),
         status=created_meeting.get("status", "draft"),
         conference_url=created_meeting.get("conference_url"),
+        description=created_meeting.get("description"),
         calendar_event_id=created_meeting.get("calendar_event_id"),
         calendar_provider=created_meeting.get("calendar_provider"),
         notifications_sent=sent_count,
@@ -350,17 +387,17 @@ def schedule_meeting(
 @router.post(
     "/meetings/{meeting_id}/send-invites",
     response_model=SendMeetingInvitesResponse,
-    summary="Send or resend email invitations to all participants of a meeting"
+    summary="Dispatch meeting invitations to all participants of a meeting"
 )
 def send_meeting_invites(
     meeting_id: UUID,
     user: CurrentUser = Depends(get_current_user)
 ) -> SendMeetingInvitesResponse:
-    """Send or re-send calendar invitation emails for an existing meeting."""
+    """Dispatch calendar invitation emails for an existing meeting."""
     client = get_supabase_client()
     m_resp = (
         client.table("meetings")
-        .select("id, title, starts_at, timezone, organiser_id, workspace_id, conference_url")
+        .select("id, title, starts_at, timezone, organiser_id, workspace_id, conference_url, visibility, duration_minutes, description")
         .eq("id", str(meeting_id))
         .limit(1)
         .execute()
@@ -371,6 +408,7 @@ def send_meeting_invites(
     meeting = m_resp.data[0]
     workspace_id = UUID(meeting["workspace_id"])
     require_role(workspace_id, ORGANISER_ROLES, user)
+    _check_private_meeting_access(client, meeting, user)
 
     # Fetch participants
     p_resp = (
@@ -383,15 +421,18 @@ def send_meeting_invites(
     external_parts = [row["external_name"] for row in (p_resp.data or []) if row.get("external_name")]
 
     starts_at_dt = datetime.fromisoformat(meeting["starts_at"])
+    duration_minutes = meeting.get("duration_minutes") or 30
+    description = meeting.get("description")
+
     sent_count, recipients = send_meeting_schedule_invitations(
         meeting_id=meeting_id,
         workspace_id=workspace_id,
         title=meeting["title"],
         starts_at_dt=starts_at_dt,
-        duration_minutes=30,
+        duration_minutes=duration_minutes,
         tz_name=meeting.get("timezone") or "Asia/Kolkata",
         conference_url=meeting.get("conference_url"),
-        description=None,
+        description=description,
         organiser_id=meeting.get("organiser_id"),
         participant_user_ids=part_user_ids,
         external_participants=external_parts,
@@ -592,22 +633,6 @@ def submit_transcript(
         segment_count=len(segments),
         word_count=word_count
     )
-
-
-def _check_private_meeting_access(db, meeting: dict, user: CurrentUser) -> None:
-    """Match the meeting SELECT policy for service-role reads."""
-    uid = str(user.id)
-    if meeting.get("visibility") != "private" or meeting["organiser_id"] == uid:
-        return
-    mid = str(meeting["id"])
-    participants = db.table("meeting_participants").select("id").eq("meeting_id", mid) \
-        .eq("user_id", uid).limit(1).execute()
-    if participants.data:
-        return
-    assignments = db.table("task_assignees").select("task_id, tasks!inner(meeting_id)") \
-        .eq("user_id", uid).eq("tasks.meeting_id", mid).limit(1).execute()
-    if not assignments.data:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Meeting not found")
 
 
 @router.get(
@@ -897,6 +922,8 @@ def get_meeting(
         created_at=datetime.fromisoformat(meeting["created_at"]),
         organiser_id=UUID(meeting["organiser_id"]),
         conference_url=meeting.get("conference_url"),
+        duration_minutes=meeting.get("duration_minutes") or 30,
+        description=meeting.get("description"),
         participants=participants,
         transcript_id=transcript_id,
     )

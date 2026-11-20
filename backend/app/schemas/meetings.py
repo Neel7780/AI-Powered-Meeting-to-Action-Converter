@@ -22,6 +22,8 @@ class CreateMeetingRequest(BaseModel):
     calendar_event_id: str | None = Field(default=None, description="External calendar event ID if linked")
     calendar_provider: str | None = Field(default=None, description="Calendar provider name, e.g. 'google'")
     conference_url: str | None = Field(default=None, description="External video conference URL")
+    duration_minutes: int | None = Field(default=30, ge=5, le=1440, description="Meeting duration in minutes")
+    description: str | None = Field(default=None, max_length=5000, description="Meeting agenda or description")
 
 
 class ScheduleMeetingRequest(BaseModel):
@@ -38,6 +40,10 @@ class ScheduleMeetingRequest(BaseModel):
     conference_url: str | None = Field(default=None, description="External video conference URL or location")
     description: str | None = Field(default=None, max_length=5000, description="Meeting agenda, goals, or description")
     notify_via_email: bool = Field(default=True, description="Whether to notify all participants via email")
+    ai_processing: bool = Field(default=True, description="Whether AI processing is requested")
+    ai_attestation: bool = Field(
+        default=False, description="Consent attestation required when AI processing is enabled"
+    )
     calendar_event_id: str | None = Field(default=None, description="External calendar event ID if linked")
     calendar_provider: str | None = Field(default=None, description="Calendar provider name, e.g. 'google'")
 
@@ -55,6 +61,7 @@ class ScheduleMeetingResponse(BaseModel):
     lifecycle: str = "active"
     status: str = "draft"
     conference_url: str | None = None
+    description: str | None = None
     calendar_event_id: str | None = None
     calendar_provider: str | None = None
     notifications_sent: int = 0
@@ -84,6 +91,8 @@ class MeetingResponse(BaseModel):
     calendar_event_id: str | None = None
     calendar_provider: str | None = None
     conference_url: str | None = None
+    duration_minutes: int | None = 30
+    description: str | None = None
     created_at: datetime
 
 
@@ -190,6 +199,8 @@ class MeetingDetail(BaseModel):
     created_at: datetime
     organiser_id: UUID
     conference_url: Optional[str] = None
+    duration_minutes: Optional[int] = 30
+    description: Optional[str] = None
     participants: List[ParticipantOut] = Field(default_factory=list)
     transcript_id: Optional[UUID] = None
 
