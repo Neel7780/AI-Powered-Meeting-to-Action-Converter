@@ -19,7 +19,7 @@ class DiffTaskSchema(BaseModel):
     assignee_name: str | None = None
     execution_type: str | None = None
     source_excerpt: str | None = None
-    meeting_id: UUID
+    meeting_id: UUID | None = None
     meeting_title: str | None = None
     spillover_count: int = 0
 

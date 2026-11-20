@@ -8,10 +8,16 @@ interface ChronicSpilloverAlertProps {
 }
 
 export const ChronicSpilloverAlert: React.FC<ChronicSpilloverAlertProps> = ({ tasks }) => {
-  if (!tasks || tasks.length === 0) return null;
+  if (!tasks || tasks.length === 0) {
+    return (
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-8 text-center text-xs text-neutral-400">
+        No chronic bottlenecks detected. All tasks are progressing smoothly within normal sprint cycles!
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-xl border border-red-500/20 bg-red-950/[0.08] p-5 backdrop-blur-sm space-y-3">
+    <div className="rounded-xl border border-red-500/20 bg-red-950/[0.06] p-4.5 space-y-3">
       <div className="flex items-center gap-2">
         <div className="flex size-7 items-center justify-center rounded-lg bg-red-500/15 text-red-400">
           <AlertCircle className="size-4" />
@@ -30,7 +36,7 @@ export const ChronicSpilloverAlert: React.FC<ChronicSpilloverAlertProps> = ({ ta
         {tasks.map((task) => (
           <div
             key={task.id}
-            className="rounded-lg border border-red-500/20 bg-black/50 p-3.5 flex flex-col justify-between"
+            className="rounded-lg border border-red-500/20 bg-black/40 p-3.5 flex flex-col justify-between"
           >
             <div>
               <div className="flex items-center justify-between gap-2 mb-1.5">

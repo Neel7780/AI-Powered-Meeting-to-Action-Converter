@@ -8,7 +8,11 @@ interface VelocityTrendChartProps {
 
 export const VelocityTrendChart: React.FC<VelocityTrendChartProps> = ({ trendHistory }) => {
   if (!trendHistory || trendHistory.length === 0) {
-    return null;
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center text-xs text-neutral-400">
+        No velocity trend data available yet. Record at least 1 meeting to view delivery throughput and carryover burnup.
+      </div>
+    );
   }
 
   // Find max tasks count to normalize bar heights
