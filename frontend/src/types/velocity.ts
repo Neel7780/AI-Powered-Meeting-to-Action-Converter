@@ -16,7 +16,7 @@ export interface DiffTaskItem {
   assignee_avatar?: string | null;
   execution_type?: 'human' | 'agent';
   source_excerpt?: string;
-  meeting_id: string;
+  meeting_id?: string | null;
   meeting_title?: string;
   spillover_count?: number; // How many meetings this task has rolled over
 }

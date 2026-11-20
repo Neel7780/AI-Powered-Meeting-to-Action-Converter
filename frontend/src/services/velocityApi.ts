@@ -8,6 +8,21 @@ import type {
   DiffTaskItem,
 } from '../types/velocity';
 
+export const EMPTY_VELOCITY_DATA: SprintVelocityData = {
+  workspace_id: '',
+  available_meetings: [],
+  selected_diff: null,
+  trend_history: [],
+  chronic_spillovers: [],
+  kpis: {
+    average_velocity: 0,
+    overall_spillover_rate: 0,
+    total_meetings_analyzed: 0,
+    total_completed_tasks: 0,
+    avg_turnaround_days: 0,
+  },
+};
+
 // Sample demonstration dataset for zero-configuration presentation & empty workspace testing
 export const DEMO_VELOCITY_DATA: SprintVelocityData = {
   workspace_id: 'demo-workspace',
@@ -275,6 +290,10 @@ export async function fetchSprintVelocity(
   baseMeetingId?: string,
   currentMeetingId?: string
 ): Promise<SprintVelocityData> {
+  if (!workspaceId) {
+    return { ...EMPTY_VELOCITY_DATA };
+  }
+
   // 1. Try privileged FastAPI backend endpoint first
   try {
     const params = new URLSearchParams();
@@ -283,14 +302,14 @@ export async function fetchSprintVelocity(
     const qs = params.toString() ? `?${params.toString()}` : '';
 
     const backendData = await requestApi<SprintVelocityData>(`/api/workspaces/${workspaceId}/velocity${qs}`);
-    if (backendData && backendData.available_meetings && backendData.available_meetings.length > 0) {
+    if (backendData && Array.isArray(backendData.available_meetings)) {
       return backendData;
     }
   } catch (backendErr) {
     console.warn('Backend velocity endpoint not reachable, attempting direct Supabase query:', backendErr);
   }
 
-  // 2. Client-side fallback via Supabase
+  // 2. Client-side fallback via Supabase (Real workspace data)
   try {
     // 1. Fetch all meetings in workspace ordered chronologically ascending
     const { data: meetingsData, error: meetingsError } = await supabase
@@ -300,8 +319,10 @@ export async function fetchSprintVelocity(
       .order('starts_at', { ascending: true });
 
     if (meetingsError || !meetingsData || meetingsData.length === 0) {
-      console.warn('No meetings found in workspace, using demo velocity data:', meetingsError?.message);
-      return DEMO_VELOCITY_DATA;
+      return {
+        ...EMPTY_VELOCITY_DATA,
+        workspace_id: workspaceId,
+      };
     }
 
     // 2. Fetch all tasks in workspace
@@ -494,8 +515,11 @@ export async function fetchSprintVelocity(
       },
     };
   } catch (err) {
-    console.error('Error fetching velocity data, returning fallback:', err);
-    return DEMO_VELOCITY_DATA;
+    console.error('Error fetching velocity data:', err);
+    return {
+      ...EMPTY_VELOCITY_DATA,
+      workspace_id: workspaceId,
+    };
   }
 }
 
