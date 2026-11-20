@@ -141,6 +141,88 @@ def test_create_meeting_success():
         app.dependency_overrides.pop(get_current_user, None)
 
 
+def test_schedule_meeting_success():
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    participant_id = uuid4()
+
+    mock_user = CurrentUser(id=caller_id, email="admin@example.com")
+
+    db = MagicMock()
+    wm_mock = MagicMock()
+    wm_mock.select.return_value = wm_mock
+    wm_mock.eq.return_value = wm_mock
+    wm_mock.in_.return_value = wm_mock
+    wm_mock.execute.side_effect = [
+        MagicMock(data=[{"role": "admin"}]),
+        MagicMock(data=[{"user_id": str(participant_id)}]),
+    ]
+
+    meeting_record = {
+        "id": str(uuid4()),
+        "workspace_id": str(workspace_id),
+        "title": "Future Strategy Session",
+        "starts_at": "2026-11-25T14:00:00Z",
+        "timezone": "Asia/Kolkata",
+        "organiser_id": str(caller_id),
+        "ai_processing": False,
+        "visibility": "workspace",
+        "status": "draft",
+        "lifecycle": "active",
+        "conference_url": "https://meet.google.com/abc-defg-hij",
+        "created_at": "2026-11-20T00:00:00Z",
+    }
+    meetings_mock = MagicMock()
+    meetings_mock.insert.return_value = meetings_mock
+    meetings_mock.execute.return_value = MagicMock(data=[meeting_record])
+
+    mp_mock = MagicMock()
+    mp_mock.insert.return_value = mp_mock
+    mp_mock.execute.return_value = MagicMock(data=[])
+
+    def table_router(name):
+        if name == "workspace_members":
+            return wm_mock
+        if name == "meetings":
+            return meetings_mock
+        if name == "meeting_participants":
+            return mp_mock
+        return MagicMock()
+
+    db.table.side_effect = table_router
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        with patch("app.core.deps.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.get_supabase_client", return_value=db), \
+             patch("app.api.meetings.send_meeting_schedule_invitations", return_value=(2, ["admin@example.com", "guest@example.com"])) as mock_send_invites:
+
+            payload = {
+                "title": "Future Strategy Session",
+                "starts_at": "2026-11-25T14:00:00Z",
+                "duration_minutes": 45,
+                "timezone": "Asia/Kolkata",
+                "participant_user_ids": [str(participant_id)],
+                "external_participants": ["guest@example.com"],
+                "conference_url": "https://meet.google.com/abc-defg-hij",
+                "description": "Align on Q1 priorities and review roadmap",
+                "notify_via_email": True,
+            }
+            resp = client.post(f"/api/workspaces/{workspace_id}/meetings/schedule", json=payload)
+            assert resp.status_code == 201
+            data = resp.json()
+            assert data["title"] == "Future Strategy Session"
+            assert data["duration_minutes"] == 45
+            assert data["conference_url"] == "https://meet.google.com/abc-defg-hij"
+            assert data["notifications_sent"] == 2
+            assert "guest@example.com" in data["notified_recipients"]
+            assert data["google_calendar_url"] is not None
+            assert "calendar.google.com" in data["google_calendar_url"]
+            assert mock_send_invites.called
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_create_meeting_requires_attestation():
     workspace_id = uuid4()
     caller_id = uuid4()

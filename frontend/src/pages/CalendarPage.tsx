@@ -19,12 +19,16 @@ import {
   CalendarCheck2,
   CheckSquare2,
   Loader2,
+  Mail,
+  Upload,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Button } from '../components/ui/button';
 import { CreateMeetingModal } from '../components/meetings/CreateMeetingModal';
+import { ScheduleMeetingModal } from '../components/meetings/ScheduleMeetingModal';
 import { FollowUpModal } from '../components/meetings/FollowUpModal';
+import { postApi } from '../services/reviewApi';
 import {
   getCalendarStatus,
   getCalendarConnectUrl,
@@ -223,10 +227,23 @@ export default function CalendarPage() {
   const [activeGCalEvent, setActiveGCalEvent] = useState<CalendarEventItem | null>(null);
 
   // Scheduling modals
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleInitialDate, setScheduleInitialDate] = useState<string | undefined>(undefined);
+  const [scheduleInitialTitle, setScheduleInitialTitle] = useState<string | undefined>(undefined);
+  const [scheduleInitialUrl, setScheduleInitialUrl] = useState<string | undefined>(undefined);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createInitialDate, setCreateInitialDate] = useState<string | undefined>(undefined);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [followUpMeeting, setFollowUpMeeting] = useState<{ id: string; title: string } | null>(null);
+  const [sendingInvitesMeetingId, setSendingInvitesMeetingId] = useState<string | null>(null);
+  const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
+
+  const handleOpenSchedule = (dateStr?: string, title?: string, confUrl?: string) => {
+    setScheduleInitialDate(dateStr);
+    setScheduleInitialTitle(title);
+    setScheduleInitialUrl(confUrl);
+    setShowScheduleModal(true);
+  };
 
   // Google Calendar Integration state
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
@@ -505,8 +522,7 @@ export default function CalendarPage() {
   const handleDateCellClick = (date: Date) => {
     const pad = (n: number) => n.toString().padStart(2, '0');
     const isoString = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T10:00`;
-    setCreateInitialDate(isoString);
-    setShowCreateModal(true);
+    handleOpenSchedule(isoString);
   };
 
   // Month header text
@@ -703,14 +719,25 @@ export default function CalendarPage() {
 
           {/* Schedule Meeting button */}
           <Button
-            onClick={() => {
-              setCreateInitialDate(undefined);
-              setShowCreateModal(true);
-            }}
+            onClick={() => handleOpenSchedule()}
             className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs px-4 py-2 rounded-lg shadow-sm"
           >
             <Plus className="size-4" />
             Schedule Meeting
+          </Button>
+
+          {/* Import / Transcribe Past Meeting */}
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCreateInitialDate(undefined);
+              setShowCreateModal(true);
+            }}
+            className="inline-flex items-center gap-1.5 border-white/15 bg-white/5 text-neutral-300 hover:bg-white/10 hover:text-white text-xs px-3 py-2 rounded-lg"
+            title="Upload notes or recording from a past meeting"
+          >
+            <Upload className="size-3.5 text-neutral-400" />
+            <span className="hidden sm:inline">Import Past Meeting</span>
           </Button>
         </div>
       </div>
@@ -1229,10 +1256,7 @@ export default function CalendarPage() {
               </p>
               <div className="mt-4 flex items-center justify-center gap-3">
                 <Button
-                  onClick={() => {
-                    setCreateInitialDate(undefined);
-                    setShowCreateModal(true);
-                  }}
+                  onClick={() => handleOpenSchedule()}
                   className="text-xs bg-cyan-600 hover:bg-cyan-500 text-white"
                 >
                   <Plus className="size-3.5 mr-1" /> Schedule Meeting
@@ -1555,7 +1579,38 @@ export default function CalendarPage() {
             </div>
 
             {/* Modal Footer Controls */}
+            {inviteFeedback && (
+              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200 flex items-center justify-between">
+                <span>{inviteFeedback}</span>
+                <button type="button" onClick={() => setInviteFeedback(null)} className="text-cyan-400 hover:text-white">
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2">
+              <Button
+                variant="outline"
+                disabled={sendingInvitesMeetingId === activeMeeting.id}
+                onClick={async () => {
+                  setSendingInvitesMeetingId(activeMeeting.id);
+                  setInviteFeedback(null);
+                  try {
+                    const res = await postApi(`/api/meetings/${activeMeeting.id}/send-invites`, {});
+                    setInviteFeedback(res.message || 'Invitations dispatched via email!');
+                  } catch (err: any) {
+                    setInviteFeedback(`Failed: ${err.message || 'Server error'}`);
+                  } finally {
+                    setSendingInvitesMeetingId(null);
+                  }
+                }}
+                className="text-xs border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
+                title="Send or resend email invitations with calendar .ics to all meeting participants"
+              >
+                <Mail className="size-3.5 text-cyan-400 mr-1.5" />
+                {sendingInvitesMeetingId === activeMeeting.id ? 'Sending invites...' : 'Send Email Invites'}
+              </Button>
+
               <Button
                 variant="outline"
                 onClick={() => {
@@ -1734,7 +1789,10 @@ export default function CalendarPage() {
                 onClick={() => {
                   const ev = activeGCalEvent;
                   setActiveGCalEvent(null);
-                  handleDateCellClick(new Date(ev.starts_at));
+                  const pad = (n: number) => n.toString().padStart(2, '0');
+                  const d = new Date(ev.starts_at);
+                  const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                  handleOpenSchedule(iso, ev.title, ev.conference_url || undefined);
                 }}
                 className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white gap-1.5"
               >
@@ -1745,7 +1803,22 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* 8. CREATE MEETING MODAL */}
+      {/* 8. SCHEDULE MEETING MODAL */}
+      {showScheduleModal && currentWorkspace && (
+        <ScheduleMeetingModal
+          isOpen={showScheduleModal}
+          onClose={() => setShowScheduleModal(false)}
+          workspaceId={currentWorkspace.id}
+          initialDate={scheduleInitialDate}
+          initialTitle={scheduleInitialTitle}
+          initialConferenceUrl={scheduleInitialUrl}
+          onMeetingScheduled={() => {
+            fetchAllWorkspaceData();
+          }}
+        />
+      )}
+
+      {/* 9. CREATE MEETING MODAL */}
       {showCreateModal && currentWorkspace && (
         <CreateMeetingModal
           isOpen={showCreateModal}

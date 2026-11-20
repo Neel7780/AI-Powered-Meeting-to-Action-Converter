@@ -24,6 +24,53 @@ class CreateMeetingRequest(BaseModel):
     conference_url: str | None = Field(default=None, description="External video conference URL")
 
 
+class ScheduleMeetingRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=300, description="Meeting title (1-300 characters)")
+    starts_at: datetime = Field(..., description="Scheduled start time in ISO 8601 format")
+    duration_minutes: int = Field(default=30, ge=5, le=1440, description="Meeting duration in minutes (5 to 1440)")
+    timezone: str = Field(default="Asia/Kolkata", description="IANA timezone name, e.g. Asia/Kolkata")
+    participant_user_ids: list[UUID] = Field(
+        default_factory=list, description="UUIDs of workspace members participating"
+    )
+    external_participants: list[str] = Field(
+        default_factory=list, description="Email addresses or names of external participants"
+    )
+    conference_url: str | None = Field(default=None, description="External video conference URL or location")
+    description: str | None = Field(default=None, max_length=5000, description="Meeting agenda, goals, or description")
+    notify_via_email: bool = Field(default=True, description="Whether to notify all participants via email")
+    calendar_event_id: str | None = Field(default=None, description="External calendar event ID if linked")
+    calendar_provider: str | None = Field(default=None, description="Calendar provider name, e.g. 'google'")
+
+
+class ScheduleMeetingResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    title: str
+    starts_at: datetime
+    duration_minutes: int = 30
+    timezone: str
+    organiser_id: UUID
+    ai_processing: bool = False
+    visibility: str = "workspace"
+    lifecycle: str = "active"
+    status: str = "draft"
+    conference_url: str | None = None
+    calendar_event_id: str | None = None
+    calendar_provider: str | None = None
+    notifications_sent: int = 0
+    notified_recipients: list[str] = Field(default_factory=list)
+    google_calendar_url: str | None = None
+    created_at: datetime
+
+
+class SendMeetingInvitesResponse(BaseModel):
+    meeting_id: UUID
+    title: str
+    notifications_sent: int
+    recipients: list[str]
+    message: str
+
+
 class MeetingResponse(BaseModel):
     id: UUID
     workspace_id: UUID

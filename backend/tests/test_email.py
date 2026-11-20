@@ -609,3 +609,115 @@ class TestMeetingRemindersAndNudges:
         assert stats["pre_meeting_reminders_sent"] == 3
         assert stats["post_meeting_nudges_sent"] == 1
         assert stats["deadline_24h_reminders_sent"] == 2
+
+
+class TestScheduledMeetingInvitations:
+    """Unit tests for meeting schedule invitations and ICS generation."""
+
+    def test_generate_ics_content(self):
+        from app.services.email import generate_ics_calendar_content
+        from datetime import datetime, timezone
+
+        meeting_id = uuid4()
+        starts_at = datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc)
+        ics = generate_ics_calendar_content(
+            meeting_id=meeting_id,
+            title="Sprint Planning & Review",
+            starts_at_dt=starts_at,
+            duration_minutes=45,
+            tz_name="Asia/Kolkata",
+            organiser_name="John Leader",
+            organiser_email="john@example.com",
+            conference_url="https://meet.google.com/xyz-abcd-efg",
+            description="Discuss Q1 goals and assign sprint tasks.",
+        )
+        assert "BEGIN:VCALENDAR" in ics
+        assert "SUMMARY:Sprint Planning & Review" in ics
+        assert f"UID:meeting-{meeting_id}@actionpulse.app" in ics
+        assert "ORGANIZER;CN=\"John Leader\":mailto:john@example.com" in ics
+        assert "LOCATION:https://meet.google.com/xyz-abcd-efg" in ics
+        assert "END:VCALENDAR" in ics
+
+    def test_generate_google_calendar_url(self):
+        from app.services.email import generate_google_calendar_url
+        from datetime import datetime, timezone
+
+        starts_at = datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc)
+        url = generate_google_calendar_url(
+            title="Sprint Review",
+            starts_at_dt=starts_at,
+            duration_minutes=30,
+            tz_name="Asia/Kolkata",
+            conference_url="https://meet.google.com/xyz-abcd-efg",
+        )
+        assert "https://calendar.google.com/calendar/render?action=TEMPLATE" in url
+        assert "Sprint%20Review" in url
+        assert "https%3A//meet.google.com/xyz-abcd-efg" in url
+
+    @patch("app.services.email.send_email")
+    def test_send_meeting_schedule_invitations(self, mock_send):
+        from app.services.email import send_meeting_schedule_invitations
+        from datetime import datetime, timezone
+
+        meeting_id = uuid4()
+        workspace_id = uuid4()
+        user_id = uuid4()
+        starts_at = datetime(2026, 11, 25, 10, 0, tzinfo=timezone.utc)
+
+        db = MagicMock()
+        prof_mock = MagicMock()
+        prof_mock.select.return_value = prof_mock
+        prof_mock.in_.return_value = prof_mock
+        prof_mock.eq.return_value = prof_mock
+        prof_mock.limit.return_value = prof_mock
+        prof_mock.execute.side_effect = [
+            # Organiser lookup
+            MagicMock(data=[{"display_name": "Organiser Alice", "email": "alice@example.com"}]),
+            # Workspace members lookup
+            MagicMock(data=[{"id": str(user_id), "email": "member@example.com", "display_name": "Bob Member", "timezone": "Asia/Kolkata"}]),
+        ]
+
+        ws_mock = MagicMock()
+        ws_mock.select.return_value = ws_mock
+        ws_mock.eq.return_value = ws_mock
+        ws_mock.limit.return_value = ws_mock
+        ws_mock.execute.return_value = MagicMock(data=[{"name": "Engineering Team"}])
+
+        notif_mock = MagicMock()
+        notif_mock.insert.return_value = notif_mock
+        notif_mock.execute.return_value = MagicMock(data=[])
+
+        def table_router(name):
+            if name == "profiles":
+                return prof_mock
+            if name == "workspaces":
+                return ws_mock
+            if name == "notifications":
+                return notif_mock
+            return MagicMock()
+
+        db.table.side_effect = table_router
+
+        with patch("app.services.email.get_supabase_client", return_value=db):
+            sent_count, recipients = send_meeting_schedule_invitations(
+                meeting_id=meeting_id,
+                workspace_id=workspace_id,
+                title="Q1 Roadmapping",
+                starts_at_dt=starts_at,
+                duration_minutes=60,
+                tz_name="Asia/Kolkata",
+                conference_url="https://meet.google.com/xyz",
+                description="Quarterly planning",
+                organiser_id=uuid4(),
+                participant_user_ids=[user_id],
+                external_participants=["client@external.com"],
+            )
+
+        assert sent_count == 2
+        assert "member@example.com" in recipients
+        assert "client@external.com" in recipients
+        assert mock_send.call_count == 2
+        # Check that invite.ics was attached
+        call_kwargs = mock_send.call_args_list[0].kwargs
+        assert "attachments" in call_kwargs
+        assert call_kwargs["attachments"][0]["filename"] == "invite.ics"

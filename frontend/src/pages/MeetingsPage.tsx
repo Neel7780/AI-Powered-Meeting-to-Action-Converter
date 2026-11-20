@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CalendarDays, Plus, Search } from 'lucide-react';
+import { CalendarDays, CalendarPlus, Plus, Search } from 'lucide-react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { canOrganise } from '../lib/workspaceRoles';
 import { loadMeetingList, meetingSources, needsAttention, type MeetingListEntry } from '../services/meetingNavigation';
 import { supabase } from '../lib/supabase';
 import { CreateMeetingModal } from '../components/meetings/CreateMeetingModal';
+import { ScheduleMeetingModal } from '../components/meetings/ScheduleMeetingModal';
 import { MeetingRow } from '../components/meetings/MeetingRow';
 import { Button } from '../components/ui/button';
 
@@ -40,6 +41,7 @@ export default function MeetingsPage() {
   const view = params.get('view') || 'attention';
   const source = meetingSources.find((option) => option === params.get('source'));
   const [query, setQuery] = useState(() => params.get('q') || '');
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const updateFilter = (key: string, value: string) => setParams((current) => {
     const next = new URLSearchParams(current);
     if (value) next.set(key, value);
@@ -118,7 +120,23 @@ export default function MeetingsPage() {
     <div className="mx-auto max-w-6xl space-y-5 p-4 sm:p-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight text-white">Meetings</h1>
-        {canManage && workspaceId && <Button onClick={create}><Plus /> New meeting</Button>}
+        {canManage && workspaceId && (
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setShowScheduleModal(true)}
+              className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs gap-1.5"
+            >
+              <CalendarPlus className="size-4" /> Schedule meeting
+            </Button>
+            <Button
+              variant="outline"
+              onClick={create}
+              className="border-white/15 bg-white/5 text-neutral-300 hover:bg-white/10 hover:text-white text-xs gap-1.5"
+            >
+              <Plus className="size-4" /> Import / Transcribe
+            </Button>
+          </div>
+        )}
       </header>
 
       {workspaceId && (
@@ -159,10 +177,30 @@ export default function MeetingsPage() {
             <h2 className="font-medium text-white">{meetings.length ? (view === 'attention' && params.size <= 1 ? 'No meetings need attention' : 'No matching meetings') : 'No meetings yet'}</h2>
             <div className="mt-4 flex flex-wrap justify-center gap-2">
               {meetings.length > 0 && <Button variant="outline" onClick={() => { setQuery(''); setParams({ view: 'all' }); }}>View all meetings</Button>}
-              {!meetings.length && canManage && <Button onClick={create}><Plus /> New meeting</Button>}
+              {!meetings.length && canManage && (
+                <>
+                  <Button onClick={() => setShowScheduleModal(true)} className="bg-cyan-600 hover:bg-cyan-500 text-white gap-1.5">
+                    <CalendarPlus className="size-4" /> Schedule meeting
+                  </Button>
+                  <Button variant="outline" onClick={create} className="gap-1.5">
+                    <Plus className="size-4" /> Import / Transcribe
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         ))}
+
+      {workspaceId && canManage && (
+        <ScheduleMeetingModal
+          workspaceId={workspaceId}
+          isOpen={showScheduleModal}
+          onClose={() => setShowScheduleModal(false)}
+          onMeetingScheduled={() => {
+            void reload();
+          }}
+        />
+      )}
 
       {workspaceId && canManage && <CreateMeetingModal workspaceId={workspaceId} isOpen={params.get('create') === '1'} onClose={closeCreator}
         onMeetingCreated={(meeting) => navigate(`/meetings/${meeting.id}?tab=overview`)} />}

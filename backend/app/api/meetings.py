@@ -30,6 +30,9 @@ from app.schemas.meetings import (
     ParticipantOut,
     WorkspaceStatsResponse,
     CreateMeetingRequest,
+    ScheduleMeetingRequest,
+    ScheduleMeetingResponse,
+    SendMeetingInvitesResponse,
     MeetingChaptersResponse,
     MeetingChapterItem,
     MeetingResponse,
@@ -38,6 +41,10 @@ from app.schemas.meetings import (
     SummaryDecisionItem,
     SummaryDiscussionPointItem,
     TranscriptUploadResponse,
+)
+from app.services.email import (
+    generate_google_calendar_url,
+    send_meeting_schedule_invitations,
 )
 from app.services.llm.summary_service import (
     generate_meeting_chapters,
@@ -179,6 +186,224 @@ def create_meeting(
         ) from exc
 
     return MeetingResponse(**created_meeting)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/meetings/schedule",
+    response_model=ScheduleMeetingResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Schedule a future meeting, add participants, and notify everyone via email"
+)
+def schedule_meeting(
+    workspace_id: UUID,
+    payload: ScheduleMeetingRequest,
+    user: CurrentUser = Depends(get_current_user)
+) -> ScheduleMeetingResponse:
+    """Schedule a future meeting in the calendar and dispatch email invitations.
+    
+    Allowed roles: admin, organiser, owner.
+    Inserts into meetings and meeting_participants, generates calendar .ics data,
+    and sends email notifications with 1-click Google Calendar add links and .ics attachments.
+    """
+    # 1. Enforce RBAC
+    require_role(workspace_id, ORGANISER_ROLES, user)
+
+    # 2. Validate input
+    clean_title = payload.title.strip()
+    if not (1 <= len(clean_title) <= 300):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Meeting title must be between 1 and 300 characters"
+        )
+
+    if not is_valid_timezone(payload.timezone):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid timezone: '{payload.timezone}'"
+        )
+
+    client = get_supabase_client()
+
+    # 3. Validate participant workspace membership
+    if payload.participant_user_ids:
+        candidate_ids = [str(pid) for pid in payload.participant_user_ids]
+        members_resp = (
+            client.table("workspace_members")
+            .select("user_id")
+            .eq("workspace_id", str(workspace_id))
+            .in_("user_id", candidate_ids)
+            .execute()
+        )
+        active_member_ids = {m["user_id"] for m in (members_resp.data or [])}
+        for cid in candidate_ids:
+            if cid not in active_member_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Participant {cid} is not a member of this workspace"
+                )
+
+    # 4. Insert meeting row
+    meeting_insert = {
+        "workspace_id": str(workspace_id),
+        "title": clean_title,
+        "starts_at": payload.starts_at.isoformat(),
+        "timezone": payload.timezone.strip(),
+        "organiser_id": str(user.id),
+        "ai_processing": False,  # Scheduled future meetings start with ai_processing=False
+        "visibility": "workspace",
+        "status": "draft",
+        "lifecycle": "active",
+        "calendar_event_id": payload.calendar_event_id,
+        "calendar_provider": payload.calendar_provider,
+        "conference_url": payload.conference_url.strip() if payload.conference_url else None,
+    }
+
+    try:
+        m_resp = client.table("meetings").insert(meeting_insert).execute()
+        if not m_resp.data:
+            raise RuntimeError("Database returned empty record on meeting insertion")
+        created_meeting = m_resp.data[0]
+        meeting_id = created_meeting["id"]
+    except Exception as exc:
+        logger.error("Failed to insert scheduled meeting: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to schedule meeting: {exc}"
+        ) from exc
+
+    # 5. Insert participants
+    try:
+        participant_rows = []
+        for pid in payload.participant_user_ids:
+            participant_rows.append({"meeting_id": meeting_id, "user_id": str(pid)})
+        for ext_name in payload.external_participants:
+            cleaned_ext = ext_name.strip()
+            if cleaned_ext:
+                participant_rows.append({"meeting_id": meeting_id, "external_name": cleaned_ext})
+
+        if participant_rows:
+            client.table("meeting_participants").insert(participant_rows).execute()
+    except Exception as exc:
+        logger.error("Failed to insert meeting participants for %s: %s", meeting_id, exc)
+        try:
+            client.table("meetings").delete().eq("id", meeting_id).execute()
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to record meeting participants: {exc}"
+        ) from exc
+
+    # 6. Send email notifications if requested
+    sent_count = 0
+    notified_recipients: list[str] = []
+    if payload.notify_via_email:
+        try:
+            sent_count, notified_recipients = send_meeting_schedule_invitations(
+                meeting_id=meeting_id,
+                workspace_id=workspace_id,
+                title=clean_title,
+                starts_at_dt=payload.starts_at,
+                duration_minutes=payload.duration_minutes,
+                tz_name=payload.timezone,
+                conference_url=payload.conference_url,
+                description=payload.description,
+                organiser_id=user.id,
+                participant_user_ids=payload.participant_user_ids,
+                external_participants=payload.external_participants,
+            )
+        except Exception as mail_err:
+            logger.error("Error sending scheduled meeting invitations for %s: %s", meeting_id, mail_err)
+
+    # 7. Generate 1-click Google Calendar URL
+    gcal_url = generate_google_calendar_url(
+        title=clean_title,
+        starts_at_dt=payload.starts_at,
+        duration_minutes=payload.duration_minutes,
+        tz_name=payload.timezone,
+        conference_url=payload.conference_url,
+        description=payload.description,
+    )
+
+    return ScheduleMeetingResponse(
+        id=UUID(created_meeting["id"]),
+        workspace_id=UUID(created_meeting["workspace_id"]),
+        title=created_meeting["title"],
+        starts_at=datetime.fromisoformat(created_meeting["starts_at"]),
+        duration_minutes=payload.duration_minutes,
+        timezone=created_meeting["timezone"],
+        organiser_id=UUID(created_meeting["organiser_id"]),
+        ai_processing=created_meeting.get("ai_processing", False),
+        visibility=created_meeting.get("visibility", "workspace"),
+        lifecycle=created_meeting.get("lifecycle", "active"),
+        status=created_meeting.get("status", "draft"),
+        conference_url=created_meeting.get("conference_url"),
+        calendar_event_id=created_meeting.get("calendar_event_id"),
+        calendar_provider=created_meeting.get("calendar_provider"),
+        notifications_sent=sent_count,
+        notified_recipients=notified_recipients,
+        google_calendar_url=gcal_url,
+        created_at=datetime.fromisoformat(created_meeting["created_at"]),
+    )
+
+
+@router.post(
+    "/meetings/{meeting_id}/send-invites",
+    response_model=SendMeetingInvitesResponse,
+    summary="Send or resend email invitations to all participants of a meeting"
+)
+def send_meeting_invites(
+    meeting_id: UUID,
+    user: CurrentUser = Depends(get_current_user)
+) -> SendMeetingInvitesResponse:
+    """Send or re-send calendar invitation emails for an existing meeting."""
+    client = get_supabase_client()
+    m_resp = (
+        client.table("meetings")
+        .select("id, title, starts_at, timezone, organiser_id, workspace_id, conference_url")
+        .eq("id", str(meeting_id))
+        .limit(1)
+        .execute()
+    )
+    if not m_resp.data:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    meeting = m_resp.data[0]
+    workspace_id = UUID(meeting["workspace_id"])
+    require_role(workspace_id, ORGANISER_ROLES, user)
+
+    # Fetch participants
+    p_resp = (
+        client.table("meeting_participants")
+        .select("user_id, external_name")
+        .eq("meeting_id", str(meeting_id))
+        .execute()
+    )
+    part_user_ids = [UUID(row["user_id"]) for row in (p_resp.data or []) if row.get("user_id")]
+    external_parts = [row["external_name"] for row in (p_resp.data or []) if row.get("external_name")]
+
+    starts_at_dt = datetime.fromisoformat(meeting["starts_at"])
+    sent_count, recipients = send_meeting_schedule_invitations(
+        meeting_id=meeting_id,
+        workspace_id=workspace_id,
+        title=meeting["title"],
+        starts_at_dt=starts_at_dt,
+        duration_minutes=30,
+        tz_name=meeting.get("timezone") or "Asia/Kolkata",
+        conference_url=meeting.get("conference_url"),
+        description=None,
+        organiser_id=meeting.get("organiser_id"),
+        participant_user_ids=part_user_ids,
+        external_participants=external_parts,
+    )
+
+    return SendMeetingInvitesResponse(
+        meeting_id=meeting_id,
+        title=meeting["title"],
+        notifications_sent=sent_count,
+        recipients=recipients,
+        message=f"Sent {sent_count} invitation email(s) successfully.",
+    )
 
 
 @router.post(
