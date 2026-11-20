@@ -70,3 +70,30 @@ def test_repeated_caption_upload_preserves_saved_transcript(world, meeting_statu
     assert repeated.status_code == 409, repeated.text
     assert len(world.db.rows("meetings")) == 1
     assert [row["id"] for row in world.db.rows("transcripts")] == [transcript_id]
+
+
+@pytest.mark.parametrize("enable_ai", [False, True])
+def test_calendar_scheduler_requires_opt_in_for_caption_ingestion(world, enable_ai):  # noqa: F811
+    ai_fields = {"ai_processing": True, "ai_attestation": True} if enable_ai else {}
+    response = world.post(f"/workspaces/{world.workspace}/meetings/schedule", world.priya, json={
+        "title": "Calendar meeting",
+        "starts_at": datetime.now(UTC).isoformat(),
+        "duration_minutes": 45,
+        "description": "Review the launch checklist",
+        "conference_url": CALL_URL,
+        "notify_via_email": False,
+        **ai_fields,
+    })
+    assert response.status_code == 201, response.text
+    meeting = response.json()
+    assert meeting["ai_processing"] is enable_ai
+    assert len(world.db.rows("consents", meeting_id=meeting["id"])) == int(enable_ai)
+
+    captions = upload(world)
+    if enable_ai:
+        assert captions.status_code == 201, captions.text
+        assert captions.json()["meeting_id"] == meeting["id"]
+    else:
+        assert captions.status_code == 409, captions.text
+        assert not world.db.rows("transcripts", meeting_id=meeting["id"])
+    assert len(world.db.rows("meetings")) == 1

@@ -177,8 +177,8 @@ export function ScheduleMeetingModal({
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [externals, setExternals] = useState<string[]>([]);
   const [notifyViaEmail, setNotifyViaEmail] = useState(true);
-  const [aiProcessing, setAiProcessing] = useState(true);
-  const [aiAttested, setAiAttested] = useState(true);
+  const [aiProcessing, setAiProcessing] = useState(false);
+  const [aiAttested, setAiAttested] = useState(false);
 
   // Status & outcome states
   const [busy, setBusy] = useState(false);
@@ -193,6 +193,8 @@ export function ScheduleMeetingModal({
     setTime(p.time);
     setTitle(initialTitle || '');
     setConferenceUrl(initialConferenceUrl || '');
+    setAiProcessing(false);
+    setAiAttested(false);
     setError('');
     setCreatedResult(null);
 
@@ -624,8 +626,7 @@ export function ScheduleMeetingModal({
                 checked={aiProcessing}
                 onChange={(e) => {
                   setAiProcessing(e.target.checked);
-                  if (!e.target.checked) setAiAttested(false);
-                  else setAiAttested(true);
+                  setAiAttested(false);
                 }}
                 className="mt-0.5 size-4 rounded border-indigo-500/50 bg-neutral-900 text-indigo-500 focus:ring-indigo-500/40"
               />

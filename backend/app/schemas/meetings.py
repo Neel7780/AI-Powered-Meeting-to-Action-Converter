@@ -40,7 +40,7 @@ class ScheduleMeetingRequest(BaseModel):
     conference_url: str | None = Field(default=None, description="External video conference URL or location")
     description: str | None = Field(default=None, max_length=5000, description="Meeting agenda, goals, or description")
     notify_via_email: bool = Field(default=True, description="Whether to notify all participants via email")
-    ai_processing: bool = Field(default=True, description="Whether AI processing is requested")
+    ai_processing: bool = Field(default=False, description="Whether AI processing is requested")
     ai_attestation: bool = Field(
         default=False, description="Consent attestation required when AI processing is enabled"
     )
