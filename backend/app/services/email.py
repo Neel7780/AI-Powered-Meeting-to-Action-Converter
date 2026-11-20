@@ -1,11 +1,12 @@
-"""Email delivery and notification service for ActionPulse (BE-2).
+﻿"""Email delivery and notification service for ActionPulse (BE-2).
 
 Zero-Budget Tech Stack: Brevo free HTTPS API when BREVO_API_KEY is set (Render's
 free tier blocks outbound SMTP ports), else standard smtplib with TLS (port 587).
-No paid APIs (Resend, SendGrid, etc. are strictly forbidden).
+No paid commercial APIs or proprietary email SDKs are allowed.
 """
 from __future__ import annotations
 
+import base64
 import html
 import hmac
 import logging
@@ -15,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 from email.message import EmailMessage
 from email.utils import parseaddr
 from typing import Any, List, Optional, Union
+from urllib.parse import quote
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -34,11 +36,12 @@ def send_email(
     *,
     html_body: Optional[str] = None,
     text_body: Optional[str] = None,
+    attachments: Optional[List[dict]] = None,
 ) -> None:
     """Send a transactional email using Python's standard smtplib.
     
     Accepts (to, subject, html, text) per project specification,
-    or keyword arguments (html_body=..., text_body=...).
+    or keyword arguments (html_body=..., text_body=..., attachments=...).
     Raises an exception on failure.
     Security Rule: Never log the email body (PII / security risk).
     """
@@ -50,16 +53,27 @@ def send_email(
 
     if settings.BREVO_API_KEY:
         sender_name, sender_email = parseaddr(settings.MAIL_FROM)
+        brevo_json = {
+            "sender": {"name": sender_name or "ActionPulse", "email": sender_email},
+            "to": [{"email": to}],
+            "subject": subject,
+            "htmlContent": final_html,
+            "textContent": final_text,
+        }
+        if attachments:
+            brevo_attachments = []
+            for att in attachments:
+                raw_bytes = att["content"] if isinstance(att["content"], bytes) else att["content"].encode("utf-8")
+                brevo_attachments.append({
+                    "name": att["filename"],
+                    "content": base64.b64encode(raw_bytes).decode("ascii"),
+                })
+            brevo_json["attachment"] = brevo_attachments
+
         resp = httpx.post(
             "https://api.brevo.com/v3/smtp/email",
             headers={"api-key": settings.BREVO_API_KEY},
-            json={
-                "sender": {"name": sender_name or "ActionPulse", "email": sender_email},
-                "to": [{"email": to}],
-                "subject": subject,
-                "htmlContent": final_html,
-                "textContent": final_text,
-            },
+            json=brevo_json,
             timeout=10,
         )
         if resp.is_error:
@@ -78,6 +92,16 @@ def send_email(
     # Plain text version first, then HTML alternative
     msg.set_content(final_text)
     msg.add_alternative(final_html, subtype="html")
+
+    if attachments:
+        for att in attachments:
+            raw_bytes = att["content"] if isinstance(att["content"], bytes) else att["content"].encode("utf-8")
+            msg.add_attachment(
+                raw_bytes,
+                maintype=att.get("maintype", "application"),
+                subtype=att.get("subtype", "octet-stream"),
+                filename=att["filename"],
+            )
 
     logger.info("Connecting to SMTP server at %s:%s", settings.SMTP_HOST, settings.SMTP_PORT)
     with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
@@ -585,6 +609,434 @@ def send_meeting_reminder_email(
 </html>"""
 
     send_email(to=to, subject=subject, html_body=html_body, text_body=text_body)
+
+
+def generate_ics_calendar_content(
+    meeting_id: Union[UUID, str],
+    title: str,
+    starts_at_dt: datetime,
+    duration_minutes: int = 30,
+    tz_name: str = "Asia/Kolkata",
+    organiser_name: str = "Meeting Organiser",
+    organiser_email: str = "noreply@actionpulse.app",
+    conference_url: Optional[str] = None,
+    description: Optional[str] = None,
+) -> str:
+    """Generate RFC 5545 iCalendar (.ics) format string for scheduled meeting invitations."""
+    now_utc_str = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    if starts_at_dt.tzinfo is None:
+        try:
+            starts_at_dt = starts_at_dt.replace(tzinfo=ZoneInfo(tz_name))
+        except Exception:
+            starts_at_dt = starts_at_dt.replace(tzinfo=timezone.utc)
+
+    start_utc = starts_at_dt.astimezone(timezone.utc)
+    end_utc = start_utc + timedelta(minutes=duration_minutes)
+
+    dtstart = start_utc.strftime("%Y%m%dT%H%M%SZ")
+    dtend = end_utc.strftime("%Y%m%dT%H%M%SZ")
+
+    def _escape(text: str) -> str:
+        return (
+            text.replace("\\", "\\\\")
+            .replace(";", "\\;")
+            .replace(",", "\\,")
+            .replace("\r\n", "\\n")
+            .replace("\n", "\\n")
+        )
+
+    clean_title = _escape(title.strip())
+    clean_desc = _escape((description or "Scheduled via ActionPulse Meeting-to-Action Converter").strip())
+    clean_location = _escape((conference_url or "Online Video Conference").strip())
+
+    lines = [
+        "BEGIN:VCALENDAR",
+        "PRODID:-//ActionPulse//Meeting Scheduler v1.0//EN",
+        "VERSION:2.0",
+        "CALSCALE:GREGORIAN",
+        "METHOD:REQUEST",
+        "BEGIN:VEVENT",
+        f"UID:meeting-{meeting_id}@actionpulse.app",
+        f"DTSTAMP:{now_utc_str}",
+        f"DTSTART:{dtstart}",
+        f"DTEND:{dtend}",
+        f"SUMMARY:{clean_title}",
+        f"DESCRIPTION:{clean_desc}",
+        f"LOCATION:{clean_location}",
+        f'ORGANIZER;CN="{organiser_name}":mailto:{organiser_email}',
+        "STATUS:CONFIRMED",
+        "SEQUENCE:0",
+    ]
+    if conference_url and conference_url.startswith("http"):
+        lines.append(f"URL:{conference_url.strip()}")
+    lines.extend([
+        "END:VEVENT",
+        "END:VCALENDAR",
+    ])
+    return "\r\n".join(lines) + "\r\n"
+
+
+def generate_google_calendar_url(
+    title: str,
+    starts_at_dt: datetime,
+    duration_minutes: int = 30,
+    tz_name: str = "Asia/Kolkata",
+    conference_url: Optional[str] = None,
+    description: Optional[str] = None,
+) -> str:
+    """Generate a direct 1-click Google Calendar add URL."""
+    if starts_at_dt.tzinfo is None:
+        try:
+            starts_at_dt = starts_at_dt.replace(tzinfo=ZoneInfo(tz_name))
+        except Exception:
+            starts_at_dt = starts_at_dt.replace(tzinfo=timezone.utc)
+
+    start_utc = starts_at_dt.astimezone(timezone.utc)
+    end_utc = start_utc + timedelta(minutes=duration_minutes)
+
+    dt_fmt = "%Y%m%dT%H%M%SZ"
+    dates_param = f"{start_utc.strftime(dt_fmt)}/{end_utc.strftime(dt_fmt)}"
+
+    details = (description or "Scheduled via ActionPulse Meeting-to-Action Converter.").strip()
+    if conference_url:
+        details += f"\n\nVideo Call Link: {conference_url.strip()}"
+
+    url = (
+        f"https://calendar.google.com/calendar/render?action=TEMPLATE"
+        f"&text={quote(title.strip())}"
+        f"&dates={dates_param}"
+        f"&details={quote(details)}"
+    )
+    if conference_url:
+        url += f"&location={quote(conference_url.strip())}"
+    return url
+
+
+def send_meeting_schedule_invitations(
+    meeting_id: Union[UUID, str],
+    workspace_id: Union[UUID, str],
+    title: str,
+    starts_at_dt: datetime,
+    duration_minutes: int = 30,
+    tz_name: str = "Asia/Kolkata",
+    conference_url: Optional[str] = None,
+    description: Optional[str] = None,
+    organiser_id: Optional[Union[UUID, str]] = None,
+    participant_user_ids: Optional[List[Union[UUID, str]]] = None,
+    external_participants: Optional[List[str]] = None,
+) -> tuple[int, list[str]]:
+    """Send meeting invitation emails with an attached .ics calendar file to all participants.
+    
+    Notifies workspace members and external email participants.
+    Updates public.notifications for tracking.
+    Returns (sent_count, list_of_notified_emails).
+    """
+    supabase = get_supabase_client()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # 1. Fetch organiser details
+    organiser_name = "Meeting Organiser"
+    organiser_email = settings.MAIL_FROM
+    if organiser_id:
+        try:
+            org_resp = supabase.table("profiles").select("display_name, email").eq("id", str(organiser_id)).limit(1).execute()
+            if org_resp.data:
+                organiser_name = org_resp.data[0].get("display_name") or organiser_name
+                organiser_email = org_resp.data[0].get("email") or organiser_email
+        except Exception as err:
+            logger.warning("send_meeting_schedule_invitations: could not fetch organiser profile for %s: %s", organiser_id, err)
+
+    # 2. Fetch workspace name
+    workspace_name = "ActionPulse Workspace"
+    try:
+        ws_resp = supabase.table("workspaces").select("name").eq("id", str(workspace_id)).limit(1).execute()
+        if ws_resp.data and ws_resp.data[0].get("name"):
+            workspace_name = ws_resp.data[0]["name"]
+    except Exception:
+        pass
+
+    # 3. Gather recipients: map of email -> dict(name=..., user_id=..., timezone=...)
+    recipients_map: dict[str, dict[str, Any]] = {}
+
+    # Workspace members
+    if participant_user_ids:
+        p_ids = [str(pid) for pid in participant_user_ids]
+        try:
+            prof_resp = supabase.table("profiles").select("id, email, display_name, timezone").in_("id", p_ids).execute()
+            for prof in (prof_resp.data or []):
+                email = prof.get("email")
+                if email and "@" in email:
+                    clean_email = email.strip().lower()
+                    recipients_map[clean_email] = {
+                        "name": prof.get("display_name") or clean_email.split("@")[0],
+                        "user_id": prof.get("id"),
+                        "timezone": prof.get("timezone") or tz_name,
+                    }
+        except Exception as err:
+            logger.warning("send_meeting_schedule_invitations: could not fetch profiles: %s", err)
+
+    # External participants (which can be email strings or names with emails)
+    if external_participants:
+        for ext in external_participants:
+            ext_str = ext.strip()
+            if not ext_str:
+                continue
+            name, email = parseaddr(ext_str)
+            if not email and "@" in ext_str:
+                email = ext_str
+                name = ext_str.split("@")[0]
+            if email and "@" in email:
+                clean_email = email.strip().lower()
+                if clean_email not in recipients_map:
+                    recipients_map[clean_email] = {
+                        "name": name or clean_email.split("@")[0],
+                        "user_id": None,
+                        "timezone": tz_name,
+                    }
+
+    if not recipients_map:
+        logger.info("send_meeting_schedule_invitations: no valid recipients for meeting %s", meeting_id)
+        return 0, []
+
+    # 4. Generate ICS calendar content
+    ics_string = generate_ics_calendar_content(
+        meeting_id=meeting_id,
+        title=title,
+        starts_at_dt=starts_at_dt,
+        duration_minutes=duration_minutes,
+        tz_name=tz_name,
+        organiser_name=organiser_name,
+        organiser_email=organiser_email,
+        conference_url=conference_url,
+        description=description,
+    )
+    ics_bytes = ics_string.encode("utf-8")
+
+    # 5. Generate Google Calendar URL
+    gcal_url = generate_google_calendar_url(
+        title=title,
+        starts_at_dt=starts_at_dt,
+        duration_minutes=duration_minutes,
+        tz_name=tz_name,
+        conference_url=conference_url,
+        description=description,
+    )
+
+    sent_count = 0
+    notified_emails: list[str] = []
+
+    # 6. Dispatch emails to each recipient
+    for email_addr, info in recipients_map.items():
+        user_name = info["name"]
+        uid = info["user_id"]
+        recipient_tz = info["timezone"] or tz_name
+
+        formatted_time = _format_deadline(starts_at_dt.isoformat(), recipient_tz)
+
+        # Calculate end time in recipient timezone
+        try:
+            if starts_at_dt.tzinfo is None:
+                dt_with_tz = starts_at_dt.replace(tzinfo=ZoneInfo(recipient_tz))
+            else:
+                dt_with_tz = starts_at_dt.astimezone(ZoneInfo(recipient_tz))
+            end_dt = dt_with_tz + timedelta(minutes=duration_minutes)
+            end_time_str = end_dt.strftime("%I:%M %p").lstrip("0")
+            formatted_duration = f"{duration_minutes} min" if duration_minutes < 60 else f"{duration_minutes // 60}h {duration_minutes % 60}m" if duration_minutes % 60 != 0 else f"{duration_minutes // 60} hour(s)"
+            time_display = f"{formatted_time} – {end_time_str} ({formatted_duration})"
+        except Exception:
+            time_display = formatted_time
+
+        safe_name = html.escape(user_name)
+        safe_title = html.escape(title)
+        safe_org = html.escape(organiser_name)
+        safe_ws = html.escape(workspace_name)
+        safe_time = html.escape(time_display)
+        safe_conf_url = html.escape(conference_url, quote=True) if conference_url else ""
+        safe_gcal_url = html.escape(gcal_url, quote=True)
+        safe_desc = html.escape(description).replace("\n", "<br>") if description else ""
+
+        meeting_link = f"{settings.APP_URL.rstrip('/')}/calendar"
+        safe_meeting_link = html.escape(meeting_link, quote=True)
+
+        subject = f"[ActionPulse] Invitation: {title} on {formatted_time}"
+
+        # Plain text body
+        text_body = (
+            f"Hello {user_name},\n\n"
+            f"{organiser_name} has scheduled a new meeting and invited you to attend:\n\n"
+            f"Title: {title}\n"
+            f"Workspace: {workspace_name}\n"
+            f"When: {time_display}\n"
+        )
+        if conference_url:
+            text_body += f"Join Call / Location: {conference_url}\n"
+        if description:
+            text_body += f"\nAgenda & Notes:\n{description}\n"
+        text_body += (
+            f"\nAdd to Google Calendar:\n{gcal_url}\n"
+            f"View in ActionPulse:\n{meeting_link}\n\n"
+            f"A calendar (.ics) invitation has been attached to this email. You can open it to add this event to Apple Calendar, Outlook, or Google Calendar.\n\n"
+            f"— ActionPulse Team"
+        )
+
+        # Call-to-action buttons
+        conf_btn = ""
+        if safe_conf_url:
+            conf_btn = (
+                f'<a href="{safe_conf_url}" style="background-color: #059669; color: #ffffff; padding: 12px 22px; '
+                f'text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; '
+                f'margin-right: 10px; margin-bottom: 8px;">🎥 Join Video Call</a>'
+            )
+
+        gcal_btn = (
+            f'<a href="{safe_gcal_url}" style="background-color: #0284c7; color: #ffffff; padding: 12px 22px; '
+            f'text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; '
+            f'margin-right: 10px; margin-bottom: 8px;">📅 Add to Google Calendar</a>'
+        )
+
+        app_btn = (
+            f'<a href="{safe_meeting_link}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 22px; '
+            f'text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px; display: inline-block; '
+            f'margin-bottom: 8px;">⚡ Open in ActionPulse</a>'
+        )
+
+        desc_card = ""
+        if safe_desc:
+            desc_card = f"""
+            <div style="margin: 16px 0; padding: 14px 16px; background-color: #f1f5f9; border-radius: 8px; border-left: 4px solid #6366f1;">
+              <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #475569;">Agenda & Notes</p>
+              <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #1e293b;">{safe_desc}</p>
+            </div>
+            """
+
+        html_body = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meeting Invitation</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0b0f19; margin: 0; padding: 24px; color: #1e293b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 14px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);">
+    <tr>
+      <td style="padding: 32px; background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);">
+        <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.02em;">ActionPulse</h1>
+        <p style="color: #e0e7ff; margin: 6px 0 0 0; font-size: 13px; font-weight: 500;">Meeting Invitation &bull; {safe_ws}</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 32px;">
+        <h2 style="font-size: 18px; margin-top: 0; color: #0f172a; font-weight: 600;">Hello {safe_name},</h2>
+        <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+          <strong>{safe_org}</strong> has scheduled an upcoming meeting and invited you to attend:
+        </p>
+
+        <div style="margin: 24px 0; padding: 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
+          <h3 style="margin: 0 0 12px 0; font-size: 17px; font-weight: 700; color: #0f172a;">{safe_title}</h3>
+          
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size: 13px; color: #475569;">
+            <tr>
+              <td style="padding: 4px 0; width: 24px;">📅</td>
+              <td style="padding: 4px 0;"><strong>When:</strong> {safe_time}</td>
+            </tr>
+            {f'<tr><td style="padding: 4px 0;">📍</td><td style="padding: 4px 0;"><strong>Link / Place:</strong> <a href="{safe_conf_url}" style="color: #4f46e5; text-decoration: underline;">{safe_conf_url}</a></td></tr>' if safe_conf_url else ''}
+            <tr>
+              <td style="padding: 4px 0;">👤</td>
+              <td style="padding: 4px 0;"><strong>Organiser:</strong> {safe_org}</td>
+            </tr>
+          </table>
+
+          {desc_card}
+        </div>
+
+        <div style="margin: 28px 0 20px 0;">
+          {conf_btn}
+          {gcal_btn}
+          {app_btn}
+        </div>
+
+        <div style="margin-top: 24px; padding-top: 18px; border-top: 1px dashed #cbd5e1; font-size: 12px; color: #64748b; line-height: 1.5;">
+          💡 <strong>Tip:</strong> An iCalendar (<code>invite.ics</code>) file is attached to this email. Opening it will directly add this meeting to Apple Calendar, Microsoft Outlook, or Google Calendar on your device.
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 18px 32px; background-color: #f1f5f9; text-align: center; border-top: 1px solid #e2e8f0;">
+        <p style="margin: 0; font-size: 12px; color: #94a3b8;">
+          ActionPulse &bull; AI-Powered Meeting-to-Action Converter &bull; Zero-Budget Tech Stack
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+        try:
+            send_email(
+                to=email_addr,
+                subject=subject,
+                html=html_body,
+                text=text_body,
+                attachments=[{
+                    "filename": "invite.ics",
+                    "content": ics_bytes,
+                    "maintype": "text",
+                    "subtype": "calendar",
+                }],
+            )
+            sent_count += 1
+            notified_emails.append(email_addr)
+
+            # Record in notifications table if workspace member
+            if uid:
+                try:
+                    supabase.table("notifications").insert({
+                        "user_id": uid,
+                        "meeting_id": str(meeting_id),
+                        "channel": "email",
+                        "event_type": "meeting_reminder",
+                        "status": "sent",
+                        "sent_at": now_iso,
+                        "attempt": 1,
+                        "idempotency_key": f"meeting_invite:email:{meeting_id}:{uid}",
+                    }).execute()
+                except Exception:
+                    pass
+
+                try:
+                    supabase.table("notifications").insert({
+                        "user_id": uid,
+                        "meeting_id": str(meeting_id),
+                        "channel": "in_app",
+                        "event_type": "meeting_reminder",
+                        "status": "sent",
+                        "sent_at": now_iso,
+                        "attempt": 0,
+                        "idempotency_key": f"meeting_invite:in_app:{meeting_id}:{uid}",
+                    }).execute()
+                except Exception:
+                    pass
+
+        except Exception as send_err:
+            logger.error("send_meeting_schedule_invitations: failed to send email to %s: %s", email_addr, send_err)
+            if uid:
+                try:
+                    supabase.table("notifications").insert({
+                        "user_id": uid,
+                        "meeting_id": str(meeting_id),
+                        "channel": "email",
+                        "event_type": "meeting_reminder",
+                        "status": "failed",
+                        "last_error": str(send_err)[:500],
+                        "attempt": 1,
+                        "idempotency_key": f"meeting_invite:email:{meeting_id}:{uid}",
+                    }).execute()
+                except Exception:
+                    pass
+
+    logger.info("send_meeting_schedule_invitations for meeting %s: sent %d email(s)", meeting_id, sent_count)
+    return sent_count, notified_emails
 
 
 def send_meeting_transcript_nudge_email(
