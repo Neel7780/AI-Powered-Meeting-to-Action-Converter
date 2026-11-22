@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Search,
   Compass,
+  BellOff,
 } from 'lucide-react';
 
 import { useChat } from '../../context/ChatContext';
@@ -19,9 +20,10 @@ import BrowseChannelsModal from './BrowseChannelsModal';
 
 interface ChatSidebarProps {
   onSelectConversation?: () => void;
+  onOpenSearch?: () => void;
 }
 
-export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) {
+export default function ChatSidebar({ onSelectConversation, onOpenSearch }: ChatSidebarProps) {
   const { currentWorkspace, currentRole } = useWorkspace();
   const {
     conversations,
@@ -32,6 +34,7 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
     refreshConversations,
     onlineUsers,
     unreadCounts,
+    isConversationMuted,
   } = useChat();
 
   const [filterText, setFilterText] = useState('');
@@ -80,15 +83,31 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
         </button>
       </div>
 
-      {/* Quick Filter */}
-      <div className="p-3">
+      {/* Quick Search & Filter */}
+      <div className="p-3 space-y-2">
+        {onOpenSearch && (
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-500 shadow-xs hover:border-indigo-300 hover:text-slate-800 transition"
+          >
+            <div className="flex items-center gap-2">
+              <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span>Search messages...</span>
+            </div>
+            <kbd className="hidden sm:inline-block rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-mono text-slate-400">
+              Ctrl+K
+            </kbd>
+          </button>
+        )}
+
         <div className="flex items-center rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 shadow-xs focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-200">
           <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
           <input
             type="text"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
-            placeholder="Jump to channel or DM..."
+            placeholder="Filter channels or DMs..."
             className="ml-2 w-full text-xs text-slate-800 placeholder-slate-400 outline-none"
           />
         </div>
@@ -168,6 +187,7 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
                 filteredChannels.map((channel) => {
                   const isActive = activeConversationId === channel.id;
                   const unread = unreadCounts[channel.id] || 0;
+                  const isMuted = isConversationMuted(channel.id);
 
                   return (
                     <button
@@ -189,11 +209,16 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
                         <span className="truncate">{channel.name}</span>
                       </div>
 
-                      {unread > 0 && !isActive && (
-                        <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                          {unread}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isMuted && (
+                          <BellOff className={`h-3 w-3 ${isActive ? 'text-white/80' : 'text-slate-400'}`} />
+                        )}
+                        {unread > 0 && !isActive && (
+                          <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                            {unread}
+                          </span>
+                        )}
+                      </div>
                     </button>
                   );
                 })
@@ -249,6 +274,7 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
                     ? onlineUsers.has(dm.other_user.id)
                     : false;
                   const unread = unreadCounts[dm.id] || 0;
+                  const isMuted = isConversationMuted(dm.id);
 
                   return (
                     <button
@@ -277,11 +303,16 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
                         <span className="truncate">{dm.name}</span>
                       </div>
 
-                      {unread > 0 && !isActive && (
-                        <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                          {unread}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {isMuted && (
+                          <BellOff className={`h-3 w-3 ${isActive ? 'text-white/80' : 'text-slate-400'}`} />
+                        )}
+                        {unread > 0 && !isActive && (
+                          <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                            {unread}
+                          </span>
+                        )}
+                      </div>
                     </button>
                   );
                 })

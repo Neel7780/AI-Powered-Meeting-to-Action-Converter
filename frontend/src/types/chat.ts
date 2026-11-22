@@ -24,4 +24,7 @@ export type {
   ConversationMember,
   LinkPreviewData,
   ChannelDiscoveryItem,
+  ChatMessageSearchResult,
+  PinnedMessageItem,
+  ChatNotificationItem,
 } from './workspaceChat';

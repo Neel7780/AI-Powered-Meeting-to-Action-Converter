@@ -11,6 +11,10 @@ import {
   ExternalLink,
   X,
   AlertCircle,
+  Pin,
+  Forward,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 
 import type { MessageAttachment, WorkspaceMessage } from '../../types/workspaceChat';
@@ -22,6 +26,7 @@ import { extractFirstUrl } from '../../utils/chatHelpers';
 import { STICKER_LIST } from './stickers';
 import EmojiPickerPopover from './EmojiPickerPopover';
 import LinkPreviewCard from './LinkPreviewCard';
+import ForwardMessageModal from './ForwardMessageModal';
 
 interface MessageItemProps {
   message: WorkspaceMessage;
@@ -38,13 +43,22 @@ export default function MessageItem({
 }: MessageItemProps) {
   const { user } = useAuth();
   const { currentRole } = useWorkspace();
-  const { editMessage, deleteMessage, toggleReaction } = useChat();
+  const {
+    editMessage,
+    deleteMessage,
+    toggleReaction,
+    pinnedMessages,
+    pinMessage,
+    unpinMessage,
+    retrySendMessage,
+  } = useChat();
 
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
   const [isCopied, setIsCopied] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+  const [showForwardModal, setShowForwardModal] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<MessageAttachment | null>(null);
   const [refreshedUrls, setRefreshedUrls] = useState<Record<string, string>>({});
   const refreshAttemptedRef = useRef<Set<string>>(new Set());
@@ -53,6 +67,7 @@ export default function MessageItem({
   const isOwn = user?.id === message.sender_id;
   const canDelete = isOwn || currentRole === 'admin' || currentRole === 'owner';
   const isDeleted = Boolean(message.deleted_at);
+  const isPinned = Boolean(message.is_pinned || pinnedMessages?.some((p) => p.message_id === message.id));
 
   useEffect(() => {
     if (!previewAttachment) return;
@@ -166,13 +181,14 @@ export default function MessageItem({
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Helper to render URL links in text
+  // Helper to render URL links and @mentions in text
   const renderContent = (content: string) => {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const parts = content.split(urlRegex);
+    const tokenRegex = /(https?:\/\/[^\s]+|@[a-zA-Z0-9_\-\s]{1,30}\b)/g;
+    const parts = content.split(tokenRegex);
+    const myName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || '';
 
     return parts.map((part, i) => {
-      if (part.match(urlRegex)) {
+      if (/^https?:\/\//.test(part)) {
         return (
           <a
             key={i}
@@ -184,6 +200,24 @@ export default function MessageItem({
             {part}
             <ExternalLink className="h-3 w-3 inline" />
           </a>
+        );
+      }
+      if (part.startsWith('@')) {
+        const mentionTarget = part.slice(1).trim().toLowerCase();
+        const isMe =
+          Boolean(myName && mentionTarget === myName.toLowerCase()) ||
+          Boolean(user?.email && mentionTarget === user.email.toLowerCase());
+        return (
+          <span
+            key={i}
+            className={`inline-block font-semibold px-1 py-0.5 rounded-md text-xs transition ${
+              isMe
+                ? 'bg-amber-100 text-amber-900 ring-1 ring-amber-300 dark:bg-amber-950/60 dark:text-amber-200'
+                : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300'
+            }`}
+          >
+            {part}
+          </span>
         );
       }
       return part;
@@ -222,6 +256,16 @@ export default function MessageItem({
             </span>
             {message.edited_at && !isDeleted && (
               <span className="text-[10px] text-slate-400">(edited)</span>
+            )}
+            {isPinned && !isDeleted && (
+              <span className="flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                <Pin className="h-2.5 w-2.5 fill-amber-500" /> Pinned
+              </span>
+            )}
+            {message.isOptimistic && (
+              <span className="flex items-center gap-1 text-[10px] italic text-slate-400">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" /> Sending...
+              </span>
             )}
           </div>
         )}
@@ -287,6 +331,21 @@ export default function MessageItem({
 
         {/* Link Preview Card */}
         {firstLinkUrl && !isEditing && <LinkPreviewCard url={firstLinkUrl} />}
+
+        {/* Failed Message Retry Alert */}
+        {message.hasFailed && (
+          <div className="mt-1.5 inline-flex items-center gap-2 rounded-lg bg-red-50 px-2.5 py-1 text-xs text-red-600 dark:bg-red-950/50 dark:text-red-300">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>Message failed to send.</span>
+            <button
+              type="button"
+              onClick={() => void retrySendMessage(message.id)}
+              className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-semibold text-white hover:bg-red-700"
+            >
+              <RefreshCw className="h-2.5 w-2.5" /> Retry
+            </button>
+          </div>
+        )}
 
         {/* Inline Action Error */}
         {actionError && (
@@ -423,6 +482,30 @@ export default function MessageItem({
             {isCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
           </button>
 
+          {!isDeleted && (
+            <button
+              type="button"
+              onClick={() => void (isPinned ? unpinMessage(message.id) : pinMessage(message.id))}
+              className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                isPinned ? 'text-amber-600 hover:bg-amber-50' : 'text-slate-500 hover:bg-slate-100'
+              }`}
+              title={isPinned ? 'Unpin Message' : 'Pin Message'}
+            >
+              <Pin className={`h-4 w-4 ${isPinned ? 'fill-amber-500' : ''}`} />
+            </button>
+          )}
+
+          {!isDeleted && (
+            <button
+              type="button"
+              onClick={() => setShowForwardModal(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
+              title="Forward Message"
+            >
+              <Forward className="h-4 w-4" />
+            </button>
+          )}
+
           {isOwn && !message.is_sticker && (
             <button
               type="button"
@@ -510,6 +593,14 @@ export default function MessageItem({
             className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
           />
         </div>
+      )}
+
+      {/* Forward Message Modal */}
+      {showForwardModal && (
+        <ForwardMessageModal
+          message={message}
+          onClose={() => setShowForwardModal(false)}
+        />
       )}
     </div>
   );

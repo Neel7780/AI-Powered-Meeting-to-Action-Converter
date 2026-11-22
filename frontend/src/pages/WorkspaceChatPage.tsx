@@ -9,6 +9,8 @@ import ConversationHeader from '../components/chat/ConversationHeader';
 import MessageList from '../components/chat/MessageList';
 import MessageComposer from '../components/chat/MessageComposer';
 import ConversationDetailsDrawer from '../components/chat/ConversationDetailsDrawer';
+import ChatSearchModal from '../components/chat/ChatSearchModal';
+import ChatNotificationToast from '../components/chat/ChatNotificationToast';
 import type { WorkspaceMessage } from '../types/workspaceChat';
 
 function WorkspaceChatInner() {
@@ -21,6 +23,19 @@ function WorkspaceChatInner() {
     activeConversation,
     setActiveConversationId,
   } = useChat();
+
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!conversationId || loadingConversations || conversations.length === 0) {
@@ -81,7 +96,7 @@ function WorkspaceChatInner() {
     <div className="relative flex h-full flex-1 overflow-hidden bg-white text-slate-900">
       {/* Desktop Chat Sidebar */}
       <div className="hidden lg:block lg:shrink-0">
-        <ChatSidebar />
+        <ChatSidebar onOpenSearch={() => setIsSearchOpen(true)} />
       </div>
 
       {/* Mobile Chat Sidebar Overlay */}
@@ -93,7 +108,13 @@ function WorkspaceChatInner() {
             onClick={() => setShowMobileChannels(false)}
           />
           <div className="relative z-10 h-full w-72 bg-white shadow-2xl">
-            <ChatSidebar onSelectConversation={() => setShowMobileChannels(false)} />
+            <ChatSidebar
+              onSelectConversation={() => setShowMobileChannels(false)}
+              onOpenSearch={() => {
+                setShowMobileChannels(false);
+                setIsSearchOpen(true);
+              }}
+            />
           </div>
         </div>
       )}
@@ -104,6 +125,7 @@ function WorkspaceChatInner() {
           onToggleSidebar={() => setShowMobileChannels((v) => !v)}
           onToggleDetails={() => setShowDetails((v) => !v)}
           isDetailsOpen={showDetails}
+          onOpenSearch={() => setIsSearchOpen(true)}
         />
 
         <MessageList onReply={handleReply} />
@@ -142,6 +164,15 @@ function WorkspaceChatInner() {
           </div>
         </>
       )}
+
+      {/* Search Modal */}
+      <ChatSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+      />
+
+      {/* In-app Toast Notification Container */}
+      <ChatNotificationToast />
     </div>
   );
 }

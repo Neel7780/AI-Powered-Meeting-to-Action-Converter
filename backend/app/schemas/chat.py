@@ -132,3 +132,59 @@ class ChannelMemberItem(BaseModel):
     is_creator: bool = False
     profile: ChannelMemberProfile
 
+
+# ==============================================================================
+# Phases 2–4: Workspace Search, Group Conversations, and Pinning Schemas
+# ==============================================================================
+
+class ChatMessageSearchResult(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    conversation_name: str
+    conversation_type: str = "channel"
+    is_private: bool = False
+    sender_id: UUID
+    sender_name: str
+    sender_avatar: str | None = None
+    content: str
+    created_at: str
+
+
+class CreateGroupConversationRequest(BaseModel):
+    participant_ids: list[UUID] = Field(..., min_length=2, max_length=50, description="List of workspace user IDs (at least 2 others)")
+    name: str | None = Field(default=None, max_length=100, description="Optional custom display name for group chat")
+
+
+class GroupConversationResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    type: str = "dm"
+    name: str | None = None
+    is_private: bool = True
+    participant_ids: list[UUID]
+    created_by: UUID | None = None
+    created_at: str
+
+
+class PinMessageResponse(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    message_id: UUID
+    pinned_by: UUID
+    created_at: str
+
+
+class PinnedMessageItem(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    message_id: UUID
+    pinned_by: UUID
+    pinned_by_name: str | None = None
+    pinned_at: str
+    message_content: str
+    message_sender_id: UUID
+    message_sender_name: str
+    message_created_at: str
+    is_sticker: bool = False
+
+

@@ -22,6 +22,8 @@ import type {
   UserProfile,
   LinkPreviewData,
   ChannelDiscoveryItem,
+  ChatMessageSearchResult,
+  PinnedMessageItem,
 } from '../types/workspaceChat';
 
 export { sanitizeAttachmentUrl };
@@ -171,7 +173,7 @@ export async function fetchWorkspaceConversations(
 
   // 2. Fetch all DM members for this workspace to resolve other user's identity
   const dmConvIds = conversations.filter((c) => c.type === 'dm').map((c) => c.id);
-  const dmMembersMap: Record<string, UserProfile> = {};
+  const dmMembersListMap: Record<string, UserProfile[]> = {};
 
   if (dmConvIds.length > 0) {
     const { data: memberData } = await supabase
@@ -192,24 +194,38 @@ export async function fetchWorkspaceConversations(
     ((memberData || []) as unknown as DmMemberQueryRow[]).forEach((row) => {
       if (row.user_id !== currentUserId) {
         const p = row.profiles;
-        dmMembersMap[row.conversation_id] = {
+        if (!dmMembersListMap[row.conversation_id]) {
+          dmMembersListMap[row.conversation_id] = [];
+        }
+        dmMembersListMap[row.conversation_id].push({
           id: row.user_id,
           display_name: p?.display_name || p?.email?.split('@')[0] || 'User',
           email: p?.email || '',
           avatar_url: p?.avatar_url || null,
-        };
+        });
       }
     });
   }
 
-  // 3. Attach other_user info to DMs
+  // 3. Attach other_user / other_users info to DMs
   return conversations.map((conv) => {
     if (conv.type === 'dm') {
-      const otherUser = dmMembersMap[conv.id];
+      const otherUsers = dmMembersListMap[conv.id] || [];
+      const otherUser = otherUsers[0];
+      const isGroup = otherUsers.length > 1;
+      let displayName = conv.topic || conv.name;
+      if (!displayName || displayName.startsWith('gdm:')) {
+        displayName = isGroup
+          ? otherUsers.map((u) => u.display_name).join(', ')
+          : otherUser
+          ? (otherUser.display_name || 'Direct Message')
+          : 'Direct Message';
+      }
       return {
         ...conv,
         other_user: otherUser,
-        name: otherUser ? otherUser.display_name : 'Direct Message',
+        other_users: otherUsers,
+        name: displayName,
       };
     }
     return conv;
@@ -889,3 +905,99 @@ export async function getSignedAttachmentUrl(storagePath: string): Promise<strin
 export async function fetchLinkPreview(url: string, token?: string): Promise<LinkPreviewData | null> {
   return linkPreviewLoader.load(url, token);
 }
+
+export async function searchWorkspaceMessages(
+  workspaceId: string,
+  query: string,
+  conversationId?: string,
+  token?: string
+): Promise<ChatMessageSearchResult[]> {
+  const authToken = token || (await supabase.auth.getSession()).data.session?.access_token;
+  const params = new URLSearchParams({ q: query.trim() });
+  if (conversationId) {
+    params.append('conversation_id', conversationId);
+  }
+  const endpoint = getApiUrl(`/api/chat/workspaces/${workspaceId}/search?${params.toString()}`);
+  const res = await fetch(endpoint, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Search failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function createGroupConversation(params: {
+  workspaceId: string;
+  participantIds: string[];
+  name?: string;
+  token?: string;
+}): Promise<Conversation> {
+  const authToken = params.token || (await supabase.auth.getSession()).data.session?.access_token;
+  const endpoint = getApiUrl(`/api/chat/workspaces/${params.workspaceId}/group-conversations`);
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify({
+      participant_ids: params.participantIds,
+      name: params.name || null,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to create group conversation' }));
+    throw new Error(err.detail || 'Failed to create group conversation');
+  }
+  return res.json();
+}
+
+export async function pinMessage(messageId: string, token?: string): Promise<void> {
+  const authToken = token || (await supabase.auth.getSession()).data.session?.access_token;
+  const endpoint = getApiUrl(`/api/chat/messages/${encodeURIComponent(messageId)}/pin`);
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to pin message');
+  }
+}
+
+export async function unpinMessage(messageId: string, token?: string): Promise<void> {
+  const authToken = token || (await supabase.auth.getSession()).data.session?.access_token;
+  const endpoint = getApiUrl(`/api/chat/messages/${encodeURIComponent(messageId)}/pin`);
+  const res = await fetch(endpoint, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to unpin message');
+  }
+}
+
+export async function fetchPinnedMessages(conversationId: string, token?: string): Promise<PinnedMessageItem[]> {
+  const authToken = token || (await supabase.auth.getSession()).data.session?.access_token;
+  const endpoint = getApiUrl(`/api/chat/conversations/${encodeURIComponent(conversationId)}/pins`);
+  const res = await fetch(endpoint, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch pinned messages');
+  }
+  return res.json();
+}
+

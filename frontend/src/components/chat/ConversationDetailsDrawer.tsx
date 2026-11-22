@@ -11,6 +11,7 @@ import {
   UserPlus,
   UserMinus,
   Crown,
+  Pin,
 } from 'lucide-react';
 
 import type { ConversationMember, MessageAttachment } from '../../types/chat';
@@ -42,6 +43,10 @@ export default function ConversationDetailsDrawer({
     messages,
     leaveChannel,
     removeChannelMember,
+    pinnedMessages,
+    unpinMessage,
+    isConversationMuted,
+    toggleMuteConversation,
   } = useChat();
 
   const [members, setMembers] = useState<ConversationMember[]>([]);
@@ -51,7 +56,7 @@ export default function ConversationDetailsDrawer({
   const [fileError, setFileError] = useState<string | null>(null);
   const [refreshedUrls, setRefreshedUrls] = useState<Record<string, string>>({});
   const refreshAttemptedRef = useRef<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<'about' | 'members' | 'files'>('about');
+  const [activeTab, setActiveTab] = useState<'about' | 'members' | 'files' | 'pinned'>('about');
 
   // Channel management modals & actions
   const [showEditModal, setShowEditModal] = useState(false);
@@ -209,6 +214,17 @@ export default function ConversationDetailsDrawer({
         )}
         <button
           type="button"
+          onClick={() => setActiveTab('pinned')}
+          className={`flex-1 py-2.5 text-center transition ${
+            activeTab === 'pinned'
+              ? 'border-b-2 border-indigo-600 bg-white text-indigo-600 font-bold'
+              : 'text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          Pinned ({pinnedMessages.length})
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab('files')}
           className={`flex-1 py-2.5 text-center transition ${
             activeTab === 'files'
@@ -278,6 +294,33 @@ export default function ConversationDetailsDrawer({
                   year: 'numeric',
                 })}
               </p>
+            </div>
+
+            {/* Notifications & Muting Toggle */}
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-slate-800 text-xs">Mute Notifications</p>
+                  <p className="text-[10px] text-slate-400">
+                    Mute sound and banner alerts for this conversation
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleMuteConversation(activeConversation.id)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden ${
+                    isConversationMuted(activeConversation.id) ? 'bg-indigo-600' : 'bg-slate-200'
+                  }`}
+                  role="switch"
+                  aria-checked={isConversationMuted(activeConversation.id)}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      isConversationMuted(activeConversation.id) ? 'translate-x-4' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
 
             {isChannel && (
@@ -466,6 +509,66 @@ export default function ConversationDetailsDrawer({
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'pinned' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Pinned Messages ({pinnedMessages.length})
+              </span>
+            </div>
+
+            {pinnedMessages.length === 0 ? (
+              <div className="text-center py-8">
+                <Pin className="mx-auto h-8 w-8 text-slate-300 stroke-[1.5]" />
+                <p className="mt-2 text-xs font-semibold text-slate-600">No pinned messages</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Pin key messages from their hover menu to keep them visible to everyone.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {pinnedMessages.map((pin) => (
+                  <div
+                    key={pin.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs transition hover:border-slate-300"
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700 shrink-0">
+                          {pin.message_sender_name?.charAt(0).toUpperCase() || 'U'}
+                        </div>
+                        <span className="font-semibold text-slate-900 truncate text-[11px]">
+                          {pin.message_sender_name || 'Member'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void unpinMessage(pin.message_id)}
+                        className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                        title="Unpin message"
+                      >
+                        <Pin className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <p className="text-slate-700 text-[11px] bg-white p-2 rounded-lg border border-slate-100 line-clamp-4 break-words">
+                      {pin.message_content || '(No text content)'}
+                    </p>
+                    <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+                      <span>Pinned by {pin.pinned_by_name || 'Member'}</span>
+                      <span>
+                        {new Date(pin.pinned_at).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

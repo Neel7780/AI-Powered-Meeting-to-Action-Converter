@@ -24,11 +24,16 @@ from app.schemas.chat import (
     ChannelMemberProfile,
     ChannelResponse,
     ChatMessageRecord,
+    ChatMessageSearchResult,
     ChatRequest,
     ChatResponse,
     ChatSessionDetail,
     ChatSessionSummary,
+    CreateGroupConversationRequest,
     CreateSessionRequest,
+    GroupConversationResponse,
+    PinMessageResponse,
+    PinnedMessageItem,
     UpdateChannelRequest,
 )
 from app.services.llm.chat_assistant import answer_workspace_chat
@@ -1245,4 +1250,432 @@ def remove_or_leave_channel_member(
     db.table("conversation_members").delete().eq("conversation_id", str(channel_id)).eq("user_id", str(target_user_id)).execute()
 
     return {"deleted": True, "user_id": target_user_id, "is_self": is_self}
+
+
+# ==============================================================================
+# Phases 2–4: Workspace Search, Group Conversations, and Pinning Endpoints
+# ==============================================================================
+
+def _get_conversation_or_404(db, conversation_id: UUID, caller_id: UUID) -> tuple[dict, UUID, str, bool]:
+    """Retrieve conversation (channel or DM) and enforce workspace membership & privacy checks."""
+    c_resp = db.table("conversations").select("*").eq("id", str(conversation_id)).execute()
+    if not c_resp.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+    conv = c_resp.data[0]
+    ws_id = UUID(str(conv["workspace_id"]))
+
+    wm_resp = (
+        db.table("workspace_members")
+        .select("role")
+        .eq("workspace_id", str(ws_id))
+        .eq("user_id", str(caller_id))
+        .execute()
+    )
+    if not wm_resp.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found or access denied")
+    caller_role = wm_resp.data[0]["role"]
+
+    cm_resp = (
+        db.table("conversation_members")
+        .select("user_id")
+        .eq("conversation_id", str(conversation_id))
+        .eq("user_id", str(caller_id))
+        .execute()
+    )
+    is_member = bool(cm_resp.data)
+
+    # Privacy protection: non-members cannot access or enumerate private channels or DMs
+    if (conv.get("is_private") or conv.get("type") == "dm") and not is_member:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found or access denied")
+
+    return conv, ws_id, caller_role, is_member
+
+
+@router.get(
+    "/workspaces/{workspace_id}/search",
+    response_model=list[ChatMessageSearchResult],
+    status_code=status.HTTP_200_OK,
+    summary="Search workspace chat messages with authoritative access control",
+)
+def search_workspace_messages(
+    workspace_id: UUID,
+    q: str = Query(..., min_length=1, max_length=100, description="Search query string"),
+    conversation_id: Optional[UUID] = Query(None, description="Optional conversation scope"),
+    limit: int = Query(30, ge=1, le=100, description="Max results"),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[ChatMessageSearchResult]:
+    """Authoritative search across accessible workspace messages respecting private conversation RLS."""
+    require_role(workspace_id, WORKSPACE_ROLES, user)
+    clean_q = q.strip()
+    if not clean_q:
+        return []
+
+    db = get_supabase_client()
+    ws_id_str = str(workspace_id)
+    caller_id_str = str(user.id)
+
+    # Determine accessible conversation IDs
+    if conversation_id is not None:
+        conv, conv_ws_id, _, _ = _get_conversation_or_404(db, conversation_id, user.id)
+        if conv_ws_id != workspace_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found in this workspace")
+        allowed_conv_ids = [str(conversation_id)]
+        conv_map = {str(conversation_id): conv}
+    else:
+        # All public channels in this workspace
+        pub_resp = (
+            db.table("conversations")
+            .select("id, name, type, is_private")
+            .eq("workspace_id", ws_id_str)
+            .eq("type", "channel")
+            .eq("is_private", False)
+            .execute()
+        )
+        pub_convs = pub_resp.data or []
+
+        # All private channels & DMs where caller is an explicit member
+        member_resp = (
+            db.table("conversation_members")
+            .select("conversation_id")
+            .eq("user_id", caller_id_str)
+            .execute()
+        )
+        member_conv_ids = [r["conversation_id"] for r in (member_resp.data or [])]
+        priv_convs = []
+        if member_conv_ids:
+            p_resp = (
+                db.table("conversations")
+                .select("id, name, type, is_private")
+                .eq("workspace_id", ws_id_str)
+                .in_("id", member_conv_ids)
+                .execute()
+            )
+            priv_convs = p_resp.data or []
+
+        all_accessible = {c["id"]: c for c in (pub_convs + priv_convs)}
+        if not all_accessible:
+            return []
+        allowed_conv_ids = list(all_accessible.keys())
+        conv_map = all_accessible
+
+    # Search messages
+    m_resp = (
+        db.table("messages")
+        .select("id, conversation_id, sender_id, content, created_at, is_sticker")
+        .eq("workspace_id", ws_id_str)
+        .in_("conversation_id", allowed_conv_ids)
+        .is_("deleted_at", "null")
+        .eq("is_sticker", False)
+        .ilike("content", f"%{clean_q}%")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    raw_msgs = m_resp.data or []
+    if not raw_msgs:
+        return []
+
+    # Fetch senders profiles for names/avatars
+    sender_ids = list({m["sender_id"] for m in raw_msgs})
+    prof_map = {}
+    if sender_ids:
+        prof_resp = (
+            db.table("profiles")
+            .select("id, display_name, email, avatar_url")
+            .in_("id", sender_ids)
+            .execute()
+        )
+        for p in (prof_resp.data or []):
+            prof_map[p["id"]] = p
+
+    results = []
+    for m in raw_msgs:
+        cid = str(m["conversation_id"])
+        conv_info = conv_map.get(cid, {})
+        sender_info = prof_map.get(m["sender_id"], {})
+        s_name = sender_info.get("display_name") or (sender_info.get("email", "").split("@")[0] if sender_info.get("email") else "User")
+        c_name = conv_info.get("name") or ("Direct Message" if conv_info.get("type") == "dm" else "channel")
+        results.append(
+            ChatMessageSearchResult(
+                id=UUID(m["id"]),
+                conversation_id=UUID(cid),
+                conversation_name=c_name,
+                conversation_type=conv_info.get("type", "channel"),
+                is_private=bool(conv_info.get("is_private", False)),
+                sender_id=UUID(m["sender_id"]),
+                sender_name=s_name,
+                sender_avatar=sender_info.get("avatar_url"),
+                content=m["content"],
+                created_at=m["created_at"],
+            )
+        )
+    return results
+
+
+@router.post(
+    "/workspaces/{workspace_id}/group-conversations",
+    response_model=GroupConversationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a multi-user direct/group conversation",
+)
+def create_group_conversation(
+    workspace_id: UUID,
+    payload: CreateGroupConversationRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> GroupConversationResponse:
+    """Create a private group direct message conversation between 3+ workspace members."""
+    from uuid import uuid4
+    require_role(workspace_id, WORKSPACE_ROLES, user)
+    db = get_supabase_client()
+    ws_id_str = str(workspace_id)
+
+    # Clean & deduplicate participant IDs, ensuring caller is included
+    all_member_ids = list({str(user.id)} | {str(pid) for pid in payload.participant_ids})
+    if len(all_member_ids) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A group conversation requires at least 2 other workspace members (3 members total)",
+        )
+
+    # Verify all participants belong to this workspace
+    wm_resp = (
+        db.table("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", ws_id_str)
+        .in_("user_id", all_member_ids)
+        .execute()
+    )
+    valid_members = {r["user_id"] for r in (wm_resp.data or [])}
+    missing_members = set(all_member_ids) - valid_members
+    if missing_members:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Some participants are not members of this workspace: {list(missing_members)}",
+        )
+
+    group_name = f"gdm:{uuid4().hex[:16]}"
+    custom_topic = payload.name.strip() if payload.name and payload.name.strip() else None
+
+    # Insert conversation
+    c_resp = (
+        db.table("conversations")
+        .insert({
+            "workspace_id": ws_id_str,
+            "type": "dm",
+            "name": group_name,
+            "topic": custom_topic,
+            "is_private": True,
+            "created_by": str(user.id),
+        })
+        .execute()
+    )
+    if not c_resp.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create group conversation",
+        )
+    new_conv = c_resp.data[0]
+    conv_id = new_conv["id"]
+
+    # Insert all conversation members
+    member_rows = [
+        {"conversation_id": conv_id, "user_id": uid}
+        for uid in all_member_ids
+    ]
+    db.table("conversation_members").insert(member_rows).execute()
+
+    return GroupConversationResponse(
+        id=UUID(conv_id),
+        workspace_id=workspace_id,
+        type="dm",
+        name=custom_topic or group_name,
+        is_private=True,
+        participant_ids=[UUID(uid) for uid in all_member_ids],
+        created_by=user.id,
+        created_at=new_conv["created_at"],
+    )
+
+
+@router.post(
+    "/messages/{message_id}/pin",
+    response_model=PinMessageResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Pin a message to its conversation",
+)
+def pin_chat_message(
+    message_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+) -> PinMessageResponse:
+    """Pin a message in a conversation. Enforces caller conversation access and message validity."""
+    db = get_supabase_client()
+    msg_id_str = str(message_id)
+
+    # Look up message
+    m_resp = (
+        db.table("messages")
+        .select("id, conversation_id, workspace_id, deleted_at")
+        .eq("id", msg_id_str)
+        .execute()
+    )
+    if not m_resp.data or m_resp.data[0].get("deleted_at") is not None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found or deleted")
+    msg = m_resp.data[0]
+    conv_id = UUID(str(msg["conversation_id"]))
+    ws_id = UUID(str(msg["workspace_id"]))
+
+    # Verify caller access to conversation
+    _get_conversation_or_404(db, conv_id, user.id)
+
+    # Check if already pinned
+    pin_resp = (
+        db.table("conversation_pins")
+        .select("id, conversation_id, message_id, pinned_by, created_at")
+        .eq("conversation_id", str(conv_id))
+        .eq("message_id", msg_id_str)
+        .execute()
+    )
+    if pin_resp.data:
+        p = pin_resp.data[0]
+        return PinMessageResponse(
+            id=UUID(p["id"]),
+            conversation_id=UUID(p["conversation_id"]),
+            message_id=UUID(p["message_id"]),
+            pinned_by=UUID(p["pinned_by"]),
+            created_at=p["created_at"],
+        )
+
+    # Insert pin
+    ins_resp = (
+        db.table("conversation_pins")
+        .insert({
+            "workspace_id": str(ws_id),
+            "conversation_id": str(conv_id),
+            "message_id": msg_id_str,
+            "pinned_by": str(user.id),
+        })
+        .execute()
+    )
+    if not ins_resp.data:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to pin message")
+    p = ins_resp.data[0]
+    return PinMessageResponse(
+        id=UUID(p["id"]),
+        conversation_id=UUID(p["conversation_id"]),
+        message_id=UUID(p["message_id"]),
+        pinned_by=UUID(p["pinned_by"]),
+        created_at=p["created_at"],
+    )
+
+
+@router.delete(
+    "/messages/{message_id}/pin",
+    status_code=status.HTTP_200_OK,
+    summary="Unpin a message from its conversation",
+)
+def unpin_chat_message(
+    message_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Unpin a message from a conversation."""
+    db = get_supabase_client()
+    msg_id_str = str(message_id)
+
+    # Look up message to get conversation
+    m_resp = (
+        db.table("messages")
+        .select("id, conversation_id, workspace_id")
+        .eq("id", msg_id_str)
+        .execute()
+    )
+    if not m_resp.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+    msg = m_resp.data[0]
+    conv_id = UUID(str(msg["conversation_id"]))
+
+    # Verify caller access to conversation
+    _get_conversation_or_404(db, conv_id, user.id)
+
+    # Delete pin
+    db.table("conversation_pins").delete().eq("conversation_id", str(conv_id)).eq("message_id", msg_id_str).execute()
+    return {"unpinned": True, "message_id": message_id}
+
+
+@router.get(
+    "/conversations/{conversation_id}/pins",
+    response_model=list[PinnedMessageItem],
+    status_code=status.HTTP_200_OK,
+    summary="List all pinned messages in a conversation",
+)
+def list_conversation_pins(
+    conversation_id: UUID,
+    user: CurrentUser = Depends(get_current_user),
+) -> list[PinnedMessageItem]:
+    """List all pinned messages in a conversation with sender details and message excerpts."""
+    db = get_supabase_client()
+    _get_conversation_or_404(db, conversation_id, user.id)
+
+    # Query pins
+    pin_resp = (
+        db.table("conversation_pins")
+        .select("id, conversation_id, message_id, pinned_by, created_at")
+        .eq("conversation_id", str(conversation_id))
+        .order("created_at", desc=True)
+        .execute()
+    )
+    pins = pin_resp.data or []
+    if not pins:
+        return []
+
+    msg_ids = [p["message_id"] for p in pins]
+    pinned_by_ids = list({p["pinned_by"] for p in pins})
+
+    # Fetch messages
+    msg_resp = (
+        db.table("messages")
+        .select("id, sender_id, content, created_at, is_sticker, deleted_at")
+        .in_("id", msg_ids)
+        .execute()
+    )
+    msg_map = {m["id"]: m for m in (msg_resp.data or [])}
+
+    # Fetch senders and pinners profiles
+    all_user_ids = list(set(pinned_by_ids) | {m["sender_id"] for m in msg_map.values()})
+    prof_map = {}
+    if all_user_ids:
+        p_resp = (
+            db.table("profiles")
+            .select("id, display_name, email")
+            .in_("id", all_user_ids)
+            .execute()
+        )
+        for row in (p_resp.data or []):
+            prof_map[row["id"]] = row
+
+    items = []
+    for p in pins:
+        mid = p["message_id"]
+        msg = msg_map.get(mid)
+        if not msg or msg.get("deleted_at") is not None:
+            continue
+        pinner = prof_map.get(p["pinned_by"], {})
+        pinner_name = pinner.get("display_name") or (pinner.get("email", "").split("@")[0] if pinner.get("email") else "User")
+        sender = prof_map.get(msg["sender_id"], {})
+        sender_name = sender.get("display_name") or (sender.get("email", "").split("@")[0] if sender.get("email") else "User")
+        items.append(
+            PinnedMessageItem(
+                id=UUID(p["id"]),
+                conversation_id=UUID(p["conversation_id"]),
+                message_id=UUID(mid),
+                pinned_by=UUID(p["pinned_by"]),
+                pinned_by_name=pinner_name,
+                pinned_at=p["created_at"],
+                message_content=msg["content"],
+                message_sender_id=UUID(msg["sender_id"]),
+                message_sender_name=sender_name,
+                message_created_at=msg["created_at"],
+                is_sticker=bool(msg.get("is_sticker", False)),
+            )
+        )
+    return items
+
 
