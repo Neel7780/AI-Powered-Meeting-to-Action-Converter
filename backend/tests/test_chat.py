@@ -691,6 +691,17 @@ def test_get_link_preview_blocks_ssrf():
     assert "private" in excinfo.value.detail.lower()
 
 
+def test_get_link_preview_disabled_by_default_returns_plain_link():
+    mock_user = CurrentUser(id=uuid4(), email="tester@example.com")
+    with patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):
+        data = get_link_preview(url="https://example.com/some/article", user=mock_user)
+        assert data.url == "https://example.com/some/article"
+        assert data.title is None
+        assert data.description is None
+        assert data.image is None
+        assert data.site_name is None
+
+
 def test_get_link_preview_blocks_redirect_ssrf():
     mock_user = CurrentUser(id=uuid4(), email="tester@example.com")
 
@@ -703,7 +714,8 @@ def test_get_link_preview_blocks_redirect_ssrf():
             return _addrinfo("93.184.216.34")
         return _addrinfo("169.254.169.254")
 
-    with patch("socket.getaddrinfo", side_effect=fake_getaddrinfo), \
+    with patch("app.api.chat.ENABLE_RICH_LINK_PREVIEWS", True), \
+         patch("socket.getaddrinfo", side_effect=fake_getaddrinfo), \
          patch("httpx.Client.get", return_value=redirect_resp):
         with pytest.raises(HTTPException) as excinfo:
             get_link_preview(url="https://public.example/go", user=mock_user)
@@ -730,7 +742,8 @@ def test_get_link_preview_parses_og_metadata_and_sanitizes_image():
     mock_resp.headers = {"content-type": "text/html"}
     mock_resp.text = mock_html
 
-    with patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")), \
+    with patch("app.api.chat.ENABLE_RICH_LINK_PREVIEWS", True), \
+         patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")), \
          patch("httpx.Client.get", return_value=mock_resp):
         data = get_link_preview(url="https://example.com", user=mock_user)
         assert data.title == "ActionPulse - Meeting Converter"
@@ -755,7 +768,8 @@ def test_get_link_preview_strips_unsafe_og_image_scheme():
     mock_resp.headers = {"content-type": "text/html"}
     mock_resp.text = mock_html
 
-    with patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")), \
+    with patch("app.api.chat.ENABLE_RICH_LINK_PREVIEWS", True), \
+         patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")), \
          patch("httpx.Client.get", return_value=mock_resp):
         data = get_link_preview(url="https://example.com", user=mock_user)
         assert data.title == "Malicious Card"
@@ -781,13 +795,32 @@ def test_get_link_preview_decodes_html_entities():
     mock_resp.headers = {"content-type": "text/html"}
     mock_resp.text = mock_html
 
-    with patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")), \
+    with patch("app.api.chat.ENABLE_RICH_LINK_PREVIEWS", True), \
+         patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")), \
          patch("httpx.Client.get", return_value=mock_resp):
         data = get_link_preview(url="https://example.com/docs", user=mock_user)
         assert data.title == 'R&D "Sprint" \'Notes\''
         assert data.description == "Compare A < B & C > D"
         assert data.site_name == "Docs & Co"
         assert data.image == "https://cdn.example.com/img.png?w=400&h=300"
+
+
+def test_get_link_preview_enforces_bounded_response_size():
+    mock_user = CurrentUser(id=uuid4(), email="tester@example.com")
+
+    # Generate a payload larger than 64 KB limit
+    large_payload = ("<meta property='og:title' content='Bounded Title'>\n" + "x" * 100000).encode("utf-8")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.headers = {"content-type": "text/html"}
+    mock_resp.iter_bytes.return_value = [large_payload[i:i + 8192] for i in range(0, len(large_payload), 8192)]
+
+    with patch("app.api.chat.ENABLE_RICH_LINK_PREVIEWS", True), \
+         patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")), \
+         patch("httpx.Client.get", return_value=mock_resp):
+        data = get_link_preview(url="https://example.com/huge", user=mock_user)
+        assert data.title == "Bounded Title"
 
 
 # ============================================================

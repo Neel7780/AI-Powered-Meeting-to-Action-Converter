@@ -31,7 +31,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = REPO_ROOT / "supabase" / "migrations"
-CHAT_MIGRATION_PATH = MIGRATIONS_DIR / "20261118000000_slack_chat_system.sql"
+CHAT_MIGRATION_PATH = MIGRATIONS_DIR / "20261121000000_slack_chat_system.sql"
 
 UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -1216,13 +1216,16 @@ def test_sql_migration_file_naming_and_security_invariants():
     assert not (MIGRATIONS_DIR / "0003_slack_chat_system.sql").exists(), (
         "Duplicate 0003_slack_chat_system.sql must not exist alongside 0003_calendar_integration.sql"
     )
+    assert not (MIGRATIONS_DIR / "20261118000000_slack_chat_system.sql").exists(), (
+        "Collision: 20261118000000_slack_chat_system.sql collides with 20261118000000_meeting_speaker_mapping.sql on main"
+    )
     assert CHAT_MIGRATION_PATH.exists(), f"Expected migration at {CHAT_MIGRATION_PATH}"
 
     sql = CHAT_MIGRATION_PATH.read_text(encoding="utf-8")
     sql_lower = sql.lower()
 
-    # Transaction framing
-    assert "begin;" in sql_lower and "commit;" in sql_lower
+    # Runner manages the migration transaction: explicit begin/commit must NOT be present
+    assert "begin;" not in sql_lower and "commit;" not in sql_lower
 
     # Dangerous policies must NOT be created
     assert "create policy conversation_members_update" not in sql_lower

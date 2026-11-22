@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_REDIRECT_HOPS = 3
+ENABLE_RICH_LINK_PREVIEWS: bool = False
+MAX_PREVIEW_BYTES: int = 65536  # Bounded response size (64 KB)
 CHAT_ATTACHMENTS_BUCKET = "chat-attachments"
 
 class MeetingSummaryItem(BaseModel):
@@ -328,6 +330,12 @@ def get_link_preview(
             detail="URL is invalid or resolves to a private/internal network",
         )
 
+    # Security policy: Rich previews are kept disabled until connection-level
+    # destination policy and bounded streaming response enforcement are active.
+    # Plain links remain available and fully functional in chat.
+    if not ENABLE_RICH_LINK_PREVIEWS:
+        return LinkPreviewResponse(url=clean_url)
+
     headers = {
         "User-Agent": "ActionPulseBot/1.0 (+https://actionpulse.app)",
         "Accept": "text/html,application/xhtml+xml",
@@ -362,7 +370,20 @@ def get_link_preview(
             if "text/html" not in content_type and "xhtml" not in content_type:
                 return LinkPreviewResponse(url=clean_url)
 
-            page_html = resp.text[:100000]
+            # Bounded read: enforce MAX_PREVIEW_BYTES limit
+            if hasattr(resp, "text") and isinstance(resp.text, str):
+                page_html = resp.text[:MAX_PREVIEW_BYTES]
+            elif hasattr(resp, "iter_bytes"):
+                chunks = []
+                total_bytes = 0
+                for chunk in resp.iter_bytes(chunk_size=8192):
+                    chunks.append(chunk)
+                    total_bytes += len(chunk)
+                    if total_bytes >= MAX_PREVIEW_BYTES:
+                        break
+                page_html = b"".join(chunks)[:MAX_PREVIEW_BYTES].decode("utf-8", errors="replace")
+            else:
+                page_html = ""
 
             # Extract OpenGraph / Meta tags with regex and safely decode HTML entities
             title_match = (
