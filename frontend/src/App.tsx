@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import AcceptInvite from "./pages/AcceptInvite";
 import CalendarCallback from "./pages/CalendarCallback";
 import GitHubCallback from "./pages/GitHubCallback";
+import WorkspaceChatPage from "./pages/WorkspaceChatPage";
 
 /**
  * Listens for auth recovery parameters (#access_token=...&type=recovery or ?flow=reset)
@@ -132,11 +133,31 @@ function App() {
           }
         />
 
+        {/* /chat — AI Meeting Copilot embedded in Dashboard layout */}
         <Route
           path="/chat"
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* /workspace-chat — Slack-like Workspace Team Chat */}
+        <Route
+          path="/workspace-chat"
+          element={
+            <ProtectedRoute>
+              <WorkspaceChatPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/workspace-chat/:conversationId"
+          element={
+            <ProtectedRoute>
+              <WorkspaceChatPage />
             </ProtectedRoute>
           }
         />

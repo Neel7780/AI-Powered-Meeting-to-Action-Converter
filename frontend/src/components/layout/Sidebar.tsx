@@ -7,6 +7,7 @@ import {
   ChevronsUpDown,
   LayoutDashboard,
   LogOut,
+  MessageSquare,
   Plus,
   Settings,
   Sparkles,
@@ -31,6 +32,7 @@ const navGroups = [
     label: "Workspace",
     items: [
       { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
+      { label: "Workspace Chat", path: "/workspace-chat", icon: MessageSquare },
       { label: "Meetings", path: "/meetings", icon: CalendarPlus },
       { label: "Calendar", path: "/calendar", icon: CalendarDays },
       { label: "Tasks", path: "/tasks", icon: SquareKanban },

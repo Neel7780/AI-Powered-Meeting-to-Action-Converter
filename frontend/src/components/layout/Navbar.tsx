@@ -8,11 +8,12 @@ import { canOrganise } from "../../lib/workspaceRoles";
 
 interface NavbarProps {
   onMenuClick?: () => void;
-  dashboardTheme: { light: boolean; toggle: () => void };
+  dashboardTheme?: { light: boolean; toggle: () => void };
 }
 
 const titles: Record<string, string> = {
   "/dashboard": "Overview",
+  "/workspace-chat": "Workspace Chat",
   "/meetings": "Meetings",
   "/tasks": "Tasks",
   "/kanban": "Tasks",
@@ -54,18 +55,22 @@ export default function Navbar({ onMenuClick, dashboardTheme }: NavbarProps) {
             <span className="truncate text-neutral-400">{wsName}</span>
             <ChevronRight className="size-3.5 shrink-0 text-neutral-600" />
             <span className="truncate font-semibold text-white" aria-current="page">
-              {titles[pathname] ?? (pathname.startsWith("/meetings/") ? "Meetings" : "Overview")}
+              {pathname.startsWith("/workspace-chat")
+                ? "Workspace Chat"
+                : (titles[pathname] ?? (pathname.startsWith("/meetings/") ? "Meetings" : "Overview"))}
             </span>
           </nav>
         </div>
 
         <div className="flex items-center gap-2">
-          <Button type="button" size="icon" variant="ghost"
-            onClick={dashboardTheme.toggle}
-            aria-label={dashboardTheme.light ? "Switch to dark mode" : "Switch to light mode"}
-            className="dashboard-theme-toggle">
-            {dashboardTheme.light ? <Moon aria-hidden="true" /> : <Sun aria-hidden="true" />}
-          </Button>
+          {dashboardTheme && (
+            <Button type="button" size="icon" variant="ghost"
+              onClick={dashboardTheme.toggle}
+              aria-label={dashboardTheme.light ? "Switch to dark mode" : "Switch to light mode"}
+              className="dashboard-theme-toggle">
+              {dashboardTheme.light ? <Moon aria-hidden="true" /> : <Sun aria-hidden="true" />}
+            </Button>
+          )}
           {canCreate && !pathname.startsWith("/meetings") && !["/dashboard", "/tasks", "/kanban"].includes(pathname) && (
             <Button size="sm" onClick={() => navigate("/meetings?create=1")} className="gap-1.5">
               <Plus /> <span className="hidden sm:inline">Create meeting</span>
