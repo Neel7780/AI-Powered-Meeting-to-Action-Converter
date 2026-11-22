@@ -18,6 +18,7 @@ import type {
   UserProfile,
   MessageAttachment,
   MessageReaction,
+  ChannelDiscoveryItem,
 } from '../types/workspaceChat';
 import * as chatService from '../services/chatService';
 import { getStickerLabel } from '../components/chat/stickers';
@@ -73,7 +74,15 @@ interface ChatContextType {
   }) => Promise<Conversation>;
   openDM: (targetUserId: string) => Promise<string>;
   joinChannel: (conversationId: string) => Promise<void>;
+  joinPublicChannel: (channelId: string) => Promise<void>;
   leaveChannel: (conversationId: string) => Promise<void>;
+  updateChannelDetails: (
+    channelId: string,
+    params: { name?: string; topic?: string; description?: string; isPrivate?: boolean }
+  ) => Promise<Conversation>;
+  addChannelMember: (channelId: string, userId: string) => Promise<void>;
+  removeChannelMember: (channelId: string, userId: string) => Promise<void>;
+  discoverPublicChannels: (query?: string) => Promise<ChannelDiscoveryItem[]>;
   sendTypingIndicator: () => void;
   refreshConversations: () => Promise<void>;
 }
@@ -768,13 +777,57 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     await loadWorkspaceData();
   };
 
+  const joinPublicChannel = async (channelId: string) => {
+    await chatService.joinPublicChannel(channelId);
+    await loadWorkspaceData();
+    selectActiveConversation(channelId);
+  };
+
   const leaveChannel = async (conversationId: string) => {
     if (!user) return;
     await chatService.leaveChannel(conversationId, user.id);
     await loadWorkspaceData();
-    // Default to general
-    const general = conversations.find((c) => c.name === 'general');
-    if (general) selectActiveConversation(general.id);
+    const general = conversations.find((c) => c.name === 'general' && c.id !== conversationId);
+    if (general) {
+      selectActiveConversation(general.id);
+    } else {
+      const remaining = conversations.find((c) => c.id !== conversationId);
+      selectActiveConversation(remaining ? remaining.id : null);
+    }
+  };
+
+  const updateChannelDetails = async (
+    channelId: string,
+    params: { name?: string; topic?: string; description?: string; isPrivate?: boolean }
+  ) => {
+    const updated = await chatService.updateChannelDetails(channelId, params);
+    setConversations((prev) =>
+      prev.map((c) => (c.id === channelId ? { ...c, ...updated } : c))
+    );
+    return updated;
+  };
+
+  const addChannelMember = async (channelId: string, userId: string) => {
+    await chatService.addChannelMember(channelId, userId);
+  };
+
+  const removeChannelMember = async (channelId: string, userId: string) => {
+    await chatService.removeChannelMember(channelId, userId);
+    if (user && userId === user.id) {
+      await loadWorkspaceData();
+      const general = conversations.find((c) => c.name === 'general' && c.id !== channelId);
+      if (general) {
+        selectActiveConversation(general.id);
+      } else {
+        const remaining = conversations.find((c) => c.id !== channelId);
+        selectActiveConversation(remaining ? remaining.id : null);
+      }
+    }
+  };
+
+  const discoverPublicChannels = async (query?: string): Promise<ChannelDiscoveryItem[]> => {
+    if (!currentWorkspace) return [];
+    return chatService.discoverPublicChannels(currentWorkspace.id, query);
   };
 
   return (
@@ -806,7 +859,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         createChannel,
         openDM,
         joinChannel,
+        joinPublicChannel,
         leaveChannel,
+        updateChannelDetails,
+        addChannelMember,
+        removeChannelMember,
+        discoverPublicChannels,
         sendTypingIndicator,
         refreshConversations: loadWorkspaceData,
       }}

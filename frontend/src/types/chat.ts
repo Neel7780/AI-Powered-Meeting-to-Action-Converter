@@ -23,4 +23,5 @@ export type {
   WorkspaceMessage,
   ConversationMember,
   LinkPreviewData,
+  ChannelDiscoveryItem,
 } from './workspaceChat';

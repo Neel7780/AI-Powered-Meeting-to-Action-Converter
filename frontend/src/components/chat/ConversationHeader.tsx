@@ -77,9 +77,14 @@ export default function ConversationHeader({
 
           <div className="truncate">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-slate-900 truncate">
+              <button
+                type="button"
+                onClick={onToggleDetails}
+                className="text-left font-bold text-sm text-slate-900 truncate hover:text-indigo-600 transition"
+                title="View details"
+              >
                 {activeConversation.name}
-              </h2>
+              </button>
 
               {!isChannel && (
                 <span className="flex items-center gap-1 text-[11px] text-slate-400">

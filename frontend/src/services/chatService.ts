@@ -21,6 +21,7 @@ import type {
   ConversationMember,
   UserProfile,
   LinkPreviewData,
+  ChannelDiscoveryItem,
 } from '../types/workspaceChat';
 
 export { sanitizeAttachmentUrl };
@@ -678,13 +679,104 @@ export async function joinChannel(conversationId: string, userId: string): Promi
   if (error && error.code !== '23505') throw error;
 }
 
+export async function joinPublicChannel(channelId: string): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const res = await fetch(getApiUrl(`/api/chat/channels/${channelId}/join`), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to join channel`);
+  }
+}
+
+export async function discoverPublicChannels(workspaceId: string, query?: string): Promise<ChannelDiscoveryItem[]> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const url = getApiUrl(
+    `/api/chat/workspaces/${workspaceId}/channels/discover${query ? `?q=${encodeURIComponent(query)}` : ''}`
+  );
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to discover channels`);
+  }
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function updateChannelDetails(
+  channelId: string,
+  params: { name?: string; topic?: string; description?: string; isPrivate?: boolean }
+): Promise<Conversation> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const res = await fetch(getApiUrl(`/api/chat/channels/${channelId}`), {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      name: params.name,
+      topic: params.topic,
+      description: params.description,
+      is_private: params.isPrivate,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to update channel`);
+  }
+  return data as Conversation;
+}
+
+export async function addChannelMember(channelId: string, userId: string): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const res = await fetch(getApiUrl(`/api/chat/channels/${channelId}/members`), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to add member`);
+  }
+}
+
+export async function removeChannelMember(channelId: string, userId: string): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const res = await fetch(getApiUrl(`/api/chat/channels/${channelId}/members/${userId}`), {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to remove member`);
+  }
+}
+
 export async function leaveChannel(conversationId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('conversation_members')
-    .delete()
-    .eq('conversation_id', conversationId)
-    .eq('user_id', userId);
-  if (error) throw error;
+  return removeChannelMember(conversationId, userId);
 }
 
 export async function fetchConversationMembers(conversationId: string): Promise<ConversationMember[]> {

@@ -8,12 +8,14 @@ import {
   ChevronRight,
   RefreshCw,
   Search,
+  Compass,
 } from 'lucide-react';
 
 import { useChat } from '../../context/ChatContext';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import CreateChannelModal from './CreateChannelModal';
 import NewDmModal from './NewDmModal';
+import BrowseChannelsModal from './BrowseChannelsModal';
 
 interface ChatSidebarProps {
   onSelectConversation?: () => void;
@@ -36,6 +38,7 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
   const [showChannels, setShowChannels] = useState(true);
   const [showDms, setShowDms] = useState(true);
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const [showBrowseChannelsModal, setShowBrowseChannelsModal] = useState(false);
   const [showNewDmModal, setShowNewDmModal] = useState(false);
 
   const channels = conversations.filter((c) => c.type === 'channel');
@@ -137,14 +140,24 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
               <span>Channels ({filteredChannels.length})</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setShowCreateChannelModal(true)}
-              className="rounded p-1 hover:bg-slate-200 hover:text-slate-800"
-              title="Create Channel"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => setShowBrowseChannelsModal(true)}
+                className="rounded p-1 hover:bg-slate-200 hover:text-slate-800"
+                title="Browse Public Channels"
+              >
+                <Compass className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateChannelModal(true)}
+                className="rounded p-1 hover:bg-slate-200 hover:text-slate-800"
+                title="Create Channel"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
 
           {showChannels && (
@@ -185,6 +198,16 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
                   );
                 })
               )}
+
+              {/* Browse all channels link */}
+              <button
+                type="button"
+                onClick={() => setShowBrowseChannelsModal(true)}
+                className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-200/60 hover:text-slate-800 transition"
+              >
+                <Compass className="h-3.5 w-3.5 text-slate-400" />
+                <span>Browse all channels</span>
+              </button>
             </div>
           )}
         </div>
@@ -274,6 +297,15 @@ export default function ChatSidebar({ onSelectConversation }: ChatSidebarProps) 
       <CreateChannelModal
         isOpen={showCreateChannelModal}
         onClose={() => setShowCreateChannelModal(false)}
+      />
+
+      <BrowseChannelsModal
+        isOpen={showBrowseChannelsModal}
+        onClose={() => setShowBrowseChannelsModal(false)}
+        onCreateChannel={() => {
+          setShowBrowseChannelsModal(false);
+          setShowCreateChannelModal(true);
+        }}
       />
 
       <NewDmModal

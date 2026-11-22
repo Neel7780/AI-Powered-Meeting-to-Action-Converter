@@ -85,3 +85,16 @@ export interface LinkPreviewData {
   site_name?: string;
 }
 
+export interface ChannelDiscoveryItem {
+  id: string;
+  workspace_id: string;
+  name: string;
+  topic?: string | null;
+  description?: string | null;
+  is_private: boolean;
+  created_at: string;
+  created_by?: string | null;
+  member_count: number;
+  is_member: boolean;
+}
+

@@ -74,3 +74,61 @@ class CreateSessionRequest(BaseModel):
 class UpdateSessionRequest(BaseModel):
     title: str | None = None
     selected_meeting_id: UUID | None = None
+
+
+# ==============================================================================
+# Phase 1: Workspace Chat Channel & Membership Management Schemas
+# ==============================================================================
+
+class UpdateChannelRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=80, description="New channel name (slugified)")
+    topic: str | None = Field(default=None, max_length=250, description="Channel topic")
+    description: str | None = Field(default=None, max_length=1000, description="Channel description")
+    is_private: bool | None = Field(default=None, description="Change channel privacy (public <-> private)")
+
+
+class ChannelResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    type: str
+    name: str
+    topic: str | None = None
+    description: str | None = None
+    is_private: bool
+    created_by: UUID | None = None
+    created_at: str
+    updated_at: str
+
+
+class ChannelDiscoveryItem(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    name: str
+    topic: str | None = None
+    description: str | None = None
+    is_private: bool
+    created_at: str
+    created_by: UUID | None = None
+    member_count: int = 0
+    is_member: bool = False
+
+
+class AddChannelMemberRequest(BaseModel):
+    user_id: UUID = Field(..., description="Target workspace user ID to add to channel")
+
+
+class ChannelMemberProfile(BaseModel):
+    id: UUID
+    display_name: str
+    email: str
+    avatar_url: str | None = None
+
+
+class ChannelMemberItem(BaseModel):
+    conversation_id: UUID
+    user_id: UUID
+    joined_at: str
+    last_read_at: str
+    is_creator: bool = False
+    profile: ChannelMemberProfile
+
