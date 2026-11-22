@@ -148,7 +148,16 @@ export default function Overview({
         </div>
         <div className="flex flex-wrap gap-2">
           {isAdmin && <Button variant="outline" onClick={onAddMember}><UserPlus /> Invite</Button>}
-          {canCreate && <Button onClick={createMeeting}><CalendarPlus /> New meeting</Button>}
+          {canCreate && (
+            <>
+              <Button onClick={() => navigate("/calendar")} className="bg-cyan-600 hover:bg-cyan-500 text-white gap-1.5">
+                <CalendarDays /> Schedule meeting
+              </Button>
+              <Button variant="outline" onClick={createMeeting} className="border-white/15 bg-white/5 text-neutral-300 hover:bg-white/10 hover:text-white">
+                <CalendarPlus /> New meeting
+              </Button>
+            </>
+          )}
         </div>
       </header>
 

@@ -10,14 +10,6 @@ import AcceptInvite from "./pages/AcceptInvite";
 import CalendarCallback from "./pages/CalendarCallback";
 import GitHubCallback from "./pages/GitHubCallback";
 import WorkspaceChatPage from "./pages/WorkspaceChatPage";
-import { useAuth } from "./context/AuthContext";
-
-/** Redirects authenticated users straight to /dashboard; shows landing otherwise. */
-function RootRoute() {
-  const { user } = useAuth();
-  if (user) return <Navigate to="/dashboard" replace />;
-  return <ActionPulseLanding />;
-}
 
 /**
  * Listens for auth recovery parameters (#access_token=...&type=recovery or ?flow=reset)
@@ -49,7 +41,7 @@ function App() {
     <BrowserRouter>
       <AuthRecoveryListener />
       <Routes>
-        <Route path="/" element={<RootRoute />} />
+        <Route path="/" element={<ActionPulseLanding />} />
 
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<Login />} />

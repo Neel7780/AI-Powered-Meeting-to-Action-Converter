@@ -19,12 +19,16 @@ import {
   CalendarCheck2,
   CheckSquare2,
   Loader2,
+  Mail,
+  Upload,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Button } from '../components/ui/button';
 import { CreateMeetingModal } from '../components/meetings/CreateMeetingModal';
+import { ScheduleMeetingModal } from '../components/meetings/ScheduleMeetingModal';
 import { FollowUpModal } from '../components/meetings/FollowUpModal';
+import { postApi } from '../services/reviewApi';
 import {
   getCalendarStatus,
   getCalendarConnectUrl,
@@ -38,6 +42,7 @@ export interface CalendarMeeting {
   title: string;
   starts_at: string;
   ends_at?: string | null;
+  duration_minutes?: number | null;
   timezone: string;
   organiser_id?: string;
   conference_url?: string | null;
@@ -151,9 +156,10 @@ const STATUS_BADGES: Record<string, string> = {
 /** Downloads an RFC 5545 .ics iCalendar file for Google Calendar, Apple Calendar, or Outlook */
 function exportMeetingToIcs(meeting: CalendarMeeting) {
   const start = new Date(meeting.starts_at);
+  const durationMin = meeting.duration_minutes || 30;
   const end = meeting.ends_at
     ? new Date(meeting.ends_at)
-    : new Date(start.getTime() + 45 * 60 * 1000);
+    : new Date(start.getTime() + durationMin * 60 * 1000);
 
   const formatDate = (date: Date) => {
     return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
@@ -223,10 +229,23 @@ export default function CalendarPage() {
   const [activeGCalEvent, setActiveGCalEvent] = useState<CalendarEventItem | null>(null);
 
   // Scheduling modals
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleInitialDate, setScheduleInitialDate] = useState<string | undefined>(undefined);
+  const [scheduleInitialTitle, setScheduleInitialTitle] = useState<string | undefined>(undefined);
+  const [scheduleInitialUrl, setScheduleInitialUrl] = useState<string | undefined>(undefined);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createInitialDate, setCreateInitialDate] = useState<string | undefined>(undefined);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [followUpMeeting, setFollowUpMeeting] = useState<{ id: string; title: string } | null>(null);
+  const [sendingInvitesMeetingId, setSendingInvitesMeetingId] = useState<string | null>(null);
+  const [inviteFeedback, setInviteFeedback] = useState<string | null>(null);
+
+  const handleOpenSchedule = (dateStr?: string, title?: string, confUrl?: string) => {
+    setScheduleInitialDate(dateStr);
+    setScheduleInitialTitle(title);
+    setScheduleInitialUrl(confUrl);
+    setShowScheduleModal(true);
+  };
 
   // Google Calendar Integration state
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
@@ -264,7 +283,7 @@ export default function CalendarPage() {
         // 1. Fetch real meetings from Supabase for all user's workspaces
         const { data: dbMeetings, error: mtgErr } = await supabase
           .from('meetings')
-          .select('id, title, starts_at, timezone, organiser_id, conference_url, workspace_id, calendar_event_id, calendar_provider, created_at')
+          .select('id, title, starts_at, timezone, organiser_id, conference_url, workspace_id, calendar_event_id, calendar_provider, created_at, duration_minutes, description')
           .in('workspace_id', workspaceIds)
           .order('starts_at', { ascending: false });
 
@@ -285,13 +304,16 @@ export default function CalendarPage() {
           loadedMeetings = dbMeetings.map((m) => {
             const wsIdx = workspaceColorMap.get(m.workspace_id) ?? 0;
             const wsName = workspaceNameMap.get(m.workspace_id) || 'Workspace';
+            const durationMin = m.duration_minutes ?? 30;
             const startD = new Date(m.starts_at);
-            const endD = new Date(startD.getTime() + 45 * 60 * 1000);
+            const endD = new Date(startD.getTime() + durationMin * 60 * 1000);
             return {
               id: m.id,
               title: m.title,
               starts_at: m.starts_at,
               ends_at: endD.toISOString(),
+              duration_minutes: durationMin,
+              description: m.description,
               timezone: m.timezone || 'Asia/Kolkata',
               organiser_id: m.organiser_id,
               conference_url: m.conference_url,
@@ -505,8 +527,7 @@ export default function CalendarPage() {
   const handleDateCellClick = (date: Date) => {
     const pad = (n: number) => n.toString().padStart(2, '0');
     const isoString = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T10:00`;
-    setCreateInitialDate(isoString);
-    setShowCreateModal(true);
+    handleOpenSchedule(isoString);
   };
 
   // Month header text
@@ -703,14 +724,25 @@ export default function CalendarPage() {
 
           {/* Schedule Meeting button */}
           <Button
-            onClick={() => {
-              setCreateInitialDate(undefined);
-              setShowCreateModal(true);
-            }}
+            onClick={() => handleOpenSchedule()}
             className="inline-flex items-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs px-4 py-2 rounded-lg shadow-sm"
           >
             <Plus className="size-4" />
             Schedule Meeting
+          </Button>
+
+          {/* Import / Transcribe Past Meeting */}
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCreateInitialDate(undefined);
+              setShowCreateModal(true);
+            }}
+            className="inline-flex items-center gap-1.5 border-white/15 bg-white/5 text-neutral-300 hover:bg-white/10 hover:text-white text-xs px-3 py-2 rounded-lg"
+            title="Upload notes or recording from a past meeting"
+          >
+            <Upload className="size-3.5 text-neutral-400" />
+            <span className="hidden sm:inline">Import Past Meeting</span>
           </Button>
         </div>
       </div>
@@ -1229,10 +1261,7 @@ export default function CalendarPage() {
               </p>
               <div className="mt-4 flex items-center justify-center gap-3">
                 <Button
-                  onClick={() => {
-                    setCreateInitialDate(undefined);
-                    setShowCreateModal(true);
-                  }}
+                  onClick={() => handleOpenSchedule()}
                   className="text-xs bg-cyan-600 hover:bg-cyan-500 text-white"
                 >
                   <Plus className="size-3.5 mr-1" /> Schedule Meeting
@@ -1489,7 +1518,7 @@ export default function CalendarPage() {
                   })}
                 </span>
                 <div className="text-neutral-300 mt-0.5">
-                  {formatTime(activeMeeting.starts_at)} ({activeMeeting.timezone})
+                  {formatTime(activeMeeting.starts_at)} ({activeMeeting.timezone}){activeMeeting.duration_minutes ? ` • ${activeMeeting.duration_minutes}m` : ''}
                 </div>
               </div>
 
@@ -1555,7 +1584,38 @@ export default function CalendarPage() {
             </div>
 
             {/* Modal Footer Controls */}
+            {inviteFeedback && (
+              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200 flex items-center justify-between">
+                <span>{inviteFeedback}</span>
+                <button type="button" onClick={() => setInviteFeedback(null)} className="text-cyan-400 hover:text-white">
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2">
+              <Button
+                variant="outline"
+                disabled={sendingInvitesMeetingId === activeMeeting.id}
+                onClick={async () => {
+                  setSendingInvitesMeetingId(activeMeeting.id);
+                  setInviteFeedback(null);
+                  try {
+                    const res = await postApi(`/api/meetings/${activeMeeting.id}/send-invites`, {});
+                    setInviteFeedback(res.message || 'Invitations dispatched via email!');
+                  } catch (err: any) {
+                    setInviteFeedback(`Failed: ${err.message || 'Server error'}`);
+                  } finally {
+                    setSendingInvitesMeetingId(null);
+                  }
+                }}
+                className="text-xs border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
+                title="Dispatch email invitations with calendar .ics to all meeting participants"
+              >
+                <Mail className="size-3.5 text-cyan-400 mr-1.5" />
+                {sendingInvitesMeetingId === activeMeeting.id ? 'Sending invites...' : 'Send Email Invites'}
+              </Button>
+
               <Button
                 variant="outline"
                 onClick={() => {
@@ -1734,7 +1794,10 @@ export default function CalendarPage() {
                 onClick={() => {
                   const ev = activeGCalEvent;
                   setActiveGCalEvent(null);
-                  handleDateCellClick(new Date(ev.starts_at));
+                  const pad = (n: number) => n.toString().padStart(2, '0');
+                  const d = new Date(ev.starts_at);
+                  const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                  handleOpenSchedule(iso, ev.title, ev.conference_url || undefined);
                 }}
                 className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white gap-1.5"
               >
@@ -1745,7 +1808,22 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* 8. CREATE MEETING MODAL */}
+      {/* 8. SCHEDULE MEETING MODAL */}
+      {showScheduleModal && currentWorkspace && (
+        <ScheduleMeetingModal
+          isOpen={showScheduleModal}
+          onClose={() => setShowScheduleModal(false)}
+          workspaceId={currentWorkspace.id}
+          initialDate={scheduleInitialDate}
+          initialTitle={scheduleInitialTitle}
+          initialConferenceUrl={scheduleInitialUrl}
+          onMeetingScheduled={() => {
+            fetchAllWorkspaceData();
+          }}
+        />
+      )}
+
+      {/* 9. CREATE MEETING MODAL */}
       {showCreateModal && currentWorkspace && (
         <CreateMeetingModal
           isOpen={showCreateModal}

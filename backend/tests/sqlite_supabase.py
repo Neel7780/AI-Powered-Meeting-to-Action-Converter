@@ -65,6 +65,8 @@ CREATE TABLE meetings (
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   title TEXT NOT NULL CHECK (length(trim(title)) BETWEEN 1 AND 300),
   starts_at TEXT NOT NULL,
+  duration_minutes INTEGER DEFAULT 30,
+  description TEXT,
   timezone TEXT NOT NULL DEFAULT 'Asia/Kolkata' CHECK (trim(timezone) <> ''),
   organiser_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE RESTRICT,
   ai_processing INTEGER NOT NULL DEFAULT 1,
