@@ -1,11 +1,9 @@
 -- ============================================================
--- Migration 20261118000000: Slack-like Workspace Chat System for ActionPulse
+-- Migration 20261121000000: Slack-like Workspace Chat System for ActionPulse
 -- Covers: Channels, Direct Messages, Messages, Attachments,
 -- Reactions, Read Receipts, Relational Consistency, Strict RLS,
 -- Realtime Publication & Private Channel Authorization, and Storage Security
 -- ============================================================
-
-begin;
 
 -- ============================================================
 -- ENUMS & TYPES
@@ -1307,6 +1305,4 @@ on conflict (conversation_id, user_id) do nothing;
 
 -- Reload PostgREST schema cache
 notify pgrst, 'reload schema';
-
-commit;
 
