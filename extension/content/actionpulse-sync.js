@@ -1,10 +1,4 @@
-/**
- * ActionPulse Web App -> Chrome Extension Context Sync
- *
- * Syncs the authenticated user's Supabase JWT access token, active workspace ID,
- * workspace name, and manager role (owner/admin/organiser) into chrome.storage.local
- * so the extension performs real authenticated uploads without dev tokens.
- */
+// Share the configured ActionPulse site’s current access token with the extension worker.
 (function () {
   if (window.__actionPulseSyncInjected) return;
   window.__actionPulseSyncInjected = true;
@@ -20,6 +14,7 @@
             return {
               accessToken: session.access_token,
               expiresAt: Number(session.expires_at || 0),
+              userId: session.user?.id || "",
               userEmail: session.user?.email || "",
             };
           }
@@ -32,6 +27,7 @@
       accessToken: "",
       expiresAt: 0,
       userEmail: "",
+      userId: "",
     };
   }
 
@@ -41,18 +37,11 @@
     try {
       if (!chrome?.runtime?.id) return;
       const auth = findSupabaseSession();
-      const workspaceId = localStorage.getItem("currentWorkspaceId") || "";
-      const workspaceName = localStorage.getItem("currentWorkspaceName") || "";
-      const managerRole = localStorage.getItem("currentWorkspaceRole") || "";
-
       const payload = {
-        appUrl: window.location.origin,
         accessToken: auth.accessToken,
         tokenExpiresAt: auth.expiresAt,
+        userId: auth.userId,
         userEmail: auth.userEmail,
-        workspaceId,
-        workspaceName,
-        managerRole,
       };
 
       const signature = JSON.stringify(payload);
@@ -69,6 +58,12 @@
       // Extension context may be invalidated during reload
     }
   }
+
+  chrome.runtime.onMessage.addListener((message, sender, respond) => {
+    if (message.type !== "READ_ACTIONPULSE_AUTH" || sender.id !== chrome.runtime.id) return;
+    const { accessToken, expiresAt, userId, userEmail } = findSupabaseSession();
+    respond({ accessToken, tokenExpiresAt: expiresAt, userId, userEmail });
+  });
 
   syncContext(true);
 

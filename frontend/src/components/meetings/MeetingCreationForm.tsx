@@ -170,9 +170,9 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
         <p className="mt-1 text-sm text-neutral-400">{created.title}</p>
       </div></div>
       <ol className="space-y-4 text-sm text-neutral-300 list-decimal pl-5">
-        <li>Install and pin the ActionPulse extension. Keep this workspace open in the same browser.</li>
-        <li>Open the call and turn on captions. Open the extension to check that the caption count is increasing.</li>
-        <li>After the call, choose Review tasks in the extension. If upload did not start, choose Upload captions.</li>
+        <li>Install the ActionPulse extension and sign in to ActionPulse in the same browser.</li>
+        <li>Join the call, confirm capture in the ActionPulse prompt, and turn on live captions.</li>
+        <li>After the call, choose Review tasks in the extension to check and assign suggested tasks.</li>
       </ol>
       <p className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs leading-5 text-neutral-400">The extension is required for live capture. You can also upload an exported transcript to this meeting afterward.</p>
       <div className="flex flex-wrap gap-3">
@@ -224,7 +224,7 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
         {source === 'live' ? (
           <div className="space-y-3">
             <div><label htmlFor="meeting-link" className="field-label">Meeting link</label><input id="meeting-link" type="url" className="field" required disabled={!!created} value={conferenceUrl} onChange={(e) => setConferenceUrl(e.target.value)} placeholder="Paste a Google Meet, Zoom or Teams link" /></div>
-            <p className="text-xs leading-5 text-neutral-400">Install the ActionPulse browser extension before joining. It starts capturing when you turn on captions in the call.</p>
+            <p className="text-xs leading-5 text-neutral-400">The ActionPulse extension will prompt you when you join. Confirm capture and turn on the call’s live captions.</p>
           </div>
         ) : source === 'in_person' ? (
           <div className="space-y-3">

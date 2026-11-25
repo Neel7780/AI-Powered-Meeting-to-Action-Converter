@@ -72,6 +72,16 @@ def create_meeting(
     payload: CreateMeetingRequest,
     user: CurrentUser = Depends(get_current_user)
 ) -> MeetingResponse:
+    return _create_meeting(workspace_id, payload, user)
+
+
+def _create_meeting(
+    workspace_id: UUID,
+    payload: CreateMeetingRequest,
+    user: CurrentUser,
+    *,
+    meeting_id: UUID | None = None,
+) -> MeetingResponse:
     """Create a meeting (and its consent row).
     
     Allowed roles: admin, organiser.
@@ -138,6 +148,8 @@ def create_meeting(
         "conference_url": payload.conference_url,
         "description": payload.description.strip() if payload.description else None,
     }
+    if meeting_id is not None:
+        meeting_insert["id"] = str(meeting_id)
 
     try:
         m_resp = client.table("meetings").insert(meeting_insert).execute()

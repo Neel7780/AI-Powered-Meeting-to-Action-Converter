@@ -1,705 +1,508 @@
-/**
- * ActionPulse - Chrome Service Worker (Manifest V3)
- * 
- * Manages transcript session state, caption buffers, local storage persistence,
- * automatic meeting start/end detection, and auto-upload on meeting end.
- */
+importScripts("captions.js", "../shared/meeting.js");
 
 const DEFAULT_CONNECTION = {
   apiUrl: "https://ai-powered-meeting-to-action-converter-9k2z.onrender.com",
   appUrl: "https://ai-powered-meeting-to-action-conver.vercel.app",
 };
+const EMPTY_AUTH = { accessToken: "", userId: "", userEmail: "", tokenExpiresAt: 0 };
+const CAPTURE_PREFIX = "capture:";
+const WATCH_ALARM = "capture-progress";
+const operations = new Map();
+let settingsQueue = Promise.resolve();
 
-const SIGNED_OUT_CONTEXT = {
-  workspaceId: "",
-  workspaceName: "",
-  managerRole: "",
-  accessToken: "",
-  tokenExpiresAt: 0,
-  userEmail: "",
-  lastSyncedAt: 0,
-};
+void chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
 
-const DEFAULT_SETTINGS = {
-  ...DEFAULT_CONNECTION,
-  ...SIGNED_OUT_CONTEXT,
-  appUrlPinned: true,
-  autoExtract: true,
-  autoUploadOnEnd: true,
-};
-
-function sanitizeSettings(rawSettings) {
-  const merged = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
-  // Previous versions used localhost and could select an origin from any open
-  // tab. Preserve a site explicitly saved in Connection settings.
-  if (rawSettings && rawSettings.appUrlPinned !== true) {
-    if (httpOrigin(rawSettings.appUrl) !== DEFAULT_CONNECTION.appUrl) {
-      Object.assign(merged, SIGNED_OUT_CONTEXT);
-    }
-    Object.assign(merged, DEFAULT_CONNECTION, { appUrlPinned: true });
-  }
-  // Clear legacy demo workspace placeholder if no real auth token was ever synced
-  if (
-    merged.workspaceId === "00000000-0000-0000-0000-000000000002" &&
-    !merged.accessToken
-  ) {
-    merged.workspaceId = "";
-    merged.managerRole = "";
-  }
-  return merged;
+async function getSettings() {
+  const { settings } = await chrome.storage.local.get("settings");
+  return settings?.appUrlPinned === true ? { ...DEFAULT_CONNECTION, ...EMPTY_AUTH, ...settings }
+    : { ...DEFAULT_CONNECTION, ...EMPTY_AUTH };
 }
 
-function createIdleSession() {
-  return {
-    id: "session_" + Date.now(),
-    isRecording: false,
-    isCompleted: false,
-    uploaded: false,
-    uploadResult: null,
-    reviewUrl: null,
-    platform: "none",
-    title: "",
-    conferenceUrl: "",
-    startTime: null,
-    endTime: null,
-    durationSeconds: 0,
-    cues: [],
-  };
-}
-
-function createNewSession(platform = "google_meet", title = "Meeting", conferenceUrl = "") {
-  return {
-    id: "session_" + Date.now(),
-    isRecording: true,
-    isCompleted: false,
-    uploaded: false,
-    uploadResult: null,
-    reviewUrl: null,
-    platform: platform,
-    title: title || "Meeting",
-    conferenceUrl: conferenceUrl || "",
-    startTime: new Date().toISOString(),
-    endTime: null,
-    durationSeconds: 0,
-    cues: [],
-  };
-}
-
-function formatMsToVtt(ms) {
-  const hours = Math.floor(ms / 3600000);
-  const minutes = Math.floor((ms % 3600000) / 60000);
-  const seconds = Math.floor((ms % 60000) / 1000);
-  const millis = ms % 1000;
-  return (
-    String(hours).padStart(2, "0") +
-    ":" +
-    String(minutes).padStart(2, "0") +
-    ":" +
-    String(seconds).padStart(2, "0") +
-    "." +
-    String(millis).padStart(3, "0")
-  );
-}
-
-function buildVttTranscript(cues, sessionStartTime) {
-  let vtt = "WEBVTT - ActionPulse Captions Ingestion\n\n";
-  const startTs = sessionStartTime ? new Date(sessionStartTime).getTime() : Date.now();
-
-  cues.forEach((cue, index) => {
-    const cueTs = cue.timestamp ? new Date(cue.timestamp).getTime() : startTs + index * 5000;
-    const startMs = Math.max(0, cueTs - startTs);
-    const endMs = startMs + 4000;
-
-    const startVtt = formatMsToVtt(startMs);
-    const endVtt = formatMsToVtt(endMs);
-    const speaker = cue.speaker || "Speaker";
-
-    vtt += `${index + 1}\n${startVtt} --> ${endVtt}\n<v ${speaker}>${cue.text}\n\n`;
+function updateSettings(update) {
+  const result = settingsQueue.then(async () => {
+    const current = await getSettings();
+    const next = update(current);
+    if (next) await chrome.storage.local.set({ settings: { ...next, appUrlPinned: true } });
+    return next || current;
   });
-
-  return vtt;
+  settingsQueue = result.catch(() => {});
+  return result;
 }
 
-function buildCanonicalText(cues) {
-  return cues.map((c) => `${c.speaker || "Speaker"}: ${c.text}`).join("\n");
+function accountIsCurrent(settings) {
+  return Boolean(settings.accessToken && settings.userId && settings.tokenExpiresAt > Date.now() / 1000 + 10);
 }
 
-const CAPTION_TOKEN_RE = /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu;
-const UI_NOISE_SPEAKERS = new Set([
-  "language",
-  "format_size",
-  "settings",
-  "circle",
-  "more_vert",
-  "arrow_drop_down",
-  "expand_more",
-  "expand_less",
-  "close",
-  "closed_caption",
-  "subtitles",
-  "font size",
-  "font color",
-]);
-const UI_NOISE_TEXT_PATTERNS = [
-  /\bformat_size\b/i,
-  /open caption settings/i,
-  /caption settings/i,
-  /\bfont size\b/i,
-  /\bfont color\b/i,
-  /^(language|settings|circle|arrow_drop_down|expand_more|expand_less|closed_caption)$/i,
-];
-
-function isCaptionToolbarNoise(speaker, text) {
-  const cleanSpeaker = String(speaker || "").replace(/\s+/g, " ").trim().toLowerCase();
-  const cleanText = String(text || "").replace(/\s+/g, " ").trim();
-  if (!cleanText || cleanText.length < 2) return true;
-  if (cleanSpeaker && UI_NOISE_SPEAKERS.has(cleanSpeaker)) return true;
-  return UI_NOISE_TEXT_PATTERNS.some((p) => p.test(cleanText));
-}
-
-function tokenizeWords(text) {
-  const matches = String(text || "").toLowerCase().match(CAPTION_TOKEN_RE);
-  return matches || [];
-}
-
-function commonPrefixLength(a, b) {
-  const limit = Math.min(a.length, b.length);
-  let i = 0;
-  while (i < limit && a[i] === b[i]) i++;
-  return i;
-}
-
-function commonSuffixLength(a, b, minStart = 0) {
-  let i = a.length - 1;
-  let j = b.length - 1;
-  let count = 0;
-  while (i >= minStart && j >= minStart && a[i] === b[j]) {
-    count++;
-    i--;
-    j--;
-  }
-  return count;
-}
-
-function stripLeadingWords(text, wordCount) {
-  if (wordCount <= 0) return text;
-  const matches = Array.from(String(text || "").matchAll(CAPTION_TOKEN_RE));
-  if (wordCount >= matches.length) return "";
-  const cutEnd = matches[wordCount - 1].index + matches[wordCount - 1][0].length;
-  return String(text || "")
-    .slice(cutEnd)
-    .replace(/^[\s.,!?;:…—-]+/, "")
-    .trim();
-}
-
-function mergeOrAppendCue(cues, incomingCue) {
-  const speaker = String(incomingCue?.speaker || "You").replace(/\s+/g, " ").trim() || "You";
-  const text = String(incomingCue?.text || "").replace(/\s+/g, " ").trim();
-  if (isCaptionToolbarNoise(speaker, text)) return "noise_ignored";
-
-  const incomingTs = incomingCue?.timestamp || new Date().toISOString();
-  const incomingMs = Date.parse(incomingTs);
-
-  // Check only the most recent 2 cues to fix progressive STT edits without ever touching earlier distinct topics
-  let targetCue = null;
-  const searchFloor = Math.max(0, cues.length - 2);
-  for (let i = cues.length - 1; i >= searchFloor; i--) {
-    const candidate = cues[i];
-    if (candidate.speaker !== speaker) continue;
-    const candidateMs = Date.parse(candidate.timestamp || "");
-    if (!Number.isFinite(incomingMs) || !Number.isFinite(candidateMs) || Math.abs(incomingMs - candidateMs) <= 30000) {
-      targetCue = candidate;
-      break;
-    }
-  }
-
-  if (targetCue) {
-    const prevText = targetCue.text || "";
-    const prevWords = tokenizeWords(prevText);
-    const newWords = tokenizeWords(text);
-    if (newWords.length === 0) return "empty";
-
-    const lcp = commonPrefixLength(prevWords, newWords);
-
-    // 1. Identical words (punctuation/casing revision only)
-    if (lcp === prevWords.length && prevWords.length === newWords.length) {
-      if (text.length >= prevText.length) {
-        targetCue.text = text;
-        targetCue.timestamp = incomingTs;
-        return "updated_revision";
-      }
-      return "duplicate_ignored";
-    }
-
-    // 2. Truncated stale prefix of what we already captured
-    if (lcp === newWords.length && newWords.length < prevWords.length) {
-      return "duplicate_ignored";
-    }
-
-    // 3. Progressive expansion or minor STT edit on the same ongoing utterance
-    const lcs = commonSuffixLength(prevWords, newWords, lcp);
-    const isSameUtteranceRevision =
-      lcp === prevWords.length ||
-      (prevWords.length >= 5 && lcp >= Math.ceil(prevWords.length * 0.7) && newWords.length >= prevWords.length - 2) ||
-      (prevWords.length >= 6 && newWords.length >= prevWords.length - 2 && lcp + lcs >= prevWords.length - 2);
-
-    if (isSameUtteranceRevision) {
-      targetCue.text = text;
-      targetCue.timestamp = incomingTs;
-      return "updated_revision";
-    }
-
-    // 4. Rolling caption window: trim suffix-of-prev overlapping with prefix-of-new
-    const maxOverlap = Math.min(prevWords.length, newWords.length);
-    for (let k = maxOverlap; k >= 2; k--) {
-      const overlapSlice = prevWords.slice(-k).join(" ");
-      if (k === 2 && overlapSlice.length < 10) continue;
-      if (overlapSlice === newWords.slice(0, k).join(" ")) {
-        const remainder = stripLeadingWords(text, k);
-        if (!remainder || remainder.length < 2) return "duplicate_ignored";
-        cues.push({ speaker, text: remainder, timestamp: incomingTs });
-        return "stored_trimmed";
-      }
-    }
-  }
-
-  // 5. Distinct utterance / new topic by the same or another speaker: keep intact
-  cues.push({ speaker, text, timestamp: incomingTs });
-  return "stored";
-}
-
-function readPageAuthContext() {
-  let accessToken = "";
-  let tokenExpiresAt = 0;
-  let userEmail = "";
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && /^sb-.*-auth-token$/.test(key)) {
+async function getAuth(force = false) {
+  const settings = await getSettings();
+  if (!force && accountIsCurrent(settings)) return settings;
+  const tabs = await chrome.tabs.query({ url: settings.appUrl + "/*" });
+  let signedOut = false;
+  for (const tab of tabs) {
+    try {
+      let data;
       try {
-        const parsed = JSON.parse(localStorage.getItem(key) || "null");
-        const session = parsed && parsed.currentSession ? parsed.currentSession : parsed;
-        if (session && typeof session.access_token === "string") {
-          accessToken = session.access_token;
-          tokenExpiresAt = Number(session.expires_at || 0);
-          userEmail = (session.user && session.user.email) || "";
-          break;
-        }
+        data = await chrome.tabs.sendMessage(tab.id, { type: "READ_ACTIONPULSE_AUTH" });
       } catch {
-        // Ignore malformed entries
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content/actionpulse-sync.js"] });
+        data = await chrome.tabs.sendMessage(tab.id, { type: "READ_ACTIONPULSE_AUTH" });
       }
+      if (data?.accessToken) return updateSettings((current) =>
+        current.appUrl === settings.appUrl ? { ...current, ...readAuth(data) } : null);
+      if (data) signedOut = true;
+    } catch {
+      // Tabs in the middle of navigation may not have an active content script.
     }
   }
+  if (signedOut) return updateSettings((current) =>
+    current.appUrl === settings.appUrl && current.accessToken === settings.accessToken
+      ? { ...current, ...EMPTY_AUTH } : null);
+  return getSettings();
+}
+
+function readAuth(data) {
   return {
-    appUrl: window.location.origin,
-    accessToken,
-    tokenExpiresAt,
-    userEmail,
-    workspaceId: localStorage.getItem("currentWorkspaceId") || "",
-    workspaceName: localStorage.getItem("currentWorkspaceName") || "",
-    managerRole: localStorage.getItem("currentWorkspaceRole") || "",
+    accessToken: String(data?.accessToken || ""),
+    userId: String(data?.userId || ""),
+    userEmail: String(data?.userEmail || ""),
+    tokenExpiresAt: Number(data?.tokenExpiresAt || 0),
   };
 }
 
-let pendingSettingsUpdate = Promise.resolve();
-
-function queueSettingsUpdate(update) {
-  const pending = pendingSettingsUpdate.then(update);
-  pendingSettingsUpdate = pending.catch(() => {});
-  return pending;
-}
-
-function httpOrigin(value) {
+function localOrHostedOrigin(value, hostingDomain) {
   try {
     const url = new URL(value);
-    if (["https:", "http:"].includes(url.protocol) && !url.username && !url.password) return url.origin;
-  } catch {
-    // Missing or invalid origin.
-  }
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return null;
+    const loopback = ["localhost", "127.0.0.1"].includes(url.hostname);
+    if (loopback && url.protocol === "http:") return url.origin;
+    if (url.protocol === "https:" && url.hostname.endsWith(hostingDomain)) return url.origin;
+  } catch { /* Invalid URL */ }
   return null;
 }
 
-async function saveAuthContext(settings, ctx) {
-  const origin = httpOrigin(ctx.appUrl);
-  if (!origin || settings.appUrl !== origin) return null;
-  const updated = {
-    ...settings,
-    appUrl: origin,
-    accessToken: ctx.accessToken || "",
-    tokenExpiresAt: Number(ctx.tokenExpiresAt || 0),
-    userEmail: ctx.userEmail || "",
-    workspaceId: ctx.workspaceId || "",
-    workspaceName: ctx.workspaceName || "",
-    managerRole: ctx.managerRole || "",
-    lastSyncedAt: Date.now(),
-  };
-  await chrome.storage.local.set({ settings: updated });
-  return updated;
-}
-
-async function syncFromOpenActionPulseTabs(settings) {
+async function api(path, settings, body) {
+  if (!accountIsCurrent(settings)) throw Object.assign(new Error("Sign in to ActionPulse in this browser, then try again."), { status: 401 });
+  let response;
   try {
-    const tabs = await chrome.tabs.query({ url: settings.appUrl + "/*" });
-    if (!tabs || tabs.length === 0) return sanitizeSettings((await chrome.storage.local.get("settings")).settings);
-
-    // Prefer active tab first so multi-tab users sync their focused ActionPulse tab
-    const sortedTabs = [...tabs].sort((a, b) => Number(b.active) - Number(a.active));
-    for (const tab of sortedTabs) {
-      if (!tab.id || !chrome.scripting) continue;
-      try {
-        const results = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: readPageAuthContext,
-        });
-        const ctx = results && results[0] && results[0].result;
-        if (ctx && (ctx.accessToken || ctx.workspaceId)) {
-          const updated = await queueSettingsUpdate(async () => {
-            const current = sanitizeSettings((await chrome.storage.local.get("settings")).settings);
-            return saveAuthContext(current, ctx);
-          });
-          if (updated) return updated;
-        }
-      } catch {
-        // Skip tabs that cannot be scripted (e.g., unloading/restricted)
-      }
-    }
-  } catch (err) {
-    console.debug("[ActionPulse] Open tab auth sync skipped:", err);
-  }
-  return sanitizeSettings((await chrome.storage.local.get("settings")).settings);
-}
-
-async function performBackendUpload(session, rawSettings) {
-  let settings = sanitizeSettings(rawSettings);
-  if (!settings.accessToken || !settings.workspaceId || !settings.managerRole) {
-    settings = await syncFromOpenActionPulseTabs(settings);
-  }
-  const cues = session.cues && session.cues.length > 0 ? session.cues : [];
-
-  if (cues.length === 0) {
-    throw new Error("No captions captured yet. Turn on Closed Captions (CC) in your meeting first.");
-  }
-  if (!settings.accessToken) {
-    throw new Error("Not signed in. Open ActionPulse in Chrome and sign in as an Admin or Organiser to sync.");
-  }
-  if (settings.tokenExpiresAt && settings.tokenExpiresAt * 1000 < Date.now()) {
-    throw new Error("ActionPulse login session expired. Open or refresh your ActionPulse tab to re-sync.");
-  }
-  if (!settings.workspaceId) {
-    throw new Error("No active workspace synced. Select a workspace in ActionPulse first.");
-  }
-
-  const normalizedRole = String(settings.managerRole || "").toLowerCase();
-  if (!["owner", "admin", "organiser"].includes(normalizedRole)) {
-    throw new Error(
-      `Manager access required: current role is "${normalizedRole || "none"}". Only workspace owners, admins, or organisers can upload.`
-    );
-  }
-
-  let durationMins = 1;
-  if (session.startTime) {
-    const endTs = session.endTime ? new Date(session.endTime).getTime() : Date.now();
-    durationMins = Math.max(1, Math.round((endTs - new Date(session.startTime).getTime()) / 60000));
-  }
-
-  const vttText = buildVttTranscript(cues, session.startTime);
-  const startTs = session.startTime ? new Date(session.startTime).getTime() : Date.now();
-  const segmentsPayload = cues.map((c, i) => {
-    const parsedCueTs = c.timestamp ? new Date(c.timestamp).getTime() : NaN;
-    const cueTs = Number.isFinite(parsedCueTs) ? parsedCueTs : startTs + i * 5000;
-    const startMs = Math.max(0, cueTs - startTs);
-    const nextCue = cues[i + 1];
-    const parsedNextTs = nextCue && nextCue.timestamp ? new Date(nextCue.timestamp).getTime() : NaN;
-    const endMs = Number.isFinite(parsedNextTs)
-      ? Math.max(startMs + 1000, parsedNextTs - startTs)
-      : startMs + 5000;
-    return {
-      speaker: c.speaker,
-      text: c.text,
-      timestamp: c.timestamp,
-      start_ms: startMs,
-      end_ms: endMs,
-    };
-  });
-
-  const payload = {
-    workspace_id: settings.workspaceId,
-    provider: session.platform && session.platform !== "none" ? session.platform : "google_meet",
-    title: session.title || "Online Meeting Transcript",
-    conference_url: session.conferenceUrl || null,
-    duration_minutes: durationMins,
-    transcript_text: vttText,
-    segments: segmentsPayload,
-    auto_extract: settings.autoExtract !== false,
-  };
-
-  const targetUrl = `${settings.apiUrl}/api/meetings/automation/extension-upload`;
-  console.log("[ActionPulse] Uploading meeting transcript to:", targetUrl);
-
-  const response = await fetch(targetUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${settings.accessToken}`,
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errBody = await response.text();
-    let detail = errBody;
-    try {
-      const parsed = JSON.parse(errBody);
-      detail = parsed.detail || errBody;
-    } catch {
-      // keep raw text
-    }
-    throw new Error(`Server returned ${response.status}: ${detail}`);
-  }
-
-  const result = await response.json();
-  const reviewFullUrl = `${settings.appUrl}${result.review_url}`;
-
-  return {
-    success: true,
-    meetingId: result.meeting_id,
-    reviewUrl: reviewFullUrl,
-    relativeReviewUrl: result.review_url,
-    segmentCount: result.segment_count,
-    extractedItemsCount: result.extracted_items_count,
-    message: result.message,
-  };
-}
-
-chrome.runtime.onInstalled.addListener(async () => {
-  const current = await chrome.storage.local.get(["settings", "session"]);
-  if (current.settings?.appUrlPinned !== true) {
-    await queueSettingsUpdate(async () => {
-      const { settings } = await chrome.storage.local.get("settings");
-      await chrome.storage.local.set({ settings: sanitizeSettings(settings) });
+    response = await fetch(settings.apiUrl + path, {
+      method: body ? "POST" : "GET",
+      headers: { Authorization: `Bearer ${settings.accessToken}`, ...(body && { "Content-Type": "application/json" }) },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(24000),
     });
+  } catch {
+    throw new Error("Could not reach ActionPulse. Check your connection and try again.");
   }
-  if (!current.session) {
-    await chrome.storage.local.set({ session: createIdleSession() });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message = response.status === 401 ? "Your ActionPulse session expired. Sign in again to continue."
+      : response.status === 404 && path.endsWith("extension-workspaces")
+        ? "This ActionPulse backend does not support live capture yet."
+        : typeof data?.detail === "string" ? data.detail : "ActionPulse could not complete the request. Try again.";
+    throw Object.assign(new Error(message), { status: response.status });
   }
-  console.log("[ActionPulse] Service worker initialized.");
-});
-
-// Session mutations read, modify, and write the same stored transcript.
-const SESSION_MUTATIONS = new Set([
-  "MEETING_STARTED", "MEETING_ENDED", "CAPTION_CUE", "CLEAR_BUFFER", "UPLOAD_TO_BACKEND",
-]);
-let pendingSessionUpdate = Promise.resolve();
-let uploadingSessionId = null;
-
-function queueSessionUpdate(update) {
-  const pending = pendingSessionUpdate.then(update);
-  pendingSessionUpdate = pending.catch(() => {});
-  return pending;
+  if (!data) throw new Error("ActionPulse returned an unexpected response.");
+  return data;
 }
 
-async function uploadAndSave(session, settings) {
-  if (session.uploaded && session.uploadResult) return session.uploadResult;
-
-  uploadingSessionId = session.id;
-  try {
-    const result = await performBackendUpload(session, settings);
-    session.uploaded = true;
-    session.uploadResult = result;
-    session.reviewUrl = result.reviewUrl;
-    session.uploadError = "";
-    await chrome.storage.local.set({ session });
-    return result;
-  } catch (error) {
-    session.uploadError = error.message || "The upload could not be completed.";
-    await chrome.storage.local.set({ session });
-    return { success: false, error: session.uploadError };
-  } finally {
-    uploadingSessionId = null;
-  }
+function withOperation(key, action) {
+  const previous = operations.get(key) || Promise.resolve();
+  const next = previous.catch(() => {}).then(action);
+  operations.set(key, next);
+  const cleanup = () => { if (operations.get(key) === next) operations.delete(key); };
+  next.then(cleanup, cleanup);
+  return next;
 }
 
-async function finishCapture(session, settings) {
-  session.isRecording = false;
-  session.isCompleted = true;
-  session.endTime = new Date().toISOString();
-  if (session.startTime) {
-    session.durationSeconds = Math.max(
-      0,
-      Math.floor((new Date(session.endTime) - new Date(session.startTime)) / 1000)
-    );
-  }
-
-  await chrome.storage.local.set({ session, meetingTabId: null });
-  if (session.cues.length && !session.uploaded && settings.autoUploadOnEnd !== false) {
-    await uploadAndSave(session, settings);
-  }
+async function readCapture(id) {
+  const key = CAPTURE_PREFIX + id;
+  return (await chrome.storage.local.get(key))[key];
 }
 
-chrome.tabs.onRemoved.addListener((tabId) => {
-  queueSessionUpdate(async () => {
-    const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
-    if (store.meetingTabId === tabId && store.session?.isRecording) {
-      await finishCapture(store.session, sanitizeSettings(store.settings));
-    }
-  }).catch((error) => console.warn("[ActionPulse] Could not finish capture:", error));
-});
+async function allCaptures() {
+  if (!chrome.storage.local.getKeys) {
+    const rows = Object.entries(await chrome.storage.local.get(null));
+    return rows.filter(([key]) => key.startsWith(CAPTURE_PREFIX)).map(([, item]) => item);
+  }
+  const keys = (await chrome.storage.local.getKeys()).filter((key) => key.startsWith(CAPTURE_PREFIX));
+  return Object.values(await chrome.storage.local.get(keys));
+}
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const handle = async () => {
-    const store = await chrome.storage.local.get(["session", "settings", "meetingTabId"]);
-    let session = store.session || createIdleSession();
-    let settings = sanitizeSettings(store.settings);
+function sameAccount(capture, settings) {
+  return capture.userId === settings.userId && capture.appUrl === settings.appUrl && capture.apiUrl === settings.apiUrl;
+}
 
-    switch (message.type) {
-      case "GET_STATE": {
-        const isStale = !settings.lastSyncedAt || Date.now() - settings.lastSyncedAt > 4000;
-        if (!settings.accessToken || !settings.workspaceId || !settings.managerRole || isStale) {
-          settings = await syncFromOpenActionPulseTabs(settings);
-        }
-        sendResponse({
-          session,
-          isUploading: uploadingSessionId === session.id,
-          settings: {
-            ...settings,
-            hasAccessToken: Boolean(settings.accessToken),
-            accessToken: undefined,
-          },
-          defaultConnection: DEFAULT_CONNECTION,
-          cueCount: session.cues ? session.cues.length : 0,
-        });
-        break;
-      }
+async function updateBadge() {
+  const attention = (await allCaptures()).some((item) =>
+    ["ready", "failed", "empty", "retry"].includes(item.phase) && !item.seen);
+  await chrome.action.setBadgeBackgroundColor({ color: "#5142c4" });
+  await chrome.action.setBadgeText({ text: attention ? "1" : "" });
+}
 
-      case "SYNC_AUTH_CONTEXT": {
-        const data = message.data || {};
-        const updated = await saveAuthContext(settings, { ...data, appUrl: sender.url });
-        sendResponse(updated ? { status: "synced" } : { status: "ignored" });
-        break;
-      }
-
-      case "MEETING_STARTED": {
-        const data = message.data || {};
-        if (!session.isRecording || session.isCompleted) {
-          session = createNewSession(data.platform, data.title, data.conferenceUrl);
-        } else {
-          if (data.title) session.title = data.title;
-          if (data.conferenceUrl) session.conferenceUrl = data.conferenceUrl;
-          if (data.platform) session.platform = data.platform;
-        }
-
-        const tabId = sender.tab ? sender.tab.id : null;
-        await chrome.storage.local.set({ session, meetingTabId: tabId });
-        sendResponse({ status: "started", session });
-        break;
-      }
-
-      case "MEETING_ENDED": {
-        if (session.isRecording) {
-          await finishCapture(session, settings);
-        }
-        sendResponse({ status: "ended", session });
-        break;
-      }
-
-      case "CAPTION_CUE": {
-        const cue = message.data;
-        if (!cue || !cue.text) {
-          sendResponse({ status: "empty" });
-          return;
-        }
-
-        if (!session.isRecording && !session.isCompleted) {
-          session.isRecording = true;
-          session.startTime = session.startTime || new Date().toISOString();
-        }
-
-        if (cue.platform && session.platform === "none") session.platform = cue.platform;
-        if (cue.title && (!session.title || session.title === "Meeting")) session.title = cue.title;
-        if (cue.conferenceUrl && !session.conferenceUrl) session.conferenceUrl = cue.conferenceUrl;
-
-        const mergeResult = mergeOrAppendCue(session.cues, cue);
-        if (mergeResult === "duplicate_ignored" || mergeResult === "noise_ignored" || mergeResult === "empty") {
-          sendResponse({ status: mergeResult, total: session.cues.length });
-          return;
-        }
-
-        await chrome.storage.local.set({ session });
-        sendResponse({ status: mergeResult, total: session.cues.length });
-        break;
-      }
-
-      case "CLEAR_BUFFER": {
-        session = createIdleSession();
-        await chrome.storage.local.set({ session });
-        sendResponse({ status: "cleared", session });
-        break;
-      }
-
-      case "UPDATE_SETTINGS": {
-        const changes = message.data || {};
-        if ("appUrl" in changes) {
-          const appUrl = httpOrigin(changes.appUrl);
-          if (!appUrl) {
-            sendResponse({ status: "invalid_settings" });
-            break;
-          }
-          if (appUrl !== settings.appUrl) {
-            Object.assign(settings, SIGNED_OUT_CONTEXT);
-          }
-          settings.appUrl = appUrl;
-          settings.appUrlPinned = true;
-        }
-        if ("apiUrl" in changes) {
-          const apiUrl = httpOrigin(changes.apiUrl);
-          if (!apiUrl) {
-            sendResponse({ status: "invalid_settings" });
-            break;
-          }
-          settings.apiUrl = apiUrl;
-        }
-        for (const key of ["autoUploadOnEnd", "autoExtract"]) {
-          if (typeof changes[key] === "boolean") settings[key] = changes[key];
-        }
-        await chrome.storage.local.set({ settings });
-        sendResponse({ status: "settings_updated" });
-        break;
-      }
-
-      case "UPLOAD_TO_BACKEND": {
-        sendResponse(await uploadAndSave(session, settings));
-        break;
-      }
-
-      case "GET_TRANSCRIPT_EXPORT": {
-        const cues = session.cues || [];
-        const vtt = buildVttTranscript(cues, session.startTime);
-        const txt = buildCanonicalText(cues);
-        sendResponse({
-          vtt,
-          txt,
-          title: session.title || "meeting_transcript",
-          cueCount: cues.length,
-        });
-        break;
-      }
-
-      default:
-        sendResponse({ error: "Unknown message type: " + message.type });
-    }
+function view(capture, appUrl) {
+  return {
+    id: capture.id, phase: capture.phase, platform: capture.platform, title: capture.title,
+    workspaceName: capture.workspaceName, startedAt: capture.startedAt, endedAt: capture.endedAt,
+    cueCount: capture.cues.length, error: capture.error,
+    meetingUrl: appUrl && capture.meetingId ? `${appUrl}/meetings/${capture.meetingId}?tab=${capture.phase === "ready" || capture.phase === "processing" ? "review" : capture.phase === "empty" ? "transcript" : "overview"}` : null,
   };
+}
 
-  let handled;
-  if (message.type === "SYNC_AUTH_CONTEXT" || message.type === "UPDATE_SETTINGS") {
-    handled = queueSettingsUpdate(handle);
-  } else if (SESSION_MUTATIONS.has(message.type)) {
-    handled = queueSessionUpdate(handle);
-  } else {
-    handled = handle();
+async function saveCapture(capture, publish = true) {
+  await chrome.storage.local.set({ [CAPTURE_PREFIX + capture.id]: capture });
+  if (!publish) return;
+  const state = view(capture, capture.appUrl);
+  if (capture.tabId != null) {
+    void chrome.tabs.sendMessage(capture.tabId, {
+      type: "ACTIONPULSE_CAPTURE_STATE", callKey: capture.callKey, state,
+    }).catch(() => {});
   }
-  handled.catch((error) => {
-    console.error("[ActionPulse] Extension request failed:", error);
-    sendResponse({ success: false, error: error.message || "Extension request failed." });
-  });
+  void updateBadge();
+}
 
+async function tabCapture(tabId, callKey, settings) {
+  return (await allCaptures()).find((item) => item.tabId === tabId && item.callKey === callKey &&
+    sameAccount(item, settings) && item.phase === "capturing");
+}
+
+function meetingSender(sender) {
+  return sender.frameId === 0 && sender.tab && ActionPulseMeeting.identify(sender.url);
+}
+
+function offerKey(tabId) {
+  return "offer:" + tabId;
+}
+
+async function getOffer(sender) {
+  const call = meetingSender(sender);
+  if (!call) return { kind: "ineligible" };
+  let settings = await getSettings();
+  let existing = await tabCapture(sender.tab.id, call.key, settings);
+  if (existing) return { kind: "capture", state: view(existing, existing.appUrl) };
+  const key = offerKey(sender.tab.id);
+  if ((await chrome.storage.session.get(key))[key] === call.key) return { kind: "dismissed" };
+  settings = await getAuth();
+  if (!accountIsCurrent(settings)) return { kind: "sign-in" };
+  let account;
+  try {
+    account = await api("/api/meetings/automation/extension-workspaces", settings);
+  } catch (error) {
+    if (error.status !== 401) throw error;
+    settings = await getAuth(true);
+    if (!accountIsCurrent(settings)) return { kind: "sign-in" };
+    try {
+      account = await api("/api/meetings/automation/extension-workspaces", settings);
+    } catch (retried) {
+      if (retried.status === 401) return { kind: "sign-in" };
+      throw retried;
+    }
+  }
+  if (account.user_id !== settings.userId) return { kind: "sign-in" };
+  existing = await tabCapture(sender.tab.id, call.key, settings);
+  if (existing) return { kind: "capture", state: view(existing, existing.appUrl) };
+  return account.workspaces.length ? { kind: "offer", userId: account.user_id, workspaces: account.workspaces } : { kind: "ineligible" };
+}
+
+async function startCapture(sender, data) {
+  const call = meetingSender(sender);
+  if (!call || !data.attested || !ActionPulseMeeting.isId(data.id) || !ActionPulseMeeting.isId(data.workspaceId)) {
+    throw new Error("Choose a workspace and confirm that you’ve informed participants.");
+  }
+  return withOperation("join:" + call.key, async () => {
+    const settings = await getAuth(true);
+    if (data.userId !== settings.userId) throw new Error("Your signed-in account changed. Reopen the meeting prompt.");
+    const tab = await chrome.tabs.get(sender.tab.id).catch(() => null);
+    if (ActionPulseMeeting.identify(tab?.url)?.key !== call.key) throw new Error("The call has already ended.");
+    const prior = (await allCaptures()).find((item) => item.callKey === call.key &&
+      item.workspaceId === data.workspaceId && sameAccount(item, settings) && item.phase === "capturing");
+    if (prior) {
+      if (prior.tabId !== sender.tab.id) throw new Error("This meeting is already being captured in another tab.");
+      return view(prior, prior.appUrl);
+    }
+    const title = String(data.title || "").trim().slice(0, 300) || ActionPulseMeeting.names[call.platform] + " meeting";
+    const result = await api("/api/meetings/automation/extension-capture", settings, {
+      capture_id: data.id, workspace_id: data.workspaceId, provider: call.platform, title,
+      conference_url: call.url, timezone: data.timezone || "UTC", ai_attestation: true,
+    });
+    if (!ActionPulseMeeting.isId(result.meeting_id)) throw new Error("ActionPulse did not return a meeting.");
+    const capture = {
+      id: data.id, meetingId: result.meeting_id, tabId: sender.tab.id, callKey: call.key,
+      platform: call.platform, conferenceUrl: call.url, title: result.title,
+      workspaceId: data.workspaceId, workspaceName: String(data.workspaceName || "").slice(0, 200),
+      userId: settings.userId, appUrl: settings.appUrl, apiUrl: settings.apiUrl,
+      phase: "capturing", startedAt: new Date().toISOString(), cues: [],
+    };
+    await saveCapture(capture);
+    const currentTab = await chrome.tabs.get(sender.tab.id).catch(() => null);
+    if (ActionPulseMeeting.identify(currentTab?.url)?.key !== call.key) void endCapture(capture.id);
+    return view(capture, capture.appUrl);
+  });
+}
+
+async function notify(capture) {
+  if (capture.seen) return;
+  const state = view(capture, capture.appUrl);
+  const copy = ActionPulseMeeting.statusCopy(state);
+  const settings = await getSettings();
+  if (!sameAccount(capture, settings)) return;
+  await chrome.notifications.create(capture.id, {
+    type: "basic", iconUrl: chrome.runtime.getURL("icons/icon-128.png"),
+    title: copy.heading, message: capture.title + " · " + copy.description,
+    buttons: [{ title: copy.action || "Open ActionPulse extension" }],
+  }).catch(() => {});
+}
+
+async function upload(capture) {
+  const settings = await getAuth(true);
+  if (!sameAccount(capture, settings)) throw new Error("Sign in with the account and connection that started this capture.");
+  const start = Date.parse(capture.startedAt);
+  const segments = capture.cues.map((cue, index, cues) => {
+    const startMs = Math.max(0, Date.parse(cue.timestamp) - start);
+    const nextMs = Date.parse(cues[index + 1]?.timestamp) - start;
+    return { ...cue, start_ms: startMs, end_ms: Number.isFinite(nextMs) ? Math.max(startMs + 1000, nextMs) : startMs + 4000 };
+  });
+  const result = await api("/api/meetings/automation/extension-upload", settings, {
+    meeting_id: capture.meetingId, workspace_id: capture.workspaceId, provider: capture.platform,
+    title: capture.title, conference_url: capture.conferenceUrl, segments, auto_extract: true,
+    duration_minutes: Math.min(480, Math.max(1, Math.round((Date.parse(capture.endedAt) - start) / 60000))),
+  });
+  if (result.meeting_id !== capture.meetingId) throw new Error("The server did not confirm the saved meeting.");
+  capture.phase = "processing";
+  capture.error = "";
+  capture.cues = [];
+  await saveCapture(capture);
+}
+
+async function refreshProgress(capture) {
+  const settings = await getAuth();
+  if (!sameAccount(capture, settings) || !accountIsCurrent(settings)) return;
+  const result = await api(`/api/meetings/automation/extension-capture/${capture.meetingId}?workspace_id=${capture.workspaceId}`, settings);
+  if (result.status === "draft") {
+    capture.phase = "failed";
+    capture.error = "Open your meeting to check its transcript and start task extraction.";
+    await saveCapture(capture);
+    await notify(capture);
+    return;
+  }
+  if (["ready", "failed"].includes(result.status)) {
+    capture.phase = result.status;
+    capture.seen = false;
+    await saveCapture(capture);
+    await notify(capture);
+  }
+}
+
+async function updateCapture(id, action) {
+  return withOperation(id, async () => {
+    const capture = await readCapture(id);
+    if (capture) return action(capture);
+  });
+}
+
+async function uploadOrRetry(capture) {
+  capture.phase = "uploading";
+  capture.seen = false;
+  await saveCapture(capture);
+  try {
+    await upload(capture);
+    await refreshProgress(capture).catch(() => {});
+  } catch (error) {
+    capture.phase = "retry";
+    capture.error = error.message;
+    await saveCapture(capture);
+    await notify(capture);
+  }
+}
+
+function endCapture(id) {
+  return updateCapture(id, async (capture) => {
+    if (capture.phase !== "capturing") return;
+    capture.endedAt = new Date().toISOString();
+    if (capture.cues.length) await uploadOrRetry(capture);
+    else {
+      capture.phase = "empty";
+      await saveCapture(capture);
+      await notify(capture);
+    }
+  });
+}
+
+async function endTab(tabId, nextCallKey) {
+  const active = (await allCaptures()).filter((item) =>
+    item.tabId === tabId && item.phase === "capturing" && item.callKey !== nextCallKey);
+  await Promise.all(active.map((item) => endCapture(item.id)));
+}
+
+async function recoverWork() {
+  const captures = await allCaptures();
+  await Promise.allSettled(captures.map(async (item) => {
+    if (item.phase === "capturing") {
+      const tab = await chrome.tabs.get(item.tabId).catch(() => null);
+      if (ActionPulseMeeting.identify(tab?.url)?.key !== item.callKey) await endCapture(item.id);
+    } else if (item.phase === "uploading" || item.phase === "processing") {
+      await updateCapture(item.id, async (current) => {
+        if (current.phase === "uploading") await uploadOrRetry(current);
+        if (current.phase === "processing") await refreshProgress(current);
+      });
+    }
+  }));
+}
+
+async function initialize() {
+  await chrome.alarms.create(WATCH_ALARM, { periodInMinutes: 0.5 });
+  // Preserve any unsent transcript from the previous extension version.
+  const { session } = await chrome.storage.local.get("session");
+  if (session) {
+    if (session.cues?.length && !session.uploaded) {
+      const settings = await getSettings();
+      const id = crypto.randomUUID();
+      await saveCapture({
+        ...session, id, phase: "retry", tabId: null, startedAt: session.startTime, endedAt: session.endTime,
+        ...Object.fromEntries(["appUrl", "apiUrl", "userId"].map((key) => [key, settings[key]])),
+        error: "Download these captions and add them to your meeting in ActionPulse.",
+      }, false);
+    }
+    await chrome.storage.local.remove(["session", "meetingTabId"]);
+  }
+  await updateBadge();
+}
+
+chrome.runtime.onInstalled.addListener(() => { void initialize(); });
+chrome.runtime.onStartup.addListener(() => { void initialize().then(recoverWork); });
+chrome.alarms.onAlarm.addListener(({ name }) => { if (name === WATCH_ALARM) void recoverWork(); });
+chrome.tabs.onRemoved.addListener((tabId) => { void chrome.storage.session.remove(offerKey(tabId)); void endTab(tabId); });
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.url) void endTab(tabId, ActionPulseMeeting.identify(change.url)?.key);
+});
+
+async function openCapture(id, tabId) {
+  const settings = await getAuth();
+  const item = await readCapture(id);
+  if (!item || (!sameAccount(item, settings) && item.meetingId)) throw new Error("Sign in with the account that started this capture.");
+  const { meetingUrl } = view(item, item.appUrl);
+  if (!meetingUrl) return chrome.windows.create({ url: chrome.runtime.getURL("popup/popup.html"), type: "popup",
+    width: 405, height: 530 });
+  await chrome.tabs.create({ url: meetingUrl, ...(tabId != null && { openerTabId: tabId }) });
+  await updateCapture(id, async (current) => { current.seen = true; await saveCapture(current, false); });
+  await chrome.notifications.clear(id);
+  void updateBadge();
+}
+
+chrome.notifications.onClicked.addListener((id) => { void openCapture(id).catch(() => {}); });
+chrome.notifications.onButtonClicked.addListener((id) => { void openCapture(id).catch(() => {}); });
+
+function isPopup(sender) {
+  return sender.url === chrome.runtime.getURL("popup/popup.html");
+}
+
+async function handle(message, sender) {
+  const data = message.data || {};
+  if (message.type === "SYNC_AUTH_CONTEXT") {
+    await updateSettings((settings) => sender.frameId === 0 && sender.tab &&
+      (sender.origin || new URL(sender.url).origin) === settings.appUrl ? { ...settings, ...readAuth(data) } : null);
+    return {};
+  }
+  const call = meetingSender(sender);
+  if (call) {
+    const tabId = sender.tab.id;
+    switch (message.type) {
+      case "MEETING_JOINED": return getOffer(sender);
+      case "DISMISS_OFFER":
+        await chrome.storage.session.set({ [offerKey(tabId)]: call.key });
+        return {};
+      case "START_CAPTURE": return startCapture(sender, data);
+      case "CAPTION_CUE":
+        return updateCapture(data.id, async (item) => {
+          if (item.tabId !== tabId || item.callKey !== call.key || item.phase !== "capturing") return;
+          const cue = { text: String(data.text || "").slice(0, 12000), speaker: String(data.speaker || "").slice(0, 200),
+            timestamp: new Date().toISOString() };
+          const outcome = mergeOrAppendCue(item.cues, cue);
+          if (["stored", "stored_trimmed", "updated_revision"].includes(outcome)) {
+            await saveCapture(item, false);
+          }
+          return { cueCount: item.cues.length };
+        });
+      case "OPEN_APP": return chrome.tabs.create({ url: (await getSettings()).appUrl + "/dashboard", openerTabId: tabId }).then(() => ({}));
+    }
+  }
+  const platform = ActionPulseMeeting.platformAt(sender.url);
+  if (platform && ["MEETING_ENDED", "OPEN_CAPTURE"].includes(message.type) && sender.frameId === 0 && sender.tab) {
+    const item = await readCapture(data.id);
+    if (!item || item.tabId !== sender.tab.id || item.platform !== platform) return {};
+    if (message.type === "MEETING_ENDED" && item.callKey === data.callKey) void endCapture(item.id);
+    if (message.type === "OPEN_CAPTURE") await openCapture(data.id, sender.tab.id);
+    return {};
+  }
+  if (!isPopup(sender)) return {};
+  switch (message.type) {
+    case "GET_STATE": {
+      const settings = await getAuth();
+      const captures = (await allCaptures()).filter((item) => !item.meetingId || sameAccount(item, settings))
+        .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      return { connection: { appUrl: settings.appUrl, apiUrl: settings.apiUrl }, defaultConnection: DEFAULT_CONNECTION,
+        account: accountIsCurrent(settings) ? settings.userEmail : "", inMeetingTab: Boolean(ActionPulseMeeting.identify(tab?.url)),
+        captures: captures.map((item) => ({
+          ...view(item, item.appUrl),
+          preview: item.cues.slice(-5).map(({ speaker, text }) => ({ speaker, text })),
+        })) };
+    }
+    case "SHOW_MEETING_PROMPT": {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!ActionPulseMeeting.identify(tab?.url)) throw new Error("Open your meeting tab first.");
+      await chrome.storage.session.remove(offerKey(tab.id));
+      return chrome.tabs.sendMessage(tab.id, { type: "ACTIONPULSE_SHOW_OFFER" }).catch(() => {
+        throw new Error("Refresh the meeting tab to enable ActionPulse.");
+      });
+    }
+    case "UPDATE_SETTINGS": {
+      const appUrl = localOrHostedOrigin(data.appUrl, ".vercel.app");
+      const apiUrl = localOrHostedOrigin(data.apiUrl, ".onrender.com");
+      if (!appUrl || !apiUrl) throw new Error("Use an HTTPS Vercel or Render address, or an HTTP localhost address.");
+      await updateSettings((current) => ({ ...current, ...(appUrl !== current.appUrl && EMPTY_AUTH), appUrl, apiUrl }));
+      await getAuth(true);
+      return {};
+    }
+    case "OPEN_APP":
+      return chrome.tabs.create({ url: (await getSettings()).appUrl + "/dashboard" }).then(() => ({}));
+    case "OPEN_CAPTURE":
+      await openCapture(data.id);
+      return {};
+    case "RETRY_UPLOAD": {
+      const settings = await getAuth();
+      void updateCapture(data.id, async (item) => {
+        if (item.meetingId && item.phase === "retry" && sameAccount(item, settings)) await uploadOrRetry(item);
+      });
+      return {};
+    }
+    case "FINISH_CAPTURE": {
+      const settings = await getSettings();
+      const item = await readCapture(data.id);
+      if (item?.phase === "capturing" && sameAccount(item, settings)) void endCapture(item.id);
+      return {};
+    }
+    case "EXPORT": {
+      const settings = await getSettings();
+      const item = await readCapture(data.id);
+      if (!item || (item.meetingId && !sameAccount(item, settings))) throw new Error("Capture unavailable.");
+      return { vtt: buildVttTranscript(item.cues, item.startedAt), txt: buildCanonicalText(item.cues), title: item.title };
+    }
+    case "DISCARD": {
+      const settings = await getSettings();
+      await updateCapture(data.id, async (item) => {
+        if (["empty", "failed", "ready", "retry"].includes(item.phase) && (!item.meetingId || sameAccount(item, settings))) {
+          await chrome.storage.local.remove(CAPTURE_PREFIX + item.id);
+          await chrome.notifications.clear(item.id);
+          void updateBadge();
+        }
+      });
+      return {};
+    }
+    default: return {};
+  }
+}
+
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  handle(message, sender).then(respond, (error) => respond({ error: error.message || "ActionPulse could not complete this step." }));
   return true;
 });

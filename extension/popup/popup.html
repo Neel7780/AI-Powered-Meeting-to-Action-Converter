@@ -3,77 +3,38 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ActionPulse · Live captions</title>
+  <title>ActionPulse</title>
+  <link rel="stylesheet" href="../shared/panel.css" />
   <link rel="stylesheet" href="popup.css" />
+  <script src="../shared/meeting.js" defer></script>
   <script src="popup.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-icon" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.3 2.5 4.4 13.1h6.2l-.8 8.4 9.8-11.3h-6.2l-.1-7.7Z"/></svg>
-      </span>
-      <div><h1>ActionPulse</h1><p>Live captions</p></div>
-    </div>
-    <button class="text-button" id="openAppBtn" type="button">Open ActionPulse <span aria-hidden="true">↗</span></button>
+  <header class="panel-header toolbar">
+    <img class="brand-icon" src="../icons/icon-48.png" alt="" />
+    <h1 class="brand-name">ActionPulse</h1>
+    <button class="secondary" id="openApp" type="button">Open ActionPulse <span aria-hidden="true">↗</span></button>
   </header>
-
   <main>
-    <section class="workspace" aria-label="Connected workspace">
-      <svg class="workspace-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9h17m-11.5 0v10.5"/></svg>
-      <div class="workspace-copy">
-        <strong id="syncWorkspaceTag">Checking workspace…</strong>
-        <p id="syncAccountStat"></p>
-      </div>
-      <span class="role" id="rolePill" hidden></span>
+    <section aria-label="Account" class="account">
+      <span class="account-indicator" aria-hidden="true"></span>
+      <span id="account" role="status">Checking account…</span>
     </section>
-
-    <section class="capture" aria-labelledby="meetingTitle">
-      <div class="status-row">
-        <div class="status" id="sessionStateTag" role="status" data-tone="idle">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span id="statusLabel">Getting ready</span>
-        </div>
-        <span class="provider" id="platformName"></span>
-      </div>
-      <h2 id="meetingTitle">Live meeting</h2>
-      <p class="muted" id="statusHint">Checking for a call.</p>
-      <dl class="metrics">
-        <div><dt>Captions</dt><dd id="cueCountStat">0</dd></div>
-        <div><dt>Duration</dt><dd id="meetingTimer">00:00</dd></div>
-      </dl>
-
-      <p class="message" id="uploadError" role="alert" hidden></p>
-      <a class="primary" id="reviewGateLink" target="_blank" rel="noopener noreferrer" hidden><span id="reviewLinkLabel">Review tasks</span><span aria-hidden="true">↗</span></a>
-      <button class="primary" id="uploadBtn" type="button" hidden><span class="spinner" id="uploadSpinner" aria-hidden="true" hidden></span><span id="uploadLabel">Upload captions</span></button>
-    </section>
-
-    <details class="disclosure" id="transcriptPanel" hidden>
-      <summary>Transcript preview <span id="previewCount"></span></summary>
-      <ol class="transcript-feed" id="transcriptFeed" aria-label="Latest captured captions"></ol>
-      <div class="transcript-actions">
-        <button class="secondary" id="saveVttBtn" type="button">Download VTT</button>
-        <button class="text-button" id="saveTxtBtn" type="button">Download TXT</button>
-        <button class="text-button danger" id="clearBufferBtn" type="button" hidden>Discard local copy</button>
-      </div>
-    </details>
-
-    <details class="disclosure settings" id="settingsPanel">
+    <button class="primary" type="button" id="showOffer" hidden>Show meeting prompt</button>
+    <section id="captures" aria-label="Meeting captures"></section>
+    <details class="settings" id="settings">
       <summary>Connection settings</summary>
-      <form id="settingsForm">
-        <label for="appUrlInput">ActionPulse website</label>
-        <input type="url" id="appUrlInput" required spellcheck="false" />
-        <label for="apiUrlInput">Backend API URL</label>
-        <input type="url" id="apiUrlInput" required spellcheck="false" />
-        <p class="muted">Change these only if you're connecting to a different ActionPulse setup.</p>
-        <div class="settings-actions">
-          <button class="secondary" id="saveSettingsBtn" type="submit">Save settings</button>
-          <button class="text-button" id="useDeployedDefaultsBtn" type="button" disabled>Use deployed defaults</button>
+      <form id="connection">
+        <label class="field-label">ActionPulse website <input name="appUrl" type="url" required spellcheck="false" /></label>
+        <label class="field-label">Backend API URL <input name="apiUrl" type="url" required spellcheck="false" /></label>
+        <div class="actions">
+          <button class="secondary" id="defaults" type="button">Use deployed defaults</button>
+          <button class="primary" type="submit">Save</button>
         </div>
-        <p id="settingsStatus" role="status"></p>
+        <p class="muted" role="status" id="settingsStatus"></p>
       </form>
     </details>
-    <p class="message" id="panelError" role="alert" hidden></p>
+    <p class="error" role="alert" id="error"></p>
   </main>
 </body>
 </html>

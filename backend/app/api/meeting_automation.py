@@ -21,8 +21,9 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response, status
 
+from app.api.meetings import MAX_WORD_COUNT, _create_meeting
 from app.core.config import settings
 from app.core.deps import ORGANISER_ROLES, WORKSPACE_ROLES, CurrentUser, get_current_user, require_role
 from app.core.supabase import get_supabase_client
@@ -32,6 +33,7 @@ from app.schemas.meeting_automation import (
     AutomationProviderStatus,
     AutomationStatusResponse,
     AutomatedMeetingFeedItem,
+    ExtensionCaptureRequest,
     ExtensionMeetingUploadRequest,
     ExtensionMeetingUploadResponse,
     ExtensionSegment,
@@ -39,6 +41,7 @@ from app.schemas.meeting_automation import (
     SimulateMeetingRequest,
     SimulateMeetingResponse,
 )
+from app.schemas.meetings import CreateMeetingRequest
 from app.services.caption_cleaner import deduplicate_caption_segments
 from app.services.llm.bedrock import llm_is_configured
 from app.services.llm.runner import run_extraction
@@ -248,12 +251,13 @@ def _ingest_and_extract_meeting(
     file_stem: str,
     auto_extract: bool,
     existing_meeting: Optional[Dict[str, Any]] = None,
+    background_tasks: BackgroundTasks | None = None,
 ) -> tuple[UUID, datetime, UUID, int, int]:
     """Persist meeting + consent + transcript + segments and execute real LLM extraction.
 
     Rolls back the created meeting row if transcript persistence fails.
     """
-    if auto_extract and not llm_is_configured():
+    if auto_extract and background_tasks is None and not llm_is_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="AI provider is not configured (configure GEMINI_API_KEY or AWS_BEARER_TOKEN_BEDROCK in backend/.env).",
@@ -284,6 +288,15 @@ def _ingest_and_extract_meeting(
     now = datetime.now(timezone.utc)
     meeting_starts_at = datetime.fromisoformat(existing_meeting["starts_at"].replace("Z", "+00:00")) if existing_meeting else now - timedelta(minutes=duration_minutes)
     conf_url = _build_conference_url(provider, meeting_id, conference_url)
+
+    if background_tasks is not None:
+        if sum(len(re.findall(r"\w+", segment.text)) for segment in segments) > MAX_WORD_COUNT:
+            raise HTTPException(422, f"Transcript exceeds the {MAX_WORD_COUNT:,}-word limit")
+        claimed = (client.table("meetings").update({"status": "processing"})
+                   .eq("id", existing_meeting["id"]).eq("status", existing_meeting["status"])
+                   .eq("ai_processing", True).execute().data)
+        if not claimed:
+            raise HTTPException(409, "This meeting is already being processed")
 
     created_meeting = {
         "id": str(meeting_id),
@@ -353,6 +366,9 @@ def _ingest_and_extract_meeting(
         try:
             if existing_meeting:
                 client.table("transcripts").delete().eq("id", str(transcript_id)).execute()
+                if background_tasks is not None:
+                    client.table("meetings").update({"status": existing_meeting["status"]}).eq(
+                        "id", str(meeting_id)).eq("status", "processing").execute()
             else:
                 client.table("meetings").delete().eq("id", str(meeting_id)).execute()
         except Exception as rollback_exc:
@@ -363,6 +379,10 @@ def _ingest_and_extract_meeting(
         ) from exc
 
     extracted_items_count = 0
+    if background_tasks is not None:
+        background_tasks.add_task(_extract_live_capture, meeting_id, workspace_id, user)
+        return meeting_id, meeting_starts_at, transcript_id, len(segments), 0
+
     if auto_extract:
         client.table("meetings").update({"status": "processing"}).eq("id", str(meeting_id)).execute()
         run_extraction(meeting_id)
@@ -470,41 +490,155 @@ def _conference_key(value: str) -> tuple[str, str]:
         match = re.search(r"/(?:j|wc/(?:join/)?)/*(\d+)", path)
         if match:
             return "zoom.us", match[1]
+    if host in ("teams.microsoft.com", "teams.live.com", "teams.cloud.microsoft"):
+        return "teams", path
     return host, path
 
 
-def _scheduled_live_meeting(client: Any, payload: ExtensionMeetingUploadRequest, user: CurrentUser):
+def _scheduled_live_meeting(client: Any, payload: ExtensionMeetingUploadRequest | ExtensionCaptureRequest, user: CurrentUser):
     """Attach captions only to the uploader's unprocessed meeting in this workspace."""
     if not payload.conference_url:
         return None
     now = datetime.now(timezone.utc)
+    starting = isinstance(payload, ExtensionCaptureRequest)
+    window = timedelta(hours=2) if starting else timedelta(days=1)
     rows = (client.table("meetings")
             .select("id, title, starts_at, conference_url, ai_processing, status")
             .eq("workspace_id", str(payload.workspace_id)).eq("organiser_id", str(user.id))
             .eq("lifecycle", "active")
-            .gte("starts_at", (now - timedelta(days=1)).isoformat())
-            .lte("starts_at", (now + timedelta(days=1)).isoformat())
+            .gte("starts_at", (now - window).isoformat())
+            .lte("starts_at", (now + window).isoformat())
             .limit(50).execute().data or [])
     matches = [m for m in rows if m.get("conference_url")
                and _conference_key(m["conference_url"]) == _conference_key(payload.conference_url)]
+    if starting and matches:
+        transcripts = (client.table("transcripts").select("meeting_id")
+                       .in_("meeting_id", [m["id"] for m in matches]).execute().data or [])
+        with_transcripts = {transcript["meeting_id"] for transcript in transcripts}
+        matches = [
+            m for m in matches if not m["ai_processing"] or m["status"] == "processing"
+            or (m["status"] in ("draft", "failed") and m["id"] not in with_transcripts)
+        ]
     if len(matches) > 1:
         raise HTTPException(409, "Several pending meetings use this call link. Upload the transcript to the intended meeting in ActionPulse.")
     if not matches:
         return None
     meeting = matches[0]
+    _require_capture_consent(client, meeting)
+    if meeting["status"] not in ("draft", "failed"):
+        raise HTTPException(409, "Open the scheduled meeting to see its transcript and action items.")
+    if _meeting_transcript(client, meeting["id"]):
+        raise HTTPException(409, "This meeting already has a transcript. Open the meeting to continue.")
+    return meeting
+
+
+def _require_capture_consent(client: Any, meeting: dict) -> None:
     if not meeting.get("ai_processing"):
         raise HTTPException(409, "AI processing is disabled for this meeting")
     consent = (client.table("consents").select("id").eq("meeting_id", meeting["id"])
                .eq("status", "attested").execute().data)
     if not consent:
         raise HTTPException(409, "No active AI consent for this meeting")
-    if meeting["status"] not in ("draft", "failed"):
-        raise HTTPException(409, "Open the scheduled meeting to see its transcript and action items.")
-    transcript = (client.table("transcripts").select("id").eq("meeting_id", meeting["id"])
-                  .limit(1).execute().data)
-    if transcript:
-        raise HTTPException(409, "This meeting already has a transcript. Open the meeting to continue.")
-    return meeting
+
+
+def _meeting_transcript(client: Any, meeting_id: str) -> dict | None:
+    rows = client.table("transcripts").select("id").eq("meeting_id", meeting_id).limit(1).execute().data
+    return rows[0] if rows else None
+
+
+def _capture_meeting(client: Any, workspace_id: UUID, meeting_id: UUID, user: CurrentUser) -> dict | None:
+    rows = (client.table("meetings").select("id, title, starts_at, conference_url, ai_processing, status")
+            .eq("id", str(meeting_id)).eq("workspace_id", str(workspace_id))
+            .eq("organiser_id", str(user.id)).eq("lifecycle", "active").limit(1).execute().data)
+    return rows[0] if rows else None
+
+
+def _extract_live_capture(meeting_id: UUID, workspace_id: UUID, user: CurrentUser) -> None:
+    client = get_supabase_client()
+    try:
+        require_role(workspace_id, ORGANISER_ROLES, user)
+        meeting = _capture_meeting(client, workspace_id, meeting_id, user)
+        if not meeting or meeting["status"] != "processing":
+            return
+        _require_capture_consent(client, meeting)
+    except Exception:
+        logger.exception("Could not verify live capture permissions for meeting %s", meeting_id)
+        client.table("meetings").update({"status": "failed"}).eq(
+            "id", str(meeting_id)).eq("status", "processing").execute()
+        return
+    run_extraction(meeting_id)
+
+
+@router.get("/meetings/automation/extension-workspaces")
+def get_extension_workspaces(user: CurrentUser = Depends(get_current_user)) -> dict:
+    db = get_supabase_client()
+    rows = (db.table("workspace_members").select("workspace_id, role, workspaces(name)")
+            .eq("user_id", str(user.id)).in_("role", sorted(ORGANISER_ROLES)).execute().data or [])
+    return {
+        "user_id": user.id,
+        "workspaces": sorted(
+            [{"id": row["workspace_id"], "name": row["workspaces"]["name"], "role": row["role"]}
+             for row in rows if row.get("workspaces")],
+            key=lambda workspace: workspace["name"].casefold(),
+        ),
+    }
+
+
+@router.post("/meetings/automation/extension-capture", status_code=status.HTTP_201_CREATED)
+def start_extension_capture(payload: ExtensionCaptureRequest, user: CurrentUser = Depends(get_current_user)) -> dict:
+    require_role(payload.workspace_id, ORGANISER_ROLES, user)
+    if not payload.ai_attestation:
+        raise HTTPException(422, "Confirm that participants have been informed about AI processing")
+
+    try:
+        parsed = urlsplit(payload.conference_url)
+        host = parsed.hostname or ""
+        matches_provider = {
+            ProviderType.GOOGLE_MEET: host == "meet.google.com",
+            ProviderType.ZOOM: host == "zoom.us" or host.endswith(".zoom.us"),
+            ProviderType.TEAMS: host in ("teams.microsoft.com", "teams.live.com", "teams.cloud.microsoft"),
+        }[payload.provider]
+        valid = (parsed.scheme == "https" and matches_provider and parsed.path.strip("/")
+                 and not parsed.username and not parsed.password and parsed.port in (None, 443))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise HTTPException(422, "Use a supported meeting link for this provider")
+
+    client = get_supabase_client()
+    meeting = _capture_meeting(client, payload.workspace_id, payload.capture_id, user)
+    if meeting:
+        _require_capture_consent(client, meeting)
+        if (_conference_key(meeting["conference_url"] or "") != _conference_key(payload.conference_url)
+                or meeting["status"] != "draft" or _meeting_transcript(client, meeting["id"])):
+            raise HTTPException(409, "This capture already belongs to a different or completed meeting")
+        return {"meeting_id": meeting["id"], "title": meeting["title"]}
+
+    scheduled = _scheduled_live_meeting(client, payload, user)
+    if scheduled:
+        return {"meeting_id": scheduled["id"], "title": scheduled["title"]}
+
+    created = _create_meeting(payload.workspace_id, CreateMeetingRequest(
+        title=payload.title,
+        starts_at=datetime.now(timezone.utc),
+        timezone=payload.timezone,
+        ai_processing=True,
+        ai_attestation=True,
+        calendar_provider=payload.provider.value,
+        conference_url=parsed._replace(query="", fragment="").geturl(),
+    ), user, meeting_id=payload.capture_id)
+    return {"meeting_id": created.id, "title": created.title}
+
+
+@router.get("/meetings/automation/extension-capture/{meeting_id}")
+def get_extension_capture_status(
+    meeting_id: UUID, workspace_id: UUID, user: CurrentUser = Depends(get_current_user)
+) -> dict:
+    require_role(workspace_id, ORGANISER_ROLES, user)
+    meeting = _capture_meeting(get_supabase_client(), workspace_id, meeting_id, user)
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    return {"status": meeting["status"]}
 
 
 @router.post(
@@ -516,6 +650,7 @@ def _scheduled_live_meeting(client: Any, payload: ExtensionMeetingUploadRequest,
 def upload_extension_meeting(
     payload: ExtensionMeetingUploadRequest,
     user: CurrentUser = Depends(get_current_user),
+    background_tasks: BackgroundTasks = None,
 ) -> ExtensionMeetingUploadResponse:
     """Manager-only endpoint for ingesting live meeting transcripts captured via Chrome Extension.
 
@@ -541,8 +676,8 @@ def upload_extension_meeting(
             raw_speaker = (seg.speaker or "").strip()
             speaker_tag = (
                 speaker_alias
-                if not raw_speaker or raw_speaker.lower() in ("you", "me", "speaker", "organiser")
-                else raw_speaker
+                if raw_speaker.lower() in ("you", "me")
+                else raw_speaker or "Speaker"
             )
             normalized_segments.append({
                 "speaker": speaker_tag,
@@ -568,7 +703,27 @@ def upload_extension_meeting(
             detail="Captured transcript is empty. Ensure Closed Captions (CC) captured speech before uploading.",
         )
 
-    scheduled = _scheduled_live_meeting(client, payload, user)
+    if payload.meeting_id:
+        scheduled = _capture_meeting(client, payload.workspace_id, payload.meeting_id, user)
+        if not scheduled:
+            raise HTTPException(404, "Meeting not found")
+        _require_capture_consent(client, scheduled)
+        transcript = _meeting_transcript(client, scheduled["id"])
+        if transcript:
+            segments = (client.table("transcript_segments").select("id").eq("transcript_id", transcript["id"])
+                        .limit(1).execute().data)
+            if not segments:
+                raise HTTPException(409, "The meeting transcript is still being saved. Try again shortly.")
+            return ExtensionMeetingUploadResponse(
+                success=True, meeting_id=payload.meeting_id, title=scheduled["title"], provider=payload.provider,
+                starts_at=scheduled["starts_at"], transcript_id=transcript["id"],
+                message="The meeting already has a transcript.",
+                review_url=f"/meetings/{payload.meeting_id}?tab=review",
+            )
+        if scheduled["status"] not in ("draft", "failed"):
+            raise HTTPException(409, "This meeting is already being processed")
+    else:
+        scheduled = _scheduled_live_meeting(client, payload, user)
     meeting_id, meeting_starts_at, transcript_id, segment_count, extracted_items_count = _ingest_and_extract_meeting(
         client=client,
         user=user,
@@ -581,6 +736,7 @@ def upload_extension_meeting(
         file_stem="extension_transcript",
         auto_extract=payload.auto_extract,
         existing_meeting=scheduled,
+        background_tasks=background_tasks if payload.meeting_id and payload.auto_extract else None,
     )
 
     return ExtensionMeetingUploadResponse(
@@ -592,7 +748,7 @@ def upload_extension_meeting(
         transcript_id=transcript_id,
         segment_count=segment_count,
         extracted_items_count=extracted_items_count,
-        message=(
+        message="Captions saved. ActionPulse is preparing suggested tasks." if payload.meeting_id else (
             f"Successfully ingested live {payload.provider.value} transcript via Chrome Extension "
             f"({segment_count} segments, {extracted_items_count} AI-extracted items ready for manager review)."
         ),

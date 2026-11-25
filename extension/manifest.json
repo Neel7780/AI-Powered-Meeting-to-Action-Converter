@@ -1,20 +1,21 @@
 {
   "manifest_version": 3,
-  "name": "ActionPulse - Meeting Transcriber & AI Actions",
-  "version": "1.1.1",
-  "description": "Live meeting captions capture & AI action item generator for Google Meet, Zoom, and Microsoft Teams. Manager-only sync to ActionPulse.",
+  "name": "ActionPulse",
+  "version": "1.2.0",
+  "description": "Turn live captions from Google Meet, Zoom Web and Microsoft Teams Web into tasks for review.",
   "permissions": [
     "storage",
-    "activeTab",
     "tabs",
     "scripting",
-    "downloads"
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
     "https://meet.google.com/*",
     "https://*.zoom.us/*",
     "https://teams.microsoft.com/*",
     "https://teams.live.com/*",
+    "https://teams.cloud.microsoft/*",
     "http://localhost:8000/*",
     "http://127.0.0.1:8000/*",
     "http://localhost:5173/*",
@@ -29,21 +30,38 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://meet.google.com/*"],
-      "js": ["content/meet.js"],
+      "matches": [
+        "https://meet.google.com/*"
+      ],
+      "js": [
+        "shared/meeting.js",
+        "content/capture.js",
+        "content/meet.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://*.zoom.us/*"],
-      "js": ["content/zoom.js"],
+      "matches": [
+        "https://*.zoom.us/*"
+      ],
+      "js": [
+        "shared/meeting.js",
+        "content/capture.js",
+        "content/zoom.js"
+      ],
       "run_at": "document_idle"
     },
     {
       "matches": [
         "https://teams.microsoft.com/*",
-        "https://teams.live.com/*"
+        "https://teams.live.com/*",
+        "https://teams.cloud.microsoft/*"
       ],
-      "js": ["content/teams.js"],
+      "js": [
+        "shared/meeting.js",
+        "content/capture.js",
+        "content/teams.js"
+      ],
       "run_at": "document_idle"
     },
     {
@@ -54,12 +72,14 @@
         "http://127.0.0.1:5174/*",
         "https://*.vercel.app/*"
       ],
-      "js": ["content/actionpulse-sync.js"],
+      "js": [
+        "content/actionpulse-sync.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_title": "ActionPulse Meeting Transcriber",
+    "default_title": "ActionPulse",
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
@@ -71,6 +91,22 @@
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
-  }
+  },
+  "minimum_chrome_version": "120",
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "shared/panel.css",
+        "shared/manrope.woff2",
+        "icons/icon-48.png"
+      ],
+      "matches": [
+        "https://meet.google.com/*",
+        "https://*.zoom.us/*",
+        "https://teams.microsoft.com/*",
+        "https://teams.live.com/*",
+        "https://teams.cloud.microsoft/*"
+      ]
+    }
+  ]
 }
-

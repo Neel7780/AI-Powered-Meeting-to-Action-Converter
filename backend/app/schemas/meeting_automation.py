@@ -87,8 +87,19 @@ class ExtensionSegment(BaseModel):
     end_ms: Optional[int] = Field(default=None, description="Segment end in milliseconds")
 
 
+class ExtensionCaptureRequest(BaseModel):
+    capture_id: UUID
+    workspace_id: UUID
+    provider: ProviderType
+    title: str = Field(min_length=1, max_length=300)
+    conference_url: str = Field(max_length=2048)
+    timezone: str = "UTC"
+    ai_attestation: bool = False
+
+
 class ExtensionMeetingUploadRequest(BaseModel):
     workspace_id: UUID = Field(..., description="Target workspace ID")
+    meeting_id: Optional[UUID] = Field(default=None, description="Meeting reserved when capture started")
     provider: ProviderType = Field(default=ProviderType.GOOGLE_MEET, description="Online meeting platform (google_meet, zoom, teams)")
     title: str = Field(default="Automated Meeting Transcript", min_length=1, max_length=300, description="Meeting title")
     conference_url: Optional[str] = Field(default=None, description="Meeting URL (e.g. meet.google.com/xyz)")

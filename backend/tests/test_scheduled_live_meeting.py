@@ -1,5 +1,6 @@
 """Live captions must finish the meeting created in the shared UI, without duplicates."""
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 
@@ -96,4 +97,81 @@ def test_calendar_scheduler_requires_opt_in_for_caption_ingestion(world, enable_
     else:
         assert captions.status_code == 409, captions.text
         assert not world.db.rows("transcripts", meeting_id=meeting["id"])
+    assert len(world.db.rows("meetings")) == 1
+
+
+def capture_payload(world, **overrides):
+    return {
+        "capture_id": str(uuid4()),
+        "workspace_id": world.workspace,
+        "provider": "google_meet",
+        "conference_url": CALL_URL + "?authuser=1",
+        "title": "Live project sync",
+        "ai_attestation": True,
+        **overrides,
+    }
+
+
+def test_extension_capture_creates_once_and_uploads_to_the_reserved_meeting(world, monkeypatch):  # noqa: F811
+    payload = capture_payload(world)
+    for _ in range(2):
+        started = world.post("/meetings/automation/extension-capture", world.priya, json=payload)
+        assert started.status_code == 201, started.text
+        assert started.json()["meeting_id"] == payload["capture_id"]
+
+    mid = payload["capture_id"]
+    assert [row["conference_url"] for row in world.db.rows("meetings")] == [CALL_URL]
+    assert len(world.db.rows("consents", meeting_id=mid)) == 1
+
+    processed = []
+
+    def extract(meeting_id):
+        assert world.db.rows("meetings", id=mid)[0]["status"] == "processing"
+        processed.append(str(meeting_id))
+        world.db.table("meetings").update({"status": "ready"}).eq("id", mid).execute()
+
+    monkeypatch.setattr("app.api.meeting_automation.run_extraction", extract)
+    body = {
+        "meeting_id": mid,
+        "workspace_id": world.workspace,
+        "segments": [
+            {"speaker": "You", "text": "I'll review the launch checklist.", "start_ms": 0, "end_ms": 3000},
+            {"speaker": "Speaker", "text": "We can send it tomorrow.", "start_ms": 3500, "end_ms": 6500},
+        ],
+    }
+    for _ in range(2):
+        result = world.post("/meetings/automation/extension-upload", world.priya, json=body)
+        assert result.status_code == 201, result.text
+        assert result.json()["meeting_id"] == mid
+    assert processed == [mid]
+    [transcript] = world.db.rows("transcripts", meeting_id=mid)
+    assert "Priya Nair:" in transcript["canonical_text"]
+    assert "Speaker:" in transcript["canonical_text"]
+    progress = world.client.get(
+        f"/api/meetings/automation/extension-capture/{mid}",
+        headers={"Authorization": f"Bearer {world.priya}"},
+        params={"workspace_id": world.workspace},
+    )
+    assert progress.json() == {"status": "ready"}
+
+
+def test_extension_capture_respects_manager_roles_and_consent(world):  # noqa: F811
+    path = "/meetings/automation/extension-capture"
+    assert world.post(path, world.aman, json=capture_payload(world)).status_code == 403
+    assert world.post(path, world.priya, json=capture_payload(world, ai_attestation=False)).status_code == 422
+    assert not world.db.rows("meetings")
+
+    mid = scheduled(world, ai=False)
+    assert world.post(path, world.priya, json=capture_payload(world)).status_code == 409
+    assert world.post("/meetings/automation/extension-upload", world.priya, json={
+        "meeting_id": mid, "workspace_id": world.workspace, "transcript_text": "No AI.",
+    }).status_code == 409
+    assert not world.db.rows("transcripts")
+
+
+def test_extension_capture_reuses_a_scheduled_meeting(world):  # noqa: F811
+    mid = scheduled(world)
+    result = world.post("/meetings/automation/extension-capture", world.priya, json=capture_payload(world))
+    assert result.status_code == 201, result.text
+    assert result.json() == {"meeting_id": mid, "title": "Sprint sync"}
     assert len(world.db.rows("meetings")) == 1

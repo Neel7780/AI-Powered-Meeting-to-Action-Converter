@@ -1,21 +1,23 @@
 # ActionPulse browser extension
 
-The extension captures captions shown in Google Meet, Zoom Web or Microsoft Teams Web. It exports a transcript or uploads it to ActionPulse so an owner, admin or organiser can review suggested tasks.
+ActionPulse captures live captions from Google Meet, Zoom Web and Microsoft Teams Web. Workspace owners, admins and organisers can create a meeting from the call and review the suggested tasks afterward.
 
-By default the extension uses the [deployed ActionPulse dashboard](https://ai-powered-meeting-to-action-conver.vercel.app) and the [production Render backend](https://ai-powered-meeting-to-action-converter-9k2z.onrender.com). Use **Connection settings** to test against a local backend.
+## Install or update
 
-## Install it
+1. Open `chrome://extensions`, `brave://extensions` or `edge://extensions` in a Chromium browser version 120 or later. Enable **Developer mode**.
+2. Select **Load unpacked** and choose this `extension/` folder. For an existing installation, select **Reload** on the extension card and refresh the ActionPulse and meeting tabs.
+3. Pin ActionPulse from the Extensions menu to see capture progress and recover uploads.
 
-1. Open `chrome://extensions`, `brave://extensions` or `edge://extensions` and turn on **Developer mode**.
-2. Click **Load unpacked** and choose this `extension/` directory. Select the folder containing `manifest.json`.
-3. Pin **ActionPulse** from the browser's Extensions menu. If you already loaded it, click **Reload** on its extension card, then refresh any open ActionPulse or meeting tabs.
+## Capture a meeting
 
-## Test a live meeting
+1. Sign in to ActionPulse in the same browser profile. Leaving the ActionPulse tab open allows the app to refresh your session during a long call.
+2. Join the call in the browser. The **Turn this meeting into tasks?** prompt appears after you join. If you dismissed it, choose **Show meeting prompt** from the extension popup while in the call.
+3. Select a workspace if you have more than one eligible workspace. Inform the participants that AI will process the call captions, check the confirmation, and choose **Start capture**. The meeting appears in ActionPulse immediately. A matching pending meeting in the chosen workspace is reused when the call link identifies it.
+4. Turn on the call’s live captions. Confirm that ActionPulse’s caption count increases while people speak.
+5. Leave the call. ActionPulse saves the captions and extracts suggested tasks. Select **Review tasks** from the in-call panel, browser notification or extension popup to review and assign them. If captions were unavailable, use **Add transcript** on the saved meeting. If upload fails, use **Retry upload** or **Download VTT** in the extension.
 
-1. Sign in to ActionPulse and select the workspace in the same browser profile. Leave that tab open.
-2. **Open ActionPulse** opens the deployed dashboard by default. To restore that setup after testing locally, use **Connection settings → Use deployed defaults**. For the local preview at `http://localhost:5174` with the production backend, expand **Connection settings** in the extension popup. Set **Backend API URL** to `https://ai-powered-meeting-to-action-converter-9k2z.onrender.com` and **ActionPulse website** to `http://localhost:5174`, then click **Save settings**. For a locally running backend, use `http://localhost:8000`.
-3. In **Meetings → New meeting → Live meeting**, paste the link for the call you'll join and save the meeting with its actual start time. Let participants know their captions will be processed.
-4. Join the call in the browser and turn on captions using the call controls. There is no separate start button in ActionPulse. Speak a few sentences and pause briefly. The extension should report a growing caption count and show the spoken text under **Transcript preview**.
-5. Use **Download VTT** to check the text and speaker names before leaving. The extension normally uploads when the call ends. If it hasn't, choose **Upload captions**. Choose **Review tasks** when suggested tasks are ready, or **Open meeting** to see the saved meeting. Confirm the transcript attached to the original meeting and the suggested tasks quote the right lines.
+Captions must be available in the browser call. Native desktop and mobile clients and provider cloud recordings require a separate transcript import. Browser notifications depend on browser and operating system settings. The popup also lists captures that need attention.
 
-If the call shows captions but the extension count stays at zero, check that the browser allows the extension to run on that site and reload the call tab. If upload fails, save the VTT and add it to the saved meeting using **Add transcript**.
+## Test against a local backend
+
+The extension defaults to the deployed ActionPulse dashboard and Render backend. Live capture requires the updated backend endpoints. To test them before deploying, run the current backend locally and set **Connection settings** in the extension to a local ActionPulse website such as `http://localhost:5174` and API URL `http://localhost:8000`. Set the frontend’s `VITE_API_BASE_URL` to the same backend and sign in with a workspace owner, admin or organiser account. Select **Use deployed defaults** after the updated backend is deployed.
