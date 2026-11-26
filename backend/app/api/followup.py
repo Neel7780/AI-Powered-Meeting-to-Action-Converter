@@ -5,12 +5,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.meetings import _check_private_meeting_access
 from app.core.deps import (
     ORGANISER_ROLES,
     CurrentUser,
     get_current_user,
     require_meeting_role,
 )
+from app.core.supabase import get_supabase_client
 from app.schemas.followup import (
     DraftFollowUpRequest,
     DraftFollowUpResponse,
@@ -42,7 +44,15 @@ def draft_followup(
     Supports targeting a specific member or the whole team, with tone presets:
     'executive' (brief), 'action_focused' (task grid), or 'chat' (Slack/WhatsApp).
     """
-    require_meeting_role(meeting_id, ORGANISER_ROLES, user)
+    meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
+    db = get_supabase_client()
+    _check_private_meeting_access(db, meeting, user)
+
+    if not meeting.get("ai_processing", True):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI processing is disabled for this private meeting (No-AI mode)."
+        )
 
     try:
         response = generate_meeting_followup(
@@ -137,7 +147,15 @@ def send_followup(
     
     Uses zero-budget Brevo HTTPS API or standard smtplib.
     """
-    require_meeting_role(meeting_id, ORGANISER_ROLES, user)
+    meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
+    db = get_supabase_client()
+    _check_private_meeting_access(db, meeting, user)
+
+    if not meeting.get("ai_processing", True):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI processing is disabled for this private meeting (No-AI mode)."
+        )
 
     if not payload.recipient_emails:
         raise HTTPException(

@@ -9,18 +9,45 @@ Verifies:
 """
 
 from datetime import datetime, timezone
+import sys
+import types
 from unittest.mock import MagicMock
 from uuid import uuid4
+
+# Provide mock modules for heavy LLM packages if not installed in current environment
+class _MockPackage(types.ModuleType):
+    def __init__(self, name: str):
+        super().__init__(name)
+        self.__path__ = []
+
+    def __getattr__(self, name: str):
+        mock = MagicMock()
+        setattr(self, name, mock)
+        return mock
+
+for _pkg in ["langchain_core", "botocore", "boto3", "langchain_aws", "langchain_google_genai"]:
+    if _pkg not in sys.modules:
+        sys.modules[_pkg] = _MockPackage(_pkg)
+
+for _mod in [
+    "langchain_core.messages", "langchain_core.runnables", "langchain_core.prompts",
+    "botocore.config", "botocore.stub"
+]:
+    if _mod not in sys.modules:
+        sys.modules[_mod] = _MockPackage(_mod)
 
 import pytest
 from fastapi import BackgroundTasks, HTTPException
 
+from app.api.extraction import start_extraction
 from app.api.meetings import (
+    _check_private_meeting_access,
     create_manual_task,
     create_meeting,
     delete_meeting_task,
-    extract_meeting_action_items,
+    get_meeting_chapters,
     get_meeting_details,
+    get_meeting_summary,
     get_meeting_tasks,
 )
 from app.core.deps import CurrentUser
@@ -102,27 +129,29 @@ def test_extract_fails_on_no_ai_meeting():
     m_mock.execute.return_value = MagicMock(data=[{
         "id": str(meeting_id),
         "workspace_id": str(workspace_id),
+        "organiser_id": str(caller_id),
+        "visibility": "private",
         "ai_processing": False,
     }])
 
     db.table.side_effect = lambda name: wm_mock if name == "workspace_members" else m_mock
 
-    import app.api.meetings as m_api
+    import app.api.extraction as ext_api
     import app.core.deps as deps_mod
 
-    orig_m_db = m_api.get_supabase_client
+    orig_ext_db = ext_api.get_supabase_client
     orig_d_db = deps_mod.get_supabase_client
     try:
-        m_api.get_supabase_client = lambda: db
+        ext_api.get_supabase_client = lambda: db
         deps_mod.get_supabase_client = lambda: db
 
         with pytest.raises(HTTPException) as exc_info:
-            extract_meeting_action_items(meeting_id, mock_user)
+            start_extraction(meeting_id, BackgroundTasks(), mock_user)
 
         assert exc_info.value.status_code == 409
-        assert "disabled for this private meeting" in exc_info.value.detail
+        assert "disabled" in exc_info.value.detail.lower()
     finally:
-        m_api.get_supabase_client = orig_m_db
+        ext_api.get_supabase_client = orig_ext_db
         deps_mod.get_supabase_client = orig_d_db
 
 
@@ -378,4 +407,224 @@ def test_get_meeting_details_and_tasks():
     finally:
         m_api.get_supabase_client = orig_m_db
         deps_mod.get_supabase_client = orig_d_db
+
+
+def test_private_meeting_access_blocked_for_non_participant():
+    """Verify non-participants cannot read or mutate private meetings."""
+    caller_id = uuid4()
+    organiser_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="outsider@example.com")
+    meeting = {
+        "id": str(uuid4()),
+        "organiser_id": str(organiser_id),
+        "visibility": "private",
+        "ai_processing": False,
+    }
+
+    db = MagicMock()
+    mp_mock = MagicMock()
+    mp_mock.select.return_value = mp_mock
+    mp_mock.eq.return_value = mp_mock
+    mp_mock.limit.return_value = mp_mock
+    mp_mock.execute.return_value = MagicMock(data=[])
+
+    ta_mock = MagicMock()
+    ta_mock.select.return_value = ta_mock
+    ta_mock.eq.return_value = ta_mock
+    ta_mock.limit.return_value = ta_mock
+    ta_mock.execute.return_value = MagicMock(data=[])
+
+    db.table.side_effect = lambda name: mp_mock if name == "meeting_participants" else ta_mock
+
+    with pytest.raises(HTTPException) as exc_info:
+        _check_private_meeting_access(db, meeting, mock_user)
+
+    assert exc_info.value.status_code == 404
+    assert "Meeting not found" in exc_info.value.detail
+
+
+def test_private_meeting_access_allowed_for_participant():
+    """Verify registered participants have read access to private meetings."""
+    caller_id = uuid4()
+    organiser_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="participant@example.com")
+    meeting = {
+        "id": str(uuid4()),
+        "organiser_id": str(organiser_id),
+        "visibility": "private",
+        "ai_processing": False,
+    }
+
+    db = MagicMock()
+    mp_mock = MagicMock()
+    mp_mock.select.return_value = mp_mock
+    mp_mock.eq.return_value = mp_mock
+    mp_mock.limit.return_value = mp_mock
+    mp_mock.execute.return_value = MagicMock(data=[{"id": str(uuid4())}])
+
+    db.table.side_effect = lambda name: mp_mock
+
+    # Participant access check should pass without raising
+    _check_private_meeting_access(db, meeting, mock_user)
+
+
+def test_summary_and_chapters_blocked_on_no_ai_meeting():
+    """Verify meeting summary and chapters refuse processing for No-AI meetings (HTTP 409)."""
+    meeting_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="manager@example.com")
+
+    db = MagicMock()
+    import app.api.meetings as m_api
+    import app.core.deps as deps_mod
+
+    meeting_record = {
+        "id": str(meeting_id),
+        "workspace_id": str(uuid4()),
+        "organiser_id": str(caller_id),
+        "visibility": "private",
+        "ai_processing": False,
+    }
+
+    orig_m_db = m_api.get_supabase_client
+    orig_d_db = deps_mod.get_supabase_client
+    orig_rmr = m_api.require_meeting_role
+    try:
+        m_api.get_supabase_client = lambda: db
+        deps_mod.get_supabase_client = lambda: db
+        m_api.require_meeting_role = lambda mid, roles, usr: meeting_record
+
+        # Test summary blocked
+        with pytest.raises(HTTPException) as exc_summary:
+            get_meeting_summary(meeting_id, refresh=False, user=mock_user)
+        assert exc_summary.value.status_code == 409
+        assert "disabled for this private meeting" in exc_summary.value.detail
+
+        # Test chapters blocked
+        with pytest.raises(HTTPException) as exc_chapters:
+            get_meeting_chapters(meeting_id, refresh=False, user=mock_user)
+        assert exc_chapters.value.status_code == 409
+        assert "disabled for this private meeting" in exc_chapters.value.detail
+    finally:
+        m_api.get_supabase_client = orig_m_db
+        deps_mod.get_supabase_client = orig_d_db
+        m_api.require_meeting_role = orig_rmr
+
+
+def test_followup_blocked_on_no_ai_meeting():
+    """Verify follow-up draft is refused for No-AI meetings (HTTP 409)."""
+    from app.api.followup import draft_followup
+    from app.schemas.followup import DraftFollowUpRequest
+
+    meeting_id = uuid4()
+    caller_id = uuid4()
+    mock_user = CurrentUser(id=caller_id, email="manager@example.com")
+
+    meeting_record = {
+        "id": str(meeting_id),
+        "workspace_id": str(uuid4()),
+        "organiser_id": str(caller_id),
+        "visibility": "private",
+        "ai_processing": False,
+    }
+
+    db = MagicMock()
+    import app.api.followup as f_api
+    orig_f_db = f_api.get_supabase_client
+    orig_rmr = f_api.require_meeting_role
+    try:
+        f_api.get_supabase_client = lambda: db
+        f_api.require_meeting_role = lambda mid, roles, usr: meeting_record
+
+        payload = DraftFollowUpRequest(tone="executive")
+        with pytest.raises(HTTPException) as exc_info:
+            draft_followup(meeting_id, payload, mock_user)
+
+        assert exc_info.value.status_code == 409
+        assert "disabled for this private meeting" in exc_info.value.detail
+    finally:
+        f_api.get_supabase_client = orig_f_db
+        f_api.require_meeting_role = orig_rmr
+
+
+def test_copilot_excludes_no_ai_transcripts():
+    """Verify workspace copilot strictly filters out transcripts from No-AI meetings."""
+    from app.services.llm.chat_assistant import _load_workspace_meeting_data
+
+    workspace_id = uuid4()
+    caller_id = uuid4()
+    ai_meeting_id = str(uuid4())
+    no_ai_meeting_id = str(uuid4())
+
+    db = MagicMock()
+
+    meetings_data = [
+        {
+            "id": ai_meeting_id,
+            "workspace_id": str(workspace_id),
+            "title": "Public Sprint Planning",
+            "starts_at": "2026-11-26T10:00:00Z",
+            "timezone": "UTC",
+            "organiser_id": str(caller_id),
+            "visibility": "workspace",
+            "status": "completed",
+            "lifecycle": "active",
+            "ai_processing": True,
+        },
+        {
+            "id": no_ai_meeting_id,
+            "workspace_id": str(workspace_id),
+            "title": "Confidential Board Review",
+            "starts_at": "2026-11-26T11:00:00Z",
+            "timezone": "UTC",
+            "organiser_id": str(caller_id),
+            "visibility": "private",
+            "status": "completed",
+            "lifecycle": "active",
+            "ai_processing": False,
+        },
+    ]
+
+    m_table = MagicMock()
+    m_table.select.return_value = m_table
+    m_table.eq.return_value = m_table
+    m_table.neq.return_value = m_table
+    m_table.order.return_value = m_table
+    m_table.limit.return_value = m_table
+    m_table.execute.return_value = MagicMock(data=meetings_data)
+
+    transcripts_table = MagicMock()
+    transcripts_table.select.return_value = transcripts_table
+    transcripts_table.in_.return_value = transcripts_table
+    transcripts_table.execute.return_value = MagicMock(data=[
+        {
+            "id": str(uuid4()),
+            "meeting_id": ai_meeting_id,
+            "canonical_text": "Public discussion content",
+            "raw_text": "Public discussion content",
+        }
+    ])
+
+    empty_table = MagicMock()
+    empty_table.select.return_value = empty_table
+    empty_table.in_.return_value = empty_table
+    empty_table.eq.return_value = empty_table
+    empty_table.execute.return_value = MagicMock(data=[])
+
+    def table_mock(name):
+        if name == "meetings":
+            return m_table
+        if name == "transcripts":
+            return transcripts_table
+        return empty_table
+
+    db.table.side_effect = table_mock
+
+    meetings, tasks, items, transcripts = _load_workspace_meeting_data(db, workspace_id, None, caller_id)
+
+    # Transcripts must only be fetched for the AI-enabled meeting
+    transcripts_table.in_.assert_called_once_with("meeting_id", [ai_meeting_id])
+    assert len(transcripts) == 1
+    assert transcripts[0]["meeting_id"] == ai_meeting_id
+
 

@@ -26,7 +26,6 @@ from app.parsers import TranscriptParseError, parse_transcript, to_canonical_tex
 from datetime import UTC, datetime
 from app.schemas.meetings import (
     CreateMeetingRequest,
-    ExtractMeetingResponse,
     ManualTaskCreateRequest,
     ManualTaskResponse,
     MeetingChapterItem,
@@ -138,7 +137,7 @@ def _create_meeting(
                 )
 
     # 4. Insert meeting row
-    effective_visibility = getattr(payload, "visibility", None) or ("private" if not payload.ai_processing else "workspace")
+    effective_visibility = "private" if not payload.ai_processing else (getattr(payload, "visibility", None) or "workspace")
     meeting_insert = {
         "workspace_id": str(workspace_id),
         "title": clean_title,
@@ -670,6 +669,12 @@ def get_meeting_summary(
     client = get_supabase_client()
     _check_private_meeting_access(client, meeting, user)
 
+    if not meeting.get("ai_processing", True):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI processing is disabled for this private meeting (No-AI mode)."
+        )
+
     # Return cached summary if present and not force-refreshed
     if not refresh and meeting.get("summary"):
         try:
@@ -744,6 +749,12 @@ def get_meeting_chapters(
     mid = str(meeting_id)
     client = get_supabase_client()
     _check_private_meeting_access(client, meeting, user)
+
+    if not meeting.get("ai_processing", True):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI processing is disabled for this private meeting (No-AI mode)."
+        )
 
     # Return cached chapters if present and not force-refreshed
     if not refresh and meeting.get("chapters"):
@@ -970,7 +981,8 @@ def get_meeting_details(
     meeting = m_resp.data[0]
     workspace_id = UUID(str(meeting["workspace_id"]))
     # Enforce caller is in workspace (admin, organiser, or member)
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
+    _check_private_meeting_access(client, meeting, user)
 
     # Fetch organiser display name
     organiser_name = "Organiser"
@@ -1042,44 +1054,6 @@ def get_meeting_details(
 
 
 @router.post(
-    "/meetings/{meeting_id}/extract",
-    response_model=ExtractMeetingResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Trigger AI action item extraction (strictly blocked for No-AI meetings)"
-)
-def extract_meeting_action_items(
-    meeting_id: UUID,
-    user: CurrentUser = Depends(get_current_user)
-) -> ExtractMeetingResponse:
-    """Trigger AI extraction on a meeting transcript.
-    
-    Hard privacy enforcement (DR-04 / US-AUT-03 / US-SEC-08):
-    If ai_processing is disabled (No-AI mode), the backend strictly rejects
-    the request with HTTP 409 Conflict. Transcripts are NEVER sent to any external
-    LLM/AI service under any circumstance.
-    """
-    meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
-    
-    if not meeting.get("ai_processing", True):
-        logger.warning(
-            "Rejected AI extraction attempt on No-AI private meeting %s by user %s",
-            meeting_id, user.id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="AI processing is disabled for this private meeting (No-AI mode). Transcripts are strictly confidential and cannot be sent to external AI providers."
-        )
-
-    # In AI-enabled mode, proceed with extraction or status update
-    return ExtractMeetingResponse(
-        meeting_id=meeting_id,
-        ai_processing=True,
-        status="processing",
-        message="AI extraction queued for transcript."
-    )
-
-
-@router.post(
     "/meetings/{meeting_id}/tasks",
     response_model=ManualTaskResponse,
     status_code=status.HTTP_201_CREATED,
@@ -1100,6 +1074,7 @@ def create_manual_task(
     meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
     workspace_id = meeting["workspace_id"]
     client = get_supabase_client()
+    _check_private_meeting_access(client, meeting, user)
 
     clean_title = payload.title.strip()
     if not (1 <= len(clean_title) <= 500):
@@ -1272,12 +1247,14 @@ def get_meeting_tasks(
 ) -> list[ManualTaskResponse]:
     """Fetch all tasks associated with this meeting, including assignees."""
     client = get_supabase_client()
-    m_resp = client.table("meetings").select("workspace_id").eq("id", str(meeting_id)).execute()
+    m_resp = client.table("meetings").select("*").eq("id", str(meeting_id)).execute()
     if not m_resp.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
     
-    workspace_id = UUID(str(m_resp.data[0]["workspace_id"]))
-    require_role(workspace_id, {"admin", "organiser", "member"}, user)
+    meeting = m_resp.data[0]
+    workspace_id = UUID(str(meeting["workspace_id"]))
+    require_role(workspace_id, WORKSPACE_ROLES, user)
+    _check_private_meeting_access(client, meeting, user)
 
     tasks_resp = (
         client.table("tasks")
@@ -1346,8 +1323,9 @@ def delete_meeting_task(
     user: CurrentUser = Depends(get_current_user)
 ) -> dict[str, str]:
     """Delete a task associated with this meeting. Organiser or admin only."""
-    require_meeting_role(meeting_id, ORGANISER_ROLES, user)
+    meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
     client = get_supabase_client()
+    _check_private_meeting_access(client, meeting, user)
     client.table("tasks").delete().eq("id", str(task_id)).eq("meeting_id", str(meeting_id)).execute()
     return {"message": f"Task {task_id} deleted successfully"}
 
