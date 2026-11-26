@@ -51,7 +51,7 @@ export default function LinearTrustShowcase() {
   return (
     <div className="w-full">
       {/* 2 Big Linear-style Reference Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.32fr_1fr] gap-4 sm:gap-5">
+      <div className="landing-testimonials grid grid-cols-1 lg:grid-cols-[1.32fr_1fr] gap-4 sm:gap-5">
         {/* =====================================================================
             CARD 1 (LEFT): Icy Lavender / Light Ice Blue (#D4E5FF -> #E9E4FF)
             ===================================================================== */}
@@ -151,9 +151,8 @@ export default function LinearTrustShowcase() {
           return (
             <div
               key={item.id}
-              onClick={() => setActivePillar(isSelected ? null : item.id)}
               className={cn(
-                "group relative rounded-xl border p-5 cursor-pointer transition-all duration-200 select-none",
+                "group relative rounded-xl border p-5 transition-colors duration-200 focus-within:ring-2 focus-within:ring-indigo-300",
                 isSelected
                   ? "border-[#e4f222] bg-[#10120d] shadow-lg shadow-[#e4f222]/5"
                   : "border-white/10 bg-[#090a0f] hover:border-white/20 hover:bg-[#0c0d14]"
@@ -185,7 +184,11 @@ export default function LinearTrustShowcase() {
 
               {/* Title & Summary */}
               <h4 className="mt-3.5 text-sm font-medium tracking-tight text-white group-hover:text-white">
-                {item.title}
+                <button type="button" aria-expanded={isSelected}
+                  onClick={() => setActivePillar(isSelected ? null : item.id)}
+                  className="text-left after:absolute after:inset-0 after:rounded-xl">
+                  {item.title}
+                </button>
               </h4>
               <p className="mt-1 text-xs leading-5 text-neutral-400">
                 {item.summary}

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
-  Sparkles,
+  Cpu,
   ClipboardCheck,
   ArrowRight,
   FileText,
@@ -43,8 +43,8 @@ const steps: StepConfig[] = [
     stepNumber: "02",
     title: "Extract",
     tagline: "Grounded AI extraction",
-    description: "Gemini 3.1 Flash-Lite extracts tasks, assignees, and deadlines backed by verbatim transcript quotes.",
-    icon: Sparkles,
+    description: "Amazon Nova Lite extracts tasks, assignees, and deadlines backed by verbatim transcript quotes.",
+    icon: Cpu,
     metrics: { label: "Hallucination Rate", value: "0.0% (Grounded)" },
   },
   {
@@ -321,9 +321,9 @@ export default function InteractiveWorkflowPipeline() {
               {activeStepIndex === 1 && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                    <span className="font-mono text-[11px] text-neutral-400">GEMINI 3.1 FLASH-LITE ENGINE</span>
+                    <span className="font-mono text-[11px] text-neutral-400">AMAZON NOVA LITE</span>
                     <span className="inline-flex items-center gap-1 font-mono text-[10px] text-emerald-400">
-                      <Sparkles size={11} /> 142ms LATENCY
+                      <Cpu size={11} /> 142ms LATENCY
                     </span>
                   </div>
 
