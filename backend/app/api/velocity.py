@@ -98,7 +98,7 @@ def get_sprint_velocity(
             assignee_name=t.get("external_owner_label") or "Unassigned",
             execution_type="agent" if t.get("external_owner_label") == "AI Agent" else "human",
             source_excerpt=t.get("source_excerpt"),
-            meeting_id=UUID(t["meeting_id"]),
+            meeting_id=UUID(t["meeting_id"]) if t.get("meeting_id") else None,
         )
 
     # 3. Calculate Meeting Briefs
