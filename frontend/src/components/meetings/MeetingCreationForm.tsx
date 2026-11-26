@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, FileText, LoaderCircle, Mic, Upload, Video } from 'lucide-react';
+import { ArrowRight, CheckCircle2, FileText, LoaderCircle, Mic, ShieldCheck, Sparkles, Upload, Video } from 'lucide-react';
 import { postApi } from '../../services/reviewApi';
 import type { CalendarEventItem } from '../../services/calendarApi';
 import type { WorkspaceMember } from '../../types/review';
@@ -63,6 +63,7 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [audio, setAudio] = useState<File | null>(null);
+  const [isNoAiMode, setIsNoAiMode] = useState(false);
   const [attested, setAttested] = useState(false);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -110,7 +111,7 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
     if (busy) return;
     setError('');
     if (!workspaceId) { setError('Select a workspace first.'); return; }
-    if (!attested) { setError('Confirm that participants were informed about AI processing.'); return; }
+    if (!isNoAiMode && !attested) { setError('Confirm that participants were informed about AI processing.'); return; }
     if (source === 'transcript' && !addTranscriptLater && !uploaded && (transcriptTab === 'paste' ? !text.trim() : !file)) {
       setError('Upload a transcript or paste your meeting notes.'); return;
     }
@@ -130,7 +131,8 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
       const meeting = created || await postApi(`/api/workspaces/${workspaceId}/meetings`, {
         title: title.trim(), starts_at: toUtc(date, timezone), timezone,
         participant_user_ids: memberIds, external_participants: externals,
-        ai_processing: true, ai_attestation: attested,
+        ai_processing: !isNoAiMode, ai_attestation: !isNoAiMode ? attested : false,
+        visibility: isNoAiMode ? 'private' : 'workspace',
         calendar_event_id: eventId, calendar_provider: eventId ? 'google' : undefined,
         conference_url: source === 'live' ? conferenceUrl.trim() : undefined,
       }) as CreatedMeeting;
@@ -150,7 +152,10 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
         await postApi(`/api/meetings/${meeting.id}/${source === 'in_person' ? 'audio' : 'transcript'}`, form);
         setUploaded(true);
       }
-      if (source === 'in_person') {
+      if (isNoAiMode) {
+        onComplete(meeting);
+        navigate(`/meetings/${meeting.id}?tab=tasks`);
+      } else if (source === 'in_person') {
         onComplete(meeting);
         navigate(`/meetings/${meeting.id}/speakers`);
       } else {
@@ -217,10 +222,44 @@ export function MeetingCreationForm({ workspaceId, initialDate, onComplete, onBu
       </fieldset>
 
       <fieldset disabled={busy} className="space-y-4">
-        <label className="flex items-start gap-3 text-xs leading-5 text-neutral-400 cursor-pointer">
-          <input type="checkbox" required disabled={recording} className="mt-1 size-4 shrink-0 accent-indigo-500" checked={attested} onChange={(e) => setAttested(e.target.checked)} />
-          <span>I have informed participants that this meeting's transcript or recording will be processed by AI. Suggested tasks require organiser approval.</span>
-        </label>
+        <div className="rounded-xl border border-white/10 p-4 space-y-3">
+          <p className="text-sm font-medium text-white">Privacy & AI mode</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => { setIsNoAiMode(false); }}
+              className={`rounded-lg border p-3 text-left transition-colors ${!isNoAiMode ? 'border-indigo-400 bg-indigo-500/10' : 'border-white/10 hover:bg-white/5'}`}
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className={`size-4 ${!isNoAiMode ? 'text-indigo-300' : 'text-neutral-400'}`} />
+                <span className="text-sm font-medium text-white">AI-Assisted Mode</span>
+              </div>
+              <p className="mt-1 text-xs text-neutral-400">Transcripts analyzed by AI to extract action items & decisions.</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setIsNoAiMode(true); setAttested(false); }}
+              className={`rounded-lg border p-3 text-left transition-colors ${isNoAiMode ? 'border-indigo-400 bg-indigo-500/10' : 'border-white/10 hover:bg-white/5'}`}
+            >
+              <div className="flex items-center gap-2">
+                <ShieldCheck className={`size-4 ${isNoAiMode ? 'text-indigo-300' : 'text-neutral-400'}`} />
+                <span className="text-sm font-medium text-white">No-AI Mode (Private)</span>
+              </div>
+              <p className="mt-1 text-xs text-neutral-400">Transcripts remain strictly private. Managers manually assign tasks.</p>
+            </button>
+          </div>
+        </div>
+
+        {!isNoAiMode ? (
+          <label className="flex items-start gap-3 text-xs leading-5 text-neutral-400 cursor-pointer">
+            <input type="checkbox" required disabled={recording} className="mt-1 size-4 shrink-0 accent-indigo-500" checked={attested} onChange={(e) => setAttested(e.target.checked)} />
+            <span>I have informed participants that this meeting's transcript or recording will be processed by AI. Suggested tasks require organiser approval.</span>
+          </label>
+        ) : (
+          <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+            ✓ No-AI mode active: Transcripts and recordings remain confidential and will never be shared with AI providers. AI attestation is waived.
+          </p>
+        )}
         {source === 'live' ? (
           <div className="space-y-3">
             <div><label htmlFor="meeting-link" className="field-label">Meeting link</label><input id="meeting-link" type="url" className="field" required disabled={!!created} value={conferenceUrl} onChange={(e) => setConferenceUrl(e.target.value)} placeholder="Paste a Google Meet, Zoom or Teams link" /></div>

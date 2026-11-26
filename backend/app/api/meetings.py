@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 
 from app.core.config import settings
 from app.core.deps import (
@@ -25,25 +25,30 @@ from app.core.supabase import get_supabase_client
 from app.parsers import TranscriptParseError, parse_transcript, to_canonical_text
 from datetime import UTC, datetime
 from app.schemas.meetings import (
-    MeetingDetail,
-    MeetingListItem,
-    ParticipantOut,
-    WorkspaceStatsResponse,
     CreateMeetingRequest,
+    ManualTaskCreateRequest,
+    ManualTaskResponse,
+    MeetingChapterItem,
+    MeetingChaptersResponse,
+    MeetingDetail,
+    MeetingDetailResponse,
+    MeetingListItem,
+    MeetingParticipantResponse,
+    MeetingResponse,
+    MeetingSummaryResponse,
+    ParticipantOut,
     ScheduleMeetingRequest,
     ScheduleMeetingResponse,
     SendMeetingInvitesResponse,
-    MeetingChaptersResponse,
-    MeetingChapterItem,
-    MeetingResponse,
-    MeetingSummaryResponse,
     SpeakerInsightItem,
     SummaryDecisionItem,
     SummaryDiscussionPointItem,
     TranscriptUploadResponse,
+    WorkspaceStatsResponse,
 )
 from app.services.email import (
     generate_google_calendar_url,
+    notify_tasks_assigned,
     send_meeting_schedule_invitations,
 )
 from app.services.llm.summary_service import (
@@ -132,21 +137,22 @@ def _create_meeting(
                 )
 
     # 4. Insert meeting row
+    effective_visibility = "private" if not payload.ai_processing else (getattr(payload, "visibility", None) or "workspace")
     meeting_insert = {
         "workspace_id": str(workspace_id),
         "title": clean_title,
         "starts_at": payload.starts_at.isoformat(),
-        "duration_minutes": payload.duration_minutes or 30,
+        "duration_minutes": getattr(payload, "duration_minutes", None) or 30,
         "timezone": payload.timezone.strip(),
         "organiser_id": str(user.id),
         "ai_processing": payload.ai_processing,
-        "visibility": "workspace",
+        "visibility": effective_visibility,
         "status": "draft",
         "lifecycle": "active",
-        "calendar_event_id": payload.calendar_event_id,
-        "calendar_provider": payload.calendar_provider,
-        "conference_url": payload.conference_url,
-        "description": payload.description.strip() if payload.description else None,
+        "calendar_event_id": getattr(payload, "calendar_event_id", None),
+        "calendar_provider": getattr(payload, "calendar_provider", None),
+        "conference_url": getattr(payload, "conference_url", None),
+        "description": payload.description.strip() if getattr(payload, "description", None) else None,
     }
     if meeting_id is not None:
         meeting_insert["id"] = str(meeting_id)
@@ -205,8 +211,10 @@ def _create_meeting(
 def _check_private_meeting_access(db, meeting: dict, user: CurrentUser) -> None:
     """Match the meeting SELECT policy for service-role reads."""
     uid = str(user.id)
-    if meeting.get("visibility") != "private" or meeting["organiser_id"] == uid:
+    if meeting.get("visibility") != "private" or meeting.get("organiser_id") == uid:
         return
+    if db is None:
+        db = get_supabase_client()
     mid = str(meeting["id"])
     participants = db.table("meeting_participants").select("id").eq("meeting_id", mid) \
         .eq("user_id", uid).limit(1).execute()
@@ -663,6 +671,12 @@ def get_meeting_summary(
     client = get_supabase_client()
     _check_private_meeting_access(client, meeting, user)
 
+    if not meeting.get("ai_processing", True):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI processing is disabled for this private meeting (No-AI mode)."
+        )
+
     # Return cached summary if present and not force-refreshed
     if not refresh and meeting.get("summary"):
         try:
@@ -737,6 +751,12 @@ def get_meeting_chapters(
     mid = str(meeting_id)
     client = get_supabase_client()
     _check_private_meeting_access(client, meeting, user)
+
+    if not meeting.get("ai_processing", True):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="AI processing is disabled for this private meeting (No-AI mode)."
+        )
 
     # Return cached chapters if present and not force-refreshed
     if not refresh and meeting.get("chapters"):
@@ -942,6 +962,234 @@ def get_meeting(
 
 
 @router.get(
+    "/meetings/{meeting_id}",
+    response_model=MeetingDetailResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get meeting details including participants and No-AI configuration"
+)
+def get_meeting_details(
+    meeting_id: UUID,
+    user: CurrentUser = Depends(get_current_user)
+) -> MeetingDetailResponse:
+    """Fetch meeting details, participants, and status.
+    
+    Verifies that the caller belongs to the meeting's workspace.
+    """
+    client = get_supabase_client()
+    m_resp = client.table("meetings").select("*").eq("id", str(meeting_id)).execute()
+    if not m_resp.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    
+    meeting = m_resp.data[0]
+    workspace_id = UUID(str(meeting["workspace_id"]))
+    # Enforce caller is in workspace (admin, organiser, or member)
+    require_role(workspace_id, WORKSPACE_ROLES, user)
+    _check_private_meeting_access(client, meeting, user)
+
+    # Fetch organiser display name
+    organiser_name = "Organiser"
+    try:
+        prof_resp = client.table("profiles").select("display_name, email").eq("id", str(meeting["organiser_id"])).execute()
+        if prof_resp.data:
+            organiser_name = prof_resp.data[0].get("display_name") or prof_resp.data[0].get("email") or "Organiser"
+    except Exception as exc:
+        logger.warning("Could not fetch organiser profile for meeting %s: %s", meeting_id, exc)
+
+    # Fetch participants
+    participants_list: list[MeetingParticipantResponse] = []
+    try:
+        p_resp = client.table("meeting_participants").select("*").eq("meeting_id", str(meeting_id)).execute()
+        raw_participants = p_resp.data or []
+        user_ids = [p["user_id"] for p in raw_participants if p.get("user_id")]
+        profiles_map = {}
+        if user_ids:
+            prof_data = client.table("profiles").select("id, display_name, email").in_("id", user_ids).execute()
+            for prof in (prof_data.data or []):
+                profiles_map[prof["id"]] = prof
+
+        for p in raw_participants:
+            uid = p.get("user_id")
+            prof = profiles_map.get(uid, {}) if uid else {}
+            participants_list.append(MeetingParticipantResponse(
+                id=UUID(str(p["id"])),
+                user_id=UUID(str(uid)) if uid else None,
+                external_name=p.get("external_name"),
+                display_name=prof.get("display_name"),
+                email=prof.get("email")
+            ))
+    except Exception as exc:
+        logger.warning("Could not fetch participants for meeting %s: %s", meeting_id, exc)
+
+    # Check transcript presence
+    has_transcript = False
+    try:
+        t_resp = client.table("transcripts").select("id").eq("meeting_id", str(meeting_id)).limit(1).execute()
+        has_transcript = bool(t_resp.data)
+    except Exception:
+        pass
+
+    # Count tasks
+    task_count = 0
+    try:
+        cnt_resp = client.table("tasks").select("id", count="exact").eq("meeting_id", str(meeting_id)).execute()
+        task_count = cnt_resp.count if hasattr(cnt_resp, "count") and cnt_resp.count is not None else len(cnt_resp.data or [])
+    except Exception:
+        pass
+
+    return MeetingDetailResponse(
+        id=UUID(str(meeting["id"])),
+        workspace_id=UUID(str(meeting["workspace_id"])),
+        title=meeting["title"],
+        starts_at=meeting["starts_at"],
+        timezone=meeting.get("timezone", "Asia/Kolkata"),
+        organiser_id=UUID(str(meeting["organiser_id"])),
+        organiser_name=organiser_name,
+        ai_processing=meeting.get("ai_processing", True),
+        status=meeting.get("status", "draft"),
+        visibility=meeting.get("visibility", "workspace"),
+        lifecycle=meeting.get("lifecycle", "active"),
+        participants=participants_list,
+        has_transcript=has_transcript,
+        task_count=task_count,
+        created_at=meeting["created_at"],
+    )
+
+
+@router.post(
+    "/meetings/{meeting_id}/tasks",
+    response_model=ManualTaskResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Manually create and assign a task to a workspace participant (No-AI Mode)"
+)
+def create_manual_task(
+    meeting_id: UUID,
+    payload: ManualTaskCreateRequest,
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user)
+) -> ManualTaskResponse:
+    """Manually assign a task to a workspace participant.
+    
+    Required role: organiser or admin (manager).
+    Designed for No-AI mode where meetings remain private and managers manually assign tasks.
+    Validates assignee workspace membership and inserts directly into tasks and task_assignees.
+    """
+    meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
+    workspace_id = meeting["workspace_id"]
+    client = get_supabase_client()
+    _check_private_meeting_access(client, meeting, user)
+
+    clean_title = payload.title.strip()
+    if not (1 <= len(clean_title) <= 500):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Task title must be between 1 and 500 characters"
+        )
+
+    valid_priorities = {"low", "normal", "high", "urgent"}
+    if payload.priority not in valid_priorities:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Priority must be one of {valid_priorities}"
+        )
+
+    # Validate assignee is an active workspace member
+    assignee_name = None
+    assignee_email = None
+    if payload.assignee_user_id:
+        assignee_str = str(payload.assignee_user_id)
+        wm_resp = (
+            client.table("workspace_members")
+            .select("user_id")
+            .eq("workspace_id", str(workspace_id))
+            .eq("user_id", assignee_str)
+            .execute()
+        )
+        if not (wm_resp.data or []):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Assignee {assignee_str} is not an active member of this workspace"
+            )
+
+        # Fetch profile info for response
+        try:
+            prof_resp = client.table("profiles").select("display_name, email").eq("id", assignee_str).execute()
+            if prof_resp.data:
+                assignee_name = prof_resp.data[0].get("display_name")
+                assignee_email = prof_resp.data[0].get("email")
+        except Exception:
+            pass
+
+    # Source excerpt: database requires non-empty string per tasks_source_excerpt_chk
+    source_excerpt = (payload.source_excerpt or "Manual task assignment (No-AI mode)").strip()
+    if not source_excerpt:
+        source_excerpt = "Manual task assignment (No-AI mode)"
+
+    task_insert = {
+        "workspace_id": str(workspace_id),
+        "meeting_id": str(meeting_id),
+        "extracted_item_id": None,  # Explicitly None for manual task
+        "title": clean_title,
+        "description": payload.description.strip() if payload.description else None,
+        "deadline_utc": payload.deadline_utc.isoformat() if payload.deadline_utc else None,
+        "priority": payload.priority,
+        "status": "todo",
+        "source_excerpt": source_excerpt,
+        "created_by": str(user.id),
+        "external_owner_label": None,
+    }
+
+    try:
+        t_resp = client.table("tasks").insert(task_insert).execute()
+        if not t_resp.data:
+            raise RuntimeError("Database returned empty record on task insertion")
+        created_task = t_resp.data[0]
+        task_id = UUID(str(created_task["id"]))
+    except Exception as exc:
+        logger.error("Failed to insert manual task for meeting %s: %s", meeting_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create task: {exc}"
+        ) from exc
+
+    # Insert primary assignee if specified
+    if payload.assignee_user_id:
+        try:
+            assignee_insert = {
+                "task_id": str(task_id),
+                "user_id": str(payload.assignee_user_id),
+                "is_primary": True,
+            }
+            client.table("task_assignees").insert(assignee_insert).execute()
+        except Exception as exc:
+            logger.error("Failed to insert task assignee for task %s: %s", task_id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to assign task: {exc}"
+            ) from exc
+
+        # Dispatch email notification in background
+        background_tasks.add_task(notify_tasks_assigned, meeting_id, [task_id])
+
+    return ManualTaskResponse(
+        id=task_id,
+        workspace_id=UUID(str(created_task["workspace_id"])),
+        meeting_id=UUID(str(created_task["meeting_id"])),
+        title=created_task["title"],
+        description=created_task.get("description"),
+        priority=created_task.get("priority", "normal"),
+        status=created_task.get("status", "todo"),
+        deadline_utc=created_task.get("deadline_utc"),
+        source_excerpt=created_task["source_excerpt"],
+        created_by=UUID(str(created_task["created_by"])),
+        assignee_user_id=payload.assignee_user_id,
+        assignee_name=assignee_name,
+        assignee_email=assignee_email,
+        created_at=created_task["created_at"],
+
+    )
+
+
+@router.get(
     "/workspaces/{workspace_id}/stats",
     response_model=WorkspaceStatsResponse,
     summary="Get workspace dashboard statistics",
@@ -987,3 +1235,100 @@ def get_workspace_stats(
         open_task_count=open_task_count,
         member_count=member_count,
     )
+
+
+@router.get(
+    "/meetings/{meeting_id}/tasks",
+    response_model=list[ManualTaskResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get all tasks assigned for a meeting"
+)
+def get_meeting_tasks(
+    meeting_id: UUID,
+    user: CurrentUser = Depends(get_current_user)
+) -> list[ManualTaskResponse]:
+    """Fetch all tasks associated with this meeting, including assignees."""
+    client = get_supabase_client()
+    m_resp = client.table("meetings").select("*").eq("id", str(meeting_id)).execute()
+    if not m_resp.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    
+    meeting = m_resp.data[0]
+    workspace_id = UUID(str(meeting["workspace_id"]))
+    require_role(workspace_id, WORKSPACE_ROLES, user)
+    _check_private_meeting_access(client, meeting, user)
+
+    tasks_resp = (
+        client.table("tasks")
+        .select("*")
+        .eq("meeting_id", str(meeting_id))
+        .order("created_at", desc=False)
+        .execute()
+    )
+    task_rows = tasks_resp.data or []
+    if not task_rows:
+        return []
+
+    task_ids = [t["id"] for t in task_rows]
+    assignees_resp = (
+        client.table("task_assignees")
+        .select("task_id, user_id, is_primary")
+        .in_("task_id", task_ids)
+        .execute()
+    )
+    primary_assignees = {
+        a["task_id"]: a["user_id"] 
+        for a in (assignees_resp.data or []) 
+        if a.get("is_primary", True)
+    }
+
+    # Fetch assignee profiles
+    user_ids = list(set(primary_assignees.values()))
+    profiles_map = {}
+    if user_ids:
+        prof_resp = client.table("profiles").select("id, display_name, email").in_("id", user_ids).execute()
+        for p in (prof_resp.data or []):
+            profiles_map[p["id"]] = p
+
+    results: list[ManualTaskResponse] = []
+    for t in task_rows:
+        assignee_uid = primary_assignees.get(t["id"])
+        prof = profiles_map.get(assignee_uid, {}) if assignee_uid else {}
+        results.append(ManualTaskResponse(
+            id=UUID(str(t["id"])),
+            workspace_id=UUID(str(t["workspace_id"])),
+            meeting_id=UUID(str(t["meeting_id"])),
+            title=t["title"],
+            description=t.get("description"),
+            priority=t.get("priority", "normal"),
+            status=t.get("status", "todo"),
+            deadline_utc=t.get("deadline_utc"),
+            source_excerpt=t.get("source_excerpt", ""),
+            created_by=UUID(str(t["created_by"])),
+            assignee_user_id=UUID(str(assignee_uid)) if assignee_uid else None,
+            assignee_name=prof.get("display_name"),
+            assignee_email=prof.get("email"),
+            created_at=t["created_at"],
+        ))
+
+    return results
+
+
+@router.delete(
+    "/meetings/{meeting_id}/tasks/{task_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete a task created for a meeting"
+)
+def delete_meeting_task(
+    meeting_id: UUID,
+    task_id: UUID,
+    user: CurrentUser = Depends(get_current_user)
+) -> dict[str, str]:
+    """Delete a task associated with this meeting. Organiser or admin only."""
+    meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
+    client = get_supabase_client()
+    _check_private_meeting_access(client, meeting, user)
+    client.table("tasks").delete().eq("id", str(task_id)).eq("meeting_id", str(meeting_id)).execute()
+    return {"message": f"Task {task_id} deleted successfully"}
+
+

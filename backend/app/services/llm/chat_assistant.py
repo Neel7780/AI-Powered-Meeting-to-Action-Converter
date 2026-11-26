@@ -224,7 +224,7 @@ def _load_workspace_meeting_data(
         # 1. Fetch meetings
         meetings_query = (
             db.table("meetings")
-            .select("id, title, starts_at, timezone, organiser_id, visibility, status, lifecycle")
+            .select("id, title, starts_at, timezone, organiser_id, visibility, status, lifecycle, ai_processing")
             .eq("workspace_id", str_workspace_id)
             .neq("lifecycle", "deleted")
         )
@@ -292,14 +292,18 @@ def _load_workspace_meeting_data(
         )
         extracted_items = items_resp.data or []
 
-        # 4. Fetch transcripts and segment summaries
-        transcripts_resp = (
-            db.table("transcripts")
-            .select("id, meeting_id, canonical_text, raw_text")
-            .in_("meeting_id", accessible_ids)
-            .execute()
-        )
-        raw_transcripts = transcripts_resp.data or []
+        # 4. Fetch transcripts and segment summaries (strictly excluding No-AI private meetings)
+        ai_accessible_ids = [m["id"] for m in accessible_meetings if m.get("ai_processing", True) is not False]
+        if ai_accessible_ids:
+            transcripts_resp = (
+                db.table("transcripts")
+                .select("id, meeting_id, canonical_text, raw_text")
+                .in_("meeting_id", ai_accessible_ids)
+                .execute()
+            )
+            raw_transcripts = transcripts_resp.data or []
+        else:
+            raw_transcripts = []
 
         # 5. Fetch task assignees and user profiles for participants, assignees, and extracted items
         task_ids = [t["id"] for t in raw_tasks]

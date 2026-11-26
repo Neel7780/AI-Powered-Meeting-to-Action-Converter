@@ -1,5 +1,6 @@
 import type { 
   ActionItemCandidate, 
+  ManualTask,
   MeetingDetails, 
   TranscriptSegment, 
   WorkspaceMember,
@@ -12,6 +13,8 @@ import { getApiUrl } from '../lib/api';
 import { canAdministerWorkspace } from '../lib/workspaceRoles';
 
 const STORAGE_KEY_ITEMS = 'staging_gate_candidate_items';
+const STORAGE_KEY_MEETINGS = 'staging_gate_meetings_list';
+const STORAGE_KEY_MANUAL_TASKS = 'staging_gate_manual_tasks';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -120,8 +123,26 @@ export const INITIAL_MEETING: MeetingDetails = {
   timezone: 'Asia/Kolkata (IST)',
   duration: '42 mins',
   organiser_name: 'Madhav Chauhan',
-  candidate_count: 7
+  status: 'review_ready',
+  candidate_count: 7,
+  ai_processing: true,
+  visibility: 'workspace'
 };
+
+export const NO_AI_DEMO_MEETING: MeetingDetails = {
+  id: 'mtg-private-no-ai',
+  workspace_id: 'ws-team-10',
+  title: 'Executive Compensation & Q3 Performance Sync (Private)',
+  date: '2026-10-16T14:30:00Z',
+  timezone: 'Asia/Kolkata (IST)',
+  duration: '30 mins',
+  organiser_name: 'Yuvraj Katara',
+  status: 'review_ready',
+  candidate_count: 0,
+  ai_processing: false,
+  visibility: 'private'
+};
+
 
 export const INITIAL_TRANSCRIPT_SEGMENTS: TranscriptSegment[] = [
   {
@@ -437,7 +458,26 @@ function saveStoredCandidateItems(items: ActionItemCandidate[]) {
 
 export const reviewApi = {
   async fetchMeetingDetails(meetingId: string): Promise<MeetingDetails> {
+    if (meetingId === 'mtg-private-no-ai') {
+      return NO_AI_DEMO_MEETING;
+    }
+
+    // Check localStorage stored meetings
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY_MEETINGS);
+        if (stored) {
+          const list = JSON.parse(stored);
+          const found = list.find((m: any) => m.id === meetingId);
+          if (found) return found;
+        }
+      } catch (e) {
+        console.warn('Error reading stored meetings:', e);
+      }
+    }
+
     if (isSupabaseConfigured && supabase) {
+      try {
         const { data, error } = await supabase
           .from('meetings')
           .select('*')
@@ -453,9 +493,15 @@ export const reviewApi = {
           date: data.starts_at || data.created_at,
           timezone: data.timezone || 'Asia/Kolkata',
           duration: '45 mins',
-          organiser_name: 'Organiser',
-          candidate_count: 0
+          organiser_name: data.organiser?.display_name || 'Organiser',
+          status: data.status === 'ready' ? 'review_ready' : data.status,
+          candidate_count: 0,
+          ai_processing: data.ai_processing !== false,
+          visibility: data.visibility || (data.ai_processing === false ? 'private' : 'workspace')
         };
+      } catch (err) {
+        console.warn('Error fetching meeting details from Supabase:', err);
+      }
     }
     return INITIAL_MEETING;
   },
@@ -773,5 +819,388 @@ async draftFollowUp(
     }
   ): Promise<SendFollowUpResponse> {
     return await postApi(`/api/meetings/${meetingId}/send-followup`, payload);
+  },
+
+
+  /**
+   * Create a new meeting (supports No-AI privacy mode)
+   */
+  async createMeeting(
+    workspaceId: string,
+    params: {
+      title: string;
+      starts_at: string;
+      timezone: string;
+      participant_user_ids?: string[];
+      external_participants?: string[];
+      ai_processing: boolean;
+      ai_attestation?: boolean;
+      visibility?: 'workspace' | 'private';
+    }
+  ): Promise<MeetingDetails> {
+    const meetingId = crypto.randomUUID();
+    const effectiveVisibility = params.visibility || (!params.ai_processing ? 'private' : 'workspace');
+
+    // 1. Try Backend API
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const res = await fetch(getApiUrl(`/workspaces/${workspaceId}/meetings`), {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            title: params.title,
+            starts_at: params.starts_at,
+            timezone: params.timezone,
+            participant_user_ids: params.participant_user_ids || [],
+            external_participants: params.external_participants || [],
+            ai_processing: params.ai_processing,
+            ai_attestation: params.ai_attestation ?? false,
+            visibility: effectiveVisibility
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const newMeeting: MeetingDetails = {
+            id: data.id,
+            workspace_id: data.workspace_id,
+            title: data.title,
+            date: data.starts_at,
+            timezone: data.timezone,
+            duration: '45 mins',
+            organiser_name: session?.user?.email?.split('@')[0] || 'Organiser',
+            status: 'review_ready',
+            candidate_count: 0,
+            ai_processing: data.ai_processing,
+            visibility: data.visibility
+          };
+          this.saveMeetingToLocal(newMeeting);
+          return newMeeting;
+        }
+      } catch (err) {
+        console.warn('[reviewApi] Backend createMeeting fallback:', err);
+      }
+    }
+
+    // 2. Direct Supabase / local fallback
+    const newMeeting: MeetingDetails = {
+      id: meetingId,
+      workspace_id: workspaceId,
+      title: params.title,
+      date: params.starts_at,
+      timezone: params.timezone,
+      duration: '45 mins',
+      organiser_name: 'Organiser',
+      status: 'review_ready',
+      candidate_count: 0,
+      ai_processing: params.ai_processing,
+      visibility: effectiveVisibility
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from('meetings').insert({
+            id: meetingId,
+            workspace_id: workspaceId,
+            title: params.title,
+            starts_at: params.starts_at,
+            timezone: params.timezone,
+            organiser_id: user.id,
+            ai_processing: params.ai_processing,
+            visibility: effectiveVisibility,
+            status: 'draft',
+            lifecycle: 'active'
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase meeting insert fallback:', err);
+      }
+    }
+
+    this.saveMeetingToLocal(newMeeting);
+    return newMeeting;
+  },
+
+  saveMeetingToLocal(meeting: MeetingDetails) {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_MEETINGS);
+      const list = stored ? JSON.parse(stored) : [];
+      list.unshift(meeting);
+      localStorage.setItem(STORAGE_KEY_MEETINGS, JSON.stringify(list));
+    } catch (e) {
+      console.warn('Error saving meeting locally:', e);
+    }
+  },
+
+  /**
+   * Fetch manually assigned tasks for a meeting
+   */
+  async fetchMeetingTasks(meetingId: string): Promise<ManualTask[]> {
+    // 1. Try Backend API
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+        const res = await fetch(getApiUrl(`/meetings/${meetingId}/tasks`), { headers });
+        if (res.ok) {
+          const list = await res.json();
+          const members = INITIAL_MEMBERS;
+          return list.map((t: any) => ({
+            id: t.id,
+            meeting_id: t.meeting_id,
+            workspace_id: t.workspace_id,
+            title: t.title,
+            description: t.description,
+            priority: t.priority,
+            status: t.status,
+            deadline_utc: t.deadline_utc,
+            source_excerpt: t.source_excerpt,
+            assignee_user_id: t.assignee_user_id,
+            assignee: t.assignee_user_id ? members.find(m => m.user_id === t.assignee_user_id || m.id === t.assignee_user_id) || {
+              id: t.assignee_user_id,
+              user_id: t.assignee_user_id,
+              full_name: t.assignee_name || 'Assigned Member',
+              email: t.assignee_email || '',
+              role: 'team_member' as const
+            } : null,
+            created_at: t.created_at
+          }));
+        }
+      } catch (err) {
+        console.warn('Backend fetchMeetingTasks fallback:', err);
+      }
+    }
+
+    // 2. Direct Supabase Query
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: tasks, error } = await supabase
+          .from('tasks')
+          .select('*, task_assignees(user_id, is_primary)')
+          .eq('meeting_id', meetingId)
+          .order('created_at', { ascending: true });
+
+        if (!error && tasks && tasks.length > 0) {
+          const members = INITIAL_MEMBERS;
+          return tasks.map((t: any) => {
+            const assigneeId = t.task_assignees?.[0]?.user_id || null;
+            return {
+              id: t.id,
+              meeting_id: t.meeting_id,
+              workspace_id: t.workspace_id,
+              title: t.title,
+              description: t.description,
+              priority: t.priority,
+              status: t.status,
+              deadline_utc: t.deadline_utc,
+              source_excerpt: t.source_excerpt,
+              assignee_user_id: assigneeId,
+              assignee: assigneeId ? members.find(m => m.user_id === assigneeId || m.id === assigneeId) || null : null,
+              created_at: t.created_at
+            };
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase fetch tasks error:', err);
+      }
+    }
+
+    // 3. Local storage fallback
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_MANUAL_TASKS);
+        if (raw) {
+          const allTasks: ManualTask[] = JSON.parse(raw);
+          const members = INITIAL_MEMBERS;
+          return allTasks
+            .filter(t => t.meeting_id === meetingId)
+            .map(t => ({
+              ...t,
+              assignee: t.assignee_user_id ? members.find(m => m.user_id === t.assignee_user_id || m.id === t.assignee_user_id) || null : null
+            }));
+        }
+      } catch (e) {
+        console.warn('Local storage tasks read error:', e);
+      }
+    }
+
+    // Default mock task for demonstration in No-AI mode
+    if (meetingId === 'mtg-private-no-ai') {
+      return [
+        {
+          id: 'manual-task-demo-1',
+          meeting_id: 'mtg-private-no-ai',
+          workspace_id: 'ws-team-10',
+          title: 'Review executive bonus allocations & board deck',
+          description: 'Ensure confidential compensation ratios are properly reconciled before Q3 audit.',
+          priority: 'urgent',
+          status: 'todo',
+          deadline_utc: '2026-10-18T18:00:00Z',
+          source_excerpt: 'Manual task assignment (No-AI mode)',
+          assignee_user_id: 'usr-3',
+          assignee: INITIAL_MEMBERS[2], // Yuvraj Katara
+          created_at: new Date().toISOString()
+        },
+        {
+          id: 'manual-task-demo-2',
+          meeting_id: 'mtg-private-no-ai',
+          workspace_id: 'ws-team-10',
+          title: 'Prepare compliance report under DPDP guidelines',
+          description: 'Verify employee data protection consent log for internal payroll processing.',
+          priority: 'high',
+          status: 'in_progress',
+          deadline_utc: '2026-10-20T12:00:00Z',
+          source_excerpt: 'Manual task assignment (No-AI mode)',
+          assignee_user_id: 'usr-1',
+          assignee: INITIAL_MEMBERS[0], // Arnav Pandita
+          created_at: new Date().toISOString()
+        }
+      ];
+    }
+
+    return [];
+  },
+
+  /**
+   * Manually create and assign a task to a workspace participant
+   */
+  async createManualTask(
+    meetingId: string,
+    workspaceId: string,
+    params: {
+      title: string;
+      description?: string;
+      assignee_user_id?: string | null;
+      priority: 'low' | 'normal' | 'high' | 'urgent';
+      deadline_utc?: string | null;
+      source_excerpt?: string;
+    }
+  ): Promise<ManualTask> {
+    const taskId = crypto.randomUUID();
+    const members = INITIAL_MEMBERS;
+    const assigneeObj = params.assignee_user_id
+      ? members.find(m => m.user_id === params.assignee_user_id || m.id === params.assignee_user_id) || null
+      : null;
+
+    // 1. Try Backend API
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const res = await fetch(getApiUrl(`/meetings/${meetingId}/tasks`), {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            title: params.title,
+            description: params.description,
+            assignee_user_id: params.assignee_user_id || null,
+            priority: params.priority,
+            deadline_utc: params.deadline_utc || null,
+            source_excerpt: params.source_excerpt || 'Manual task assignment (No-AI mode)'
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const created: ManualTask = {
+            id: data.id,
+            meeting_id: data.meeting_id,
+            workspace_id: data.workspace_id,
+            title: data.title,
+            description: data.description,
+            priority: data.priority,
+            status: data.status,
+            deadline_utc: data.deadline_utc,
+            source_excerpt: data.source_excerpt,
+            assignee_user_id: data.assignee_user_id,
+            assignee: assigneeObj,
+            created_at: data.created_at
+          };
+          this.saveManualTaskToLocal(created);
+          return created;
+        }
+      } catch (err) {
+        console.warn('Backend createManualTask fallback:', err);
+      }
+    }
+
+    // 2. Fallback record
+    const created: ManualTask = {
+      id: taskId,
+      meeting_id: meetingId,
+      workspace_id: workspaceId,
+      title: params.title,
+      description: params.description,
+      priority: params.priority,
+      status: 'todo',
+      deadline_utc: params.deadline_utc || null,
+      source_excerpt: params.source_excerpt || 'Manual task assignment (No-AI mode)',
+      assignee_user_id: params.assignee_user_id,
+      assignee: assigneeObj,
+      created_at: new Date().toISOString()
+    };
+
+    this.saveManualTaskToLocal(created);
+    return created;
+  },
+
+  saveManualTaskToLocal(task: ManualTask) {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_MANUAL_TASKS);
+      const list: ManualTask[] = raw ? JSON.parse(raw) : [];
+      list.push(task);
+      localStorage.setItem(STORAGE_KEY_MANUAL_TASKS, JSON.stringify(list));
+    } catch (e) {
+      console.warn('Error saving manual task locally:', e);
+    }
+  },
+
+  async deleteManualTask(meetingId: string, taskId: string): Promise<void> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+        await fetch(getApiUrl(`/meetings/${meetingId}/tasks/${taskId}`), {
+          method: 'DELETE',
+          headers
+        });
+      } catch (e) {
+        console.warn('Backend deleteManualTask error:', e);
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_MANUAL_TASKS);
+        if (raw) {
+          const list: ManualTask[] = JSON.parse(raw);
+          const filtered = list.filter(t => t.id !== taskId);
+          localStorage.setItem(STORAGE_KEY_MANUAL_TASKS, JSON.stringify(filtered));
+        }
+      } catch (e) {
+        console.warn('Local storage delete error:', e);
+      }
+    }
+
   }
 };

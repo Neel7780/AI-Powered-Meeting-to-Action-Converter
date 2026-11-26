@@ -205,6 +205,7 @@ export default function Dashboard() {
               onAddMember={() => setShowAddMember(true)}
               onFollowUp={() => (latestMeeting ? setShowFollowUp(true) : navigate("/meetings"))}
             />
+
           )}
 
           {/* Create Workspace Modal */}

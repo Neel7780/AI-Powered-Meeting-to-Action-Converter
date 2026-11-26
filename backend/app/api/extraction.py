@@ -9,6 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
+from app.api.meetings import _check_private_meeting_access
 from app.core.deps import ORGANISER_ROLES, CurrentUser, get_current_user, require_meeting_role
 from app.core.supabase import get_supabase_client
 from app.services.llm.bedrock import llm_is_configured
@@ -35,6 +36,7 @@ def start_extraction(
     """
     meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
     mid = str(meeting_id)
+    _check_private_meeting_access(None, meeting, user)
 
     # No-AI meetings never reach any provider. No fallback.
     if not meeting.get("ai_processing"):
