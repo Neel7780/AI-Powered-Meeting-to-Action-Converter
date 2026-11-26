@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText,
-  Sparkles,
   Check,
   CheckCircle2,
   X,
@@ -12,8 +11,6 @@ import {
   Play,
   Pause,
   RotateCcw,
-  MousePointer,
-  ArrowRight,
   ShieldCheck,
   Sun,
   Moon,
@@ -151,17 +148,15 @@ function NotionCursor({
   );
 }
 
-export default function InteractiveProductWalkthrough() {
+export default function InteractiveProductWalkthrough({ isLight, onToggleTheme }: { isLight: boolean; onToggleTheme: () => void }) {
   const [actions, setActions] = useState<ActionItem[]>(initialActions);
   const [activeQuoteId, setActiveQuoteId] = useState<string | null>("onboarding");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tab, setTab] = useState<"transcript" | "actions">("actions");
   const [errorId, setErrorId] = useState<string | null>(null);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const isLight = theme === "light";
 
   // Autoplay State Machine
-  const [isAutoplay, setIsAutoplay] = useState<boolean>(true);
+  const [isAutoplay, setIsAutoplay] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number }>({ x: 300, y: 150 });
   const [isCursorClicking, setIsCursorClicking] = useState<boolean>(false);
   const [cursorLabel, setCursorLabel] = useState<string>("Scanning transcript");
@@ -176,7 +171,18 @@ export default function InteractiveProductWalkthrough() {
   const approveBtn3Ref = useRef<HTMLButtonElement>(null);
   const transcriptCardRef = useRef<HTMLDivElement>(null);
 
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => { if (preference.matches) setIsAutoplay(false); };
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting));
+    if (containerRef.current) observer.observe(containerRef.current);
+    preference.addEventListener("change", onChange);
+    return () => {
+      observer.disconnect();
+      preference.removeEventListener("change", onChange);
+    };
+  }, []);
 
   // User Action Handlers
   const updateAction = useCallback((id: string, patch: Partial<ActionItem>) => {
@@ -204,20 +210,7 @@ export default function InteractiveProductWalkthrough() {
     setProgressPercent(0);
   }, []);
 
-  // Enter Interactive Mode on user mouse enter / interaction
-  const enterInteractiveMode = () => {
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    setIsAutoplay(false);
-  };
-
-  // Schedule auto-resumption when mouse leaves
-  const handleMouseLeave = () => {
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => {
-      resetToInitial();
-      setIsAutoplay(true);
-    }, 8000);
-  };
+  const enterInteractiveMode = () => setIsAutoplay(false);
 
   // Dynamic coordinate calculator
   const getElementCenter = useCallback((el: HTMLElement | null) => {
@@ -232,8 +225,9 @@ export default function InteractiveProductWalkthrough() {
 
   // Choreographed Walkthrough Storyline Loop (12 seconds)
   useEffect(() => {
-    if (!isAutoplay) return;
+    if (!isAutoplay || !inView) return;
 
+    let clickTimer: ReturnType<typeof setTimeout>;
     let stepTimer: ReturnType<typeof setTimeout>;
     const progressInterval = setInterval(() => {
       setProgressPercent((prev) => (prev >= 100 ? 0 : prev + 100 / 120));
@@ -275,7 +269,7 @@ export default function InteractiveProductWalkthrough() {
 
           stepTimer = setTimeout(() => {
             setIsCursorClicking(true);
-            setTimeout(() => {
+            clickTimer = setTimeout(() => {
               setIsCursorClicking(false);
               updateAction("onboarding", { status: "approved" });
             }, 250);
@@ -301,7 +295,7 @@ export default function InteractiveProductWalkthrough() {
 
                 stepTimer = setTimeout(() => {
                   setIsCursorClicking(true);
-                  setTimeout(() => {
+                  clickTimer = setTimeout(() => {
                     setIsCursorClicking(false);
                     setEditingId("readme");
                     updateAction("readme", { owner: "Priya Patel", due: "Next sprint" });
@@ -317,7 +311,7 @@ export default function InteractiveProductWalkthrough() {
 
                     stepTimer = setTimeout(() => {
                       setIsCursorClicking(true);
-                      setTimeout(() => {
+                      clickTimer = setTimeout(() => {
                         setIsCursorClicking(false);
                         updateAction("readme", { status: "approved" });
                         setEditingId(null);
@@ -338,20 +332,23 @@ export default function InteractiveProductWalkthrough() {
       }, 2000);
     };
 
-    runStoryline();
-
+    const frame = requestAnimationFrame(() => {
+      resetToInitial();
+      setIsCursorClicking(false);
+      runStoryline();
+    });
     return () => {
+      cancelAnimationFrame(frame);
       clearTimeout(stepTimer);
+      clearTimeout(clickTimer);
       clearInterval(progressInterval);
     };
-  }, [isAutoplay, getElementCenter, resetToInitial, updateAction]);
+  }, [isAutoplay, inView, getElementCenter, resetToInitial, updateAction]);
 
   return (
     <div
       id="demo"
       ref={containerRef}
-      onMouseEnter={enterInteractiveMode}
-      onMouseLeave={handleMouseLeave}
       className={`scroll-mt-24 linear-3d-card relative overflow-hidden rounded-xl border transition-all duration-300 ${
         isLight
           ? "border-neutral-200/90 bg-white shadow-[0_25px_80px_-20px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.2)] text-neutral-900"
@@ -369,7 +366,7 @@ export default function InteractiveProductWalkthrough() {
       <NotionCursor
         x={cursorPos.x}
         y={cursorPos.y}
-        visible={isAutoplay}
+        visible={isAutoplay && inView}
         clicking={isCursorClicking}
         label={cursorLabel}
         role="ActionPulse AI"
@@ -382,7 +379,7 @@ export default function InteractiveProductWalkthrough() {
         }`}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex shrink-0 gap-1.5 items-center">
+          <span className="hidden shrink-0 gap-1.5 items-center sm:flex">
             {isLight ? (
               <>
                 <i className="size-2.5 rounded-full bg-[#FF5F56] border border-[#E0443E]/70 shadow-sm" />
@@ -397,41 +394,14 @@ export default function InteractiveProductWalkthrough() {
               </>
             )}
           </span>
-          <span className={`h-4 w-px shrink-0 ${isLight ? "bg-neutral-200" : "bg-white/10"}`} />
+          <span className={`hidden sm:block h-4 w-px shrink-0 ${isLight ? "bg-neutral-200" : "bg-white/10"}`} />
           <span className={`truncate text-xs font-medium ${isLight ? "text-neutral-700" : "text-neutral-300"}`}>
-            Live Preview <span className={isLight ? "text-neutral-400" : "text-neutral-600"}>/</span> Grounded Extraction Engine
+            <span className="hidden sm:inline">Meeting review · </span>Sample meeting
           </span>
         </div>
 
         {/* Center / Right Control Hub */}
         <div className="flex items-center gap-2">
-          {/* Autoplay / Interactive Mode Pill Badge */}
-          <div
-            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono transition-colors ${
-              isAutoplay
-                ? isLight
-                  ? "border-blue-200 bg-blue-50 text-blue-700 font-medium"
-                  : "border-blue-500/40 bg-blue-500/10 text-blue-400"
-                : isLight
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 font-medium"
-                  : "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
-            }`}
-          >
-            {isAutoplay ? (
-              <>
-                <span className={`size-1.5 rounded-full ${isLight ? "bg-blue-600" : "bg-blue-400"} animate-ping`} />
-                <Play size={10} className="fill-current" />
-                <span>Autoplay Demo</span>
-              </>
-            ) : (
-              <>
-                <span className={`size-1.5 rounded-full ${isLight ? "bg-emerald-600" : "bg-emerald-400"}`} />
-                <MousePointer size={10} />
-                <span>Interactive Mode</span>
-              </>
-            )}
-          </div>
-
           {/* Autoplay Toggle Button */}
           <Button
             variant="ghost"
@@ -440,7 +410,6 @@ export default function InteractiveProductWalkthrough() {
               if (isAutoplay) {
                 setIsAutoplay(false);
               } else {
-                resetToInitial();
                 setIsAutoplay(true);
               }
             }}
@@ -452,11 +421,11 @@ export default function InteractiveProductWalkthrough() {
           >
             {isAutoplay ? (
               <>
-                <Pause size={11} className={`mr-1 ${isLight ? "text-blue-600" : "text-blue-400"}`} /> Pause
+                <Pause size={11} className={`mr-1 ${isLight ? "text-blue-600" : "text-blue-400"}`} /> Pause demo
               </>
             ) : (
               <>
-                <Play size={11} className={`mr-1 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} /> Play Video
+                <Play size={11} className={`mr-1 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} /> Play demo
               </>
             )}
           </Button>
@@ -466,7 +435,7 @@ export default function InteractiveProductWalkthrough() {
             variant="ghost"
             size="icon"
             aria-label="Reset demo"
-            onClick={resetToInitial}
+            onClick={() => { enterInteractiveMode(); resetToInitial(); }}
             className={`size-7 border transition-colors ${
               isLight
                 ? "border-neutral-200 bg-white text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 shadow-sm"
@@ -479,35 +448,14 @@ export default function InteractiveProductWalkthrough() {
           {/* Theme Switcher Button */}
           <Button
             variant="ghost"
-            size="sm"
-            onClick={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
-            className={`h-7 px-2.5 text-xs border transition-colors ${
-              isLight
-                ? "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900 shadow-sm"
-                : "border-white/10 text-neutral-300 hover:text-white hover:bg-white/5"
-            }`}
-            title={`Switch to ${isLight ? "dark" : "light"} mode`}
+            size="icon"
+            onClick={onToggleTheme}
+            className={`size-7 border ${isLight ? "border-neutral-200 bg-white text-neutral-600 hover:text-neutral-900" : "border-white/10 text-neutral-300 hover:text-white"}`}
+            aria-label={`Switch demo to ${isLight ? "dark" : "light"} mode`}
+            title={`Switch demo to ${isLight ? "dark" : "light"} mode`}
           >
-            {isLight ? (
-              <>
-                <Moon size={11} className="mr-1 text-neutral-500" /> Dark
-              </>
-            ) : (
-              <>
-                <Sun size={11} className="mr-1 text-amber-400" /> Light
-              </>
-            )}
+            {isLight ? <Moon size={13}/> : <Sun size={13}/>}
           </Button>
-
-          <span
-            className={`shrink-0 rounded border px-2 py-1 font-mono text-[10px] uppercase font-medium ${
-              isLight
-                ? "border-neutral-200 bg-neutral-100 text-neutral-700"
-                : "border-white/15 bg-white/5 text-white"
-            }`}
-          >
-            Grounded v1.0
-          </span>
         </div>
       </div>
 
@@ -570,7 +518,7 @@ export default function InteractiveProductWalkthrough() {
       </div>
 
       {/* Two-Column Stage */}
-      <div className="grid lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]">
+      <div className="grid lg:grid-cols-[minmax(0,0.88fr)_minmax(0,1.12fr)]" onFocusCapture={enterInteractiveMode}>
         {/* Left: Transcript Ingestion Panel */}
         <div
           ref={transcriptCardRef}
@@ -587,10 +535,7 @@ export default function InteractiveProductWalkthrough() {
             }`}
           >
             <div>
-              <p className={`font-mono text-[10px] uppercase ${isLight ? "text-neutral-400" : "text-neutral-500"}`}>
-                01 / Input
-              </p>
-              <h3 className={`mt-1 text-sm font-medium tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>
+              <h3 className={`text-sm font-semibold tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>
                 Meeting transcript
               </h3>
             </div>
@@ -617,7 +562,7 @@ export default function InteractiveProductWalkthrough() {
                     <span className={`text-xs font-semibold ${isLight ? "text-neutral-900" : "text-white"}`}>
                       {line.speaker}
                     </span>
-                    <span className={`font-mono text-[10px] ${isLight ? "text-neutral-400" : "text-neutral-500"}`}>
+                    <span className={`font-mono text-[11px] ${isLight ? "text-neutral-600" : "text-neutral-400"}`}>
                       {line.time}
                     </span>
                     {isMatched && (
@@ -655,8 +600,7 @@ export default function InteractiveProductWalkthrough() {
               isLight ? "border-neutral-200 bg-white text-neutral-400" : "border-white/10 bg-[#08080a] text-neutral-500"
             }`}
           >
-            <span>6 SEGMENTS · SAMPLE TRANSCRIPT</span>
-            <span className={isLight ? "text-neutral-400" : "text-neutral-600"}>UNTRUSTED USER INPUT BOUNDARY</span>
+            <span>{transcript.length} segments · Sample transcript</span>
           </div>
         </div>
 
@@ -675,23 +619,11 @@ export default function InteractiveProductWalkthrough() {
             }`}
           >
             <div>
-              <p className={`font-mono text-[10px] uppercase ${isLight ? "text-neutral-400" : "text-neutral-500"}`}>
-                02 / Human review
-              </p>
-              <h3 className={`mt-1 text-sm font-medium tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>
+              <h3 className={`text-sm font-semibold tracking-tight ${isLight ? "text-neutral-900" : "text-white"}`}>
                 AI extracted actions
               </h3>
             </div>
             <div className="flex items-center gap-2">
-              <span
-                className={`hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded border font-mono text-[10px] ${
-                  isLight
-                    ? "border-neutral-200 bg-neutral-100 text-neutral-700"
-                    : "border-white/10 bg-white/5 text-neutral-300"
-                }`}
-              >
-                <Sparkles size={11} className={isLight ? "text-neutral-700" : "text-white"} /> Grounded Triplet
-              </span>
               <span
                 className={`rounded border px-2 py-1 font-mono text-[10px] font-medium ${
                   isLight
@@ -966,51 +898,6 @@ export default function InteractiveProductWalkthrough() {
         </div>
       </div>
 
-      {/* Floating Interactive Prompt Helper */}
-      <div
-        className={`border-t px-4 py-2.5 flex items-center justify-between text-xs ${
-          isLight ? "border-neutral-200 bg-[#F8FAFC] text-neutral-600" : "border-white/10 bg-[#08080a] text-neutral-400"
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          {isAutoplay ? (
-            <span className={`flex items-center gap-1.5 font-mono text-[11px] ${isLight ? "text-blue-700 font-semibold" : "text-blue-400"}`}>
-              <span className={`size-2 rounded-full animate-ping ${isLight ? "bg-blue-600" : "bg-blue-400"}`} />
-              Notion-style animated preview active
-            </span>
-          ) : (
-            <span className={`flex items-center gap-1.5 font-mono text-[11px] ${isLight ? "text-emerald-700 font-semibold" : "text-emerald-400"}`}>
-              <span className={`size-2 rounded-full ${isLight ? "bg-emerald-600" : "bg-emerald-400"}`} />
-              You have control · Click or edit any action card
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className={`hidden sm:inline font-mono text-[10px] ${isLight ? "text-neutral-500" : "text-neutral-500"}`}>
-            {isAutoplay ? "Hover anywhere to interact" : "Idle for 8s resumes preview"}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (isAutoplay) {
-                enterInteractiveMode();
-              } else {
-                resetToInitial();
-                setIsAutoplay(true);
-              }
-            }}
-            className={`h-6 px-2 text-[11px] ${
-              isLight
-                ? "text-neutral-700 hover:text-neutral-900 hover:bg-neutral-200/60"
-                : "text-neutral-300 hover:text-white"
-            }`}
-          >
-            {isAutoplay ? "Take control" : "Restart preview"} <ArrowRight size={10} className="ml-1" />
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

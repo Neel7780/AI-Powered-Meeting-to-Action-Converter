@@ -1,0 +1,171 @@
+.product-landing {
+  --landing-accent: #afbcff;
+  font-family: "DM Sans Variable", system-ui, sans-serif;
+}
+
+.product-landing :is(h1, h2, h3) {
+  font-family: "Manrope Variable", system-ui, sans-serif;
+}
+
+.product-landing h2 {
+  font-weight: 580;
+  letter-spacing: -.042em;
+  text-wrap: balance;
+}
+
+.landing-heading > p:last-child { max-width: 58ch; }
+.landing-heading > p:first-child { color: #b7c0d2; }
+.product-landing .landing-title {
+  max-width: 22ch;
+  margin-inline: auto;
+  font-size: clamp(2.35rem, 5.7vw, 4.65rem);
+  font-weight: 620;
+  letter-spacing: -.055em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+.landing-intro > p { text-wrap: pretty; }
+.landing-cover-static { border-radius: 3px; background: #171717; padding-inline: .1em; }
+.product-landing .landing-title > .group\/cover { max-width: 100%; }
+
+.product-landing .hero-atmosphere {
+  background-image:
+    radial-gradient(ellipse 55% 24rem at 50% 0%, #7386e91b, transparent 90%),
+    linear-gradient(to right, #a8b1d00a 1px, transparent 1px),
+    linear-gradient(to bottom, #a8b1d00a 1px, transparent 1px);
+  background-size: auto, 64px 64px, 64px 64px;
+  mask-image: linear-gradient(black, transparent 55rem);
+}
+
+.product-landing .hero-horizon {
+  background: linear-gradient(90deg, transparent, #879bff60 50%, transparent);
+}
+
+.landing-nav-link { position: relative; }
+.landing-nav-link::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -6px;
+  height: 1px;
+  background: var(--landing-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.landing-nav-link:is(:hover, :focus-visible)::after { transform: scaleX(1); }
+
+.product-landing :is(a, button, summary):focus-visible {
+  outline: 2px solid #879bff;
+  outline-offset: 3px;
+}
+.landing-stack summary { cursor: pointer; list-style: none; }
+.landing-stack summary::-webkit-details-marker { display: none; }
+.landing-stack[open] summary svg { transform: rotate(180deg); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .landing-intro > * { animation: landing-rise .55s cubic-bezier(.2,.7,.2,1) both; }
+  .landing-intro h1 { animation-delay: 50ms; }
+  .landing-intro p { animation-delay: 90ms; }
+  .landing-intro .landing-actions { animation-delay: 130ms; }
+  .landing-nav-link::after, .landing-stack summary svg, .landing-actions a svg {
+    transition: transform .18s ease-out;
+  }
+  .landing-actions a { transition: background-color .18s, border-color .18s, transform .18s; }
+  .landing-actions a:active { transform: scale(.98); }
+  .landing-actions a:is(:hover, :focus-visible) .lucide-arrow-right { transform: translateX(3px); }
+  .landing-actions a:is(:hover, :focus-visible) .lucide-arrow-down { transform: translateY(3px); }
+  .landing-actions a:is(:hover, :focus-visible) .lucide-arrow-up-right { transform: translate(2px,-2px); }
+
+  @keyframes landing-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(.product-landing) { scroll-behavior: auto; }
+  .product-landing :is(.animate-pulse, .animate-ping) { animation: none; }
+}
+
+.product-landing .rst { max-width: 100%; }
+@media (max-width: 420px) {
+  .landing-actions a { padding-inline: 1.1rem; }
+}
+
+html:has([data-landing-theme="light"]) { color-scheme: light; background: #fafbfe; }
+.product-landing[data-landing-theme="light"] {
+  color-scheme: light;
+  --landing-accent: #505abb;
+  --paper: #fafbfe;
+  --card: #fff;
+  --inset: #f0f2f8;
+  --line: #d5dae5;
+  --ink: #202635;
+  --copy: #444e61;
+  --muted: #596476;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* The sample meeting has an independent theme switch. The two testimonial
+   illustrations already carry their own light palettes. */
+@scope ([data-landing-theme="light"]) to (#demo, .landing-testimonials) {
+  :scope .bg-black { background-color: var(--paper); }
+  :scope [class~="bg-black/95"] { background-color: rgb(250 251 254 / 94%); }
+  :scope :is([class~="bg-[#040407]"], [class~="bg-black/40"]) { background-color: var(--inset); }
+  :scope :is([class~="bg-[#060608]"], [class~="bg-[#08080c]"], [class~="bg-[#090a0f]"],
+    [class~="bg-[#040406]"], [class~="bg-[#121316]"], [class~="bg-[#121316]/60"],
+    [class~="bg-[#121319]"], [class~="bg-[#16171e]"]) { background-color: var(--card); }
+  :scope :is([class~="bg-[#16171b]"], [class~="bg-white/5"], [class~="bg-white/10"],
+    [class~="bg-white/15"], [class~="bg-white/20"]) { background-color: #e8ecf4; }
+  :scope :is(.text-white, .text-neutral-200) { color: var(--ink); }
+  :scope :is(.text-neutral-300, .text-neutral-400, .landing-heading > p:first-child) { color: var(--copy); }
+  :scope :is(.text-neutral-500, .text-neutral-600) { color: var(--muted); }
+
+  :scope :is(.text-emerald-200,.text-emerald-300,.text-emerald-400) { color: #086248; }
+  :scope :is(.text-amber-200,.text-amber-300,.text-amber-400) { color: #86500c; }
+  :scope :is(.text-blue-200,.text-blue-400,.text-indigo-400) { color: #374ea5; }
+  :scope :is(.text-cyan-300,.text-cyan-400) { color: #106179; }
+  :scope :is(.text-purple-300,.text-purple-400) { color: #7537a3; }
+  :scope :is(.text-rose-300,.text-rose-400) { color: #a9395b; }
+
+  :scope :is([class*="border-white/"], [class~="border-neutral-700"]) { border-color: var(--line); }
+  :scope :is([class~="hover:bg-white/5"],[class~="hover:bg-white/10"],[class~="hover:bg-white/20"],
+    [class~="hover:bg-[#0c0d14]"]):hover { background-color: #e4e9f2; }
+  :scope [class~="hover:border-white/20"]:hover { border-color: #9eaac0; }
+  :scope :is([class~="hover:text-white"],[class~="hover:text-neutral-200"]):hover { color: var(--ink); }
+  :scope .bg-white.text-black { background-color: var(--ink); color: white; }
+  :scope :is(button,a).bg-white.text-black:hover { background-color: #38445a; }
+  :scope :is(.from-blue-700,.from-purple-700).text-white { color: white; }
+
+  :scope .from-black { --tw-gradient-from: var(--paper) var(--tw-gradient-from-position); }
+  :scope [class~="from-black/60"] { --tw-gradient-from: #fafbfe99 var(--tw-gradient-from-position); }
+  :scope :is([class~="via-black/80"],[class~="via-black/85"],[class~="via-black/90"]) {
+    --tw-gradient-stops: var(--tw-gradient-from), #fafbfed9 var(--tw-gradient-via-position), var(--tw-gradient-to);
+  }
+  :scope [class~="from-[#0a0a0f]"] { background-image: linear-gradient(#fff, #f5f6fb); }
+  :scope [class~="from-[#090a0f]"] { background-image: linear-gradient(to top, white, transparent); }
+  :scope :is(.shadow-lg, .shadow-xl, .shadow-2xl, [class*="shadow-[0_25px_80px"]) {
+    box-shadow: 0 12px 32px -15px rgb(33 48 82 / 23%);
+  }
+
+  :scope [class~="bg-[#10120d]"] { background-color: #f4f7e9; border-color: #9ca85a; }
+  :scope [class~="text-[#e4f222]"] { color: #566121; border-color: #b8c18b; }
+  :scope .landing-cover-static, :scope .landing-title > .group\/cover { background-color: #e2e6f3; color: var(--ink); }
+  :scope .landing-title .group\/cover > span { color: var(--ink); }
+  :scope .landing-title .group\/cover:hover { background-color: #212638; }
+  :scope .landing-title .group\/cover:hover > span { color: white; }
+  :scope .landing-title .group\/cover > .animate-pulse { background: #485573; }
+  :scope .hero-atmosphere {
+    background-image: radial-gradient(ellipse 55% 24rem at 50% 0%, #a5b3fa3b, transparent 90%),
+      linear-gradient(to right, #5662940d 1px, transparent 1px), linear-gradient(to bottom, #5662940d 1px, transparent 1px);
+  }
+  :scope .rst {
+    --ink: #202635; --ink-rgb: 32, 38, 53; --ink-5: #596476;
+    --board: #fff; --fill-slab: #fff; --on-ink: #fff; --fill-on: #4f46c1;
+  }
+  :scope .rst-at { color: var(--muted); }
+}
+.product-landing[data-landing-theme="light"] .linear-3d-card {
+  box-shadow: 0 20px 55px -24px rgb(44 53 86 / 35%);
+}

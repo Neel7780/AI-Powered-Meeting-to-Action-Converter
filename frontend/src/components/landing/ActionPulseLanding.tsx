@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDown, ArrowRight, ArrowUpRight, Bell, Check, CheckCircle2, CircleHelp, ClipboardCheck, Mail, Menu, MessageSquare, Quote, Shield, ShieldCheck, Sparkles, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUpRight, Bell, ChevronDown, CheckCircle2, CircleHelp, ClipboardCheck, Mail, Menu, MessageSquare, Moon, Quote, Shield, Sun, X } from "lucide-react";
 import logoImg from "@/assets/logo.png";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import SelectionList from "@/components/ui/SelectionList";
+import { MotionConfig } from "framer-motion";
 import { Cover } from "@/components/ui/cover";
+import "./landing.css";
 import InteractiveProductWalkthrough from "@/components/landing/InteractiveProductWalkthrough";
 import LinearWorkflowShowcase from "@/components/landing/LinearWorkflowShowcase";
 import InteractiveBentoFeatures from "@/components/landing/InteractiveBentoFeatures";
@@ -13,6 +15,17 @@ import InteractiveRoleMatrix from "@/components/landing/InteractiveRoleMatrix";
 import LinearTrustShowcase from "@/components/landing/LinearTrustShowcase";
 
 const repo = "https://github.com/Neel7780/AI-Powered-Meeting-to-Action-Converter";
+const themeKey = "actionpulse.landing-theme";
+function readTheme() {
+  try { return localStorage.getItem(themeKey); } catch { return null; }
+}
+
+const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+function subscribeToMotionPreference(update: () => void) {
+  motionPreference.addEventListener("change", update);
+  return () => motionPreference.removeEventListener("change", update);
+}
+
 const nav = [
   { label: "Features", href: "#features" },
   { label: "How it works", href: "#how-it-works" },
@@ -34,8 +47,8 @@ function Brand() {
 
 function SectionHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description?: string }) {
   return (
-    <div className="max-w-3xl">
-      <p className="mb-3 font-mono text-[11px] font-medium uppercase tracking-wider text-neutral-400">{eyebrow}</p>
+    <div className="landing-heading max-w-3xl">
+      <p className="mb-3 text-xs font-semibold text-neutral-400">{eyebrow}</p>
       <h2 className="text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight text-white leading-[1.08]">{title}</h2>
       {description && <p className="mt-4 text-base sm:text-lg text-neutral-400 leading-relaxed font-normal">{description}</p>}
     </div>
@@ -46,39 +59,58 @@ function SectionHeading({ eyebrow, title, description }: { eyebrow: string; titl
 export default function ActionPulseLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user } = useAuth();
+  const [theme, setTheme] = useState(readTheme);
+  const light = theme === "light";
+  const [demoLight, setDemoLight] = useState(theme !== "dark");
+  const reduceMotion = useSyncExternalStore(subscribeToMotionPreference, () => motionPreference.matches);
+
+  function toggleTheme() {
+    const next = light ? "dark" : "light";
+    setTheme(next);
+    setDemoLight(next === "light");
+    try { localStorage.setItem(themeKey, next); } catch { /* Keep the in-memory preference. */ }
+  }
 
   return (
-    <div id="top" className="min-h-screen bg-black text-white selection:bg-white selection:text-black">
+    <MotionConfig reducedMotion="user">
+    <div id="top" data-landing-theme={light ? "light" : "dark"} className="product-landing min-h-screen bg-black text-white selection:bg-white selection:text-black">
       {/* Navbar */}
       <header className="sticky top-0 z-50 border-b border-white/10 bg-black/95 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <Brand/>
           <nav aria-label="Main navigation" className="hidden items-center gap-7 md:flex">
             {nav.map(item => (
-              <a key={item.href} href={item.href} className="text-[13px] text-neutral-400 transition-colors hover:text-white">
+              <a key={item.href} href={item.href} className="landing-nav-link text-sm text-neutral-300 transition-colors hover:text-white">
                 {item.label}
               </a>
             ))}
           </nav>
-          <div className="hidden items-center gap-3 md:flex">
-            {user ? (
-              <Button size="sm" asChild>
-                <Link to="/dashboard">Dashboard <ArrowRight/></Link>
-              </Button>
-            ) : (
-              <>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link to="/login">Sign in</Link>
-                </Button>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" size="icon" onClick={toggleTheme}
+              aria-label={`Switch landing page to ${light ? "dark" : "light"} mode`}
+              title={`Switch to ${light ? "dark" : "light"} mode`}>
+              {light ? <Moon aria-hidden="true"/> : <Sun aria-hidden="true"/>}
+            </Button>
+            <div className="hidden items-center gap-3 md:flex">
+              {user ? (
                 <Button size="sm" asChild>
-                  <Link to="/signup">Get started <ArrowRight/></Link>
+                  <Link to="/dashboard">Dashboard <ArrowRight/></Link>
                 </Button>
-              </>
-            )}
+              ) : (
+                <>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/login">Sign in</Link>
+                  </Button>
+                  <Button size="sm" asChild>
+                    <Link to="/signup">Get started <ArrowRight/></Link>
+                  </Button>
+                </>
+              )}
+            </div>
+            <Button variant="ghost" size="icon" className="md:hidden text-white" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
+              {menuOpen ? <X/> : <Menu/>}
+            </Button>
           </div>
-          <Button variant="ghost" size="icon" className="md:hidden text-white" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>
-            {menuOpen ? <X/> : <Menu/>}
-          </Button>
         </div>
         {menuOpen && (
           <nav aria-label="Mobile navigation" className="border-t border-white/10 bg-black px-4 py-3 md:hidden">
@@ -109,29 +141,20 @@ export default function ActionPulseLanding() {
 
       <main className="bg-black">
         {/* Hero Section */}
-        <section className="relative isolate overflow-hidden border-b border-white/10 bg-black px-4 pb-24 pt-16 sm:px-6 sm:pt-24 lg:pb-32 lg:px-8">
+        <section className="landing-hero relative isolate overflow-hidden border-b border-white/10 bg-black px-4 pb-20 pt-14 sm:px-6 sm:pt-20 lg:pb-24 lg:px-8">
           {/* Linear Minimal Atmosphere Grid */}
           <div aria-hidden="true" className="hero-atmosphere pointer-events-none absolute inset-0 -z-10"/>
 
-          <div className="mx-auto max-w-3xl text-center">
-            <span className="inline-flex items-center gap-2 rounded border border-white/15 bg-white/5 px-3 py-1.5 font-mono text-[10px] font-medium uppercase text-neutral-300">
-              <Sparkles size={12}/> AI-powered meeting intelligence
-            </span>
-            <h1 className="mt-7 text-[42px] font-medium leading-[1.08] tracking-tight text-white sm:text-6xl lg:text-7xl">
-              Turn meeting conversations into <Cover>accountable actions.</Cover>
+          <div className="landing-intro mx-auto max-w-5xl text-center">
+            <h1 className="landing-title text-white">
+              Turn meeting conversations into {reduceMotion
+                ? <span className="landing-cover-static">accountable actions.</span>
+                : <Cover>accountable actions.</Cover>}
             </h1>
-            <p className="mx-auto mt-6 max-w-[620px] text-[15px] leading-7 text-neutral-400 sm:text-base">
-              Extract tasks, owners, and deadlines from meeting transcripts, review every AI suggestion, and move approved actions into your team’s workspace.
+            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-neutral-300 sm:text-lg">
+              Extract tasks, owners, and deadlines from meeting transcripts. Review the suggestions and send approved work to your team.
             </p>
-            <div className="mt-7 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-neutral-400">
-              {["Grounded in source quotes", "Human approval", "Workspace-based"].map(value => (
-                <span key={value} className="inline-flex items-center gap-1.5">
-                  <Check size={13} className="text-emerald-400"/>
-                  {value}
-                </span>
-              ))}
-            </div>
-            <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <div className="landing-actions mt-7 flex flex-wrap justify-center gap-3">
               <Button size="lg" asChild>
                 <a href="#demo">Try the demo <ArrowDown/></a>
               </Button>
@@ -142,30 +165,12 @@ export default function ActionPulseLanding() {
           </div>
 
           {/* Linear-Style 3D Stage & Centerpiece Demo */}
-          <div className="relative mx-auto mt-20 max-w-7xl linear-stage-container">
+          <div className="relative mx-auto mt-12 max-w-7xl linear-stage-container sm:mt-16">
             {/* Minimal Pedestal Spotlight Floor Glow directly inspired by Linear */}
             <div aria-hidden="true" className="linear-pedestal-glow" />
             <div aria-hidden="true" className="hero-horizon absolute -top-8 left-1/2 h-px w-[min(90%,950px)] -translate-x-1/2"/>
 
-            <div className="relative z-10 mb-4 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <p className="font-mono text-[10px] uppercase text-neutral-400 font-medium tracking-wider">From conversation to commitment</p>
-                <p className="mt-1 text-xs text-neutral-500">Live interactive product demonstration</p>
-              </div>
-              <p className="font-mono text-[10px] text-neutral-500">SAMPLE MEETING / NOT SAVED</p>
-            </div>
-
-            <InteractiveProductWalkthrough/>
-
-            <div className="relative z-10 mt-6 flex flex-wrap items-center justify-center gap-x-7 gap-y-2 font-mono text-[10px] uppercase text-neutral-500">
-              <span>01 Transcript</span>
-              <ArrowRight size={12}/>
-              <span>02 Evidence</span>
-              <ArrowRight size={12}/>
-              <span>03 Human decision</span>
-              <ArrowRight size={12}/>
-              <span>04 Shared work</span>
-            </div>
+            <InteractiveProductWalkthrough isLight={demoLight} onToggleTheme={() => setDemoLight(!demoLight)}/>
 
             <div className="relative z-10 mt-10 grid border-y border-white/10 sm:grid-cols-3">
               <div className="flex items-center gap-3 border-b border-white/10 py-4 sm:border-b-0 sm:border-r sm:px-5">
@@ -191,29 +196,18 @@ export default function ActionPulseLanding() {
               </div>
             </div>
 
-            {/* Linear-style Ecosystem & Architecture Strip directly from screenshot */}
-            <div className="relative z-10 mt-16 pt-8 border-t border-white/10 text-center">
-              <p className="font-mono text-[10px] tracking-widest uppercase text-neutral-500 mb-6">
-                Engineered for High-Reliability Production Workspaces
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-8 sm:gap-14 text-neutral-400 font-semibold tracking-tight text-sm">
-                <span className="flex items-center gap-2 hover:text-white transition-colors">
-                  <span className="text-white text-base">⚛</span> React 18 + Vite
-                </span>
-                <span className="flex items-center gap-2 hover:text-white transition-colors">
-                  <span className="text-white font-mono text-xs">⚡</span> FastAPI
-                </span>
-                <span className="flex items-center gap-2 hover:text-white transition-colors">
-                  <span className="text-white font-mono text-xs">❖</span> Supabase Postgres
-                </span>
-                <span className="flex items-center gap-2 hover:text-white transition-colors">
-                  <Sparkles size={14} className="text-white"/> Gemini 3.1 Flash-Lite
-                </span>
-                <span className="flex items-center gap-2 hover:text-white transition-colors">
-                  <ShieldCheck size={15} className="text-white"/> Row-Level Security
-                </span>
+            <details className="landing-stack relative z-10 mx-auto mt-6 text-center">
+              <summary className="inline-flex items-center gap-1.5 rounded text-sm text-neutral-400">
+                Technology behind ActionPulse <ChevronDown size={14} aria-hidden="true"/>
+              </summary>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-neutral-400 font-semibold tracking-tight text-sm">
+                <span>React + Vite</span>
+                <span>FastAPI</span>
+                <span>Supabase Postgres</span>
+                <span>Amazon Nova Lite on Amazon Bedrock</span>
+                <span>Row-Level Security</span>
               </div>
-            </div>
+            </details>
           </div>
         </section>
 
@@ -232,7 +226,7 @@ export default function ActionPulseLanding() {
 
         {/* Direct Notifications & Assignee Dispatch */}
         <section id="notifications" className="scroll-mt-20 border-b border-white/10 bg-[#040407] py-20 sm:py-24">
-          <div className="mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-16 lg:px-8">
+          <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 px-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-16 lg:px-8">
             <div>
               <SectionHeading
                 eyebrow="Instant notification dispatch"
@@ -280,10 +274,10 @@ export default function ActionPulseLanding() {
             </div>
 
             {/* Interactive Selection List Card */}
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-white/15 bg-gradient-to-b from-[#0a0a0f] to-[#040406] p-8 sm:p-10 shadow-2xl relative">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-white/15 bg-gradient-to-b from-[#0a0a0f] to-[#040406] p-4 sm:p-10 shadow-2xl relative">
               <div className="mb-6 flex items-center justify-between w-full max-w-[268px]">
                 <span className="font-mono text-[10px] uppercase tracking-wider text-neutral-400">
-                  Try it: Assignee Notification Roster
+                  Assignee notification roster
                 </span>
                 <span className="flex size-2 rounded-full bg-emerald-400 animate-pulse" title="Live component" />
               </div>
@@ -292,7 +286,7 @@ export default function ActionPulseLanding() {
               <SelectionList rows={4} />
 
               <p className="mt-5 text-center text-[11px] text-neutral-500 max-w-[268px]">
-                Select teammates above to see liquid-gooey metaball feedback, then click <span className="text-neutral-300 font-medium">Send request</span>.
+                Choose the teammates to notify, then select <span className="text-neutral-300 font-medium">Send request</span>.
               </p>
             </div>
           </div>
@@ -312,7 +306,6 @@ export default function ActionPulseLanding() {
             <div className="rounded-lg border border-white/15 bg-[#060608] p-5 sm:p-7 shadow-xl">
               <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
                 <span className="font-mono text-[10px] uppercase text-neutral-500">Extracted action</span>
-                <Sparkles size={16} className="text-white"/>
               </div>
               <h3 className="mt-5 text-xl font-medium tracking-tight text-white sm:text-2xl">Prepare revised onboarding flow</h3>
               <p className="mt-3 text-sm text-neutral-400">Suggested owner <span className="text-white font-medium">Aman Shah</span> <span className="mx-2 text-neutral-600">·</span> Due <span className="text-white font-medium">Friday</span></p>
@@ -357,7 +350,7 @@ export default function ActionPulseLanding() {
             <p className="mt-4 text-sm leading-7 text-neutral-400 sm:text-base">
               Stop losing valuable commitments in meeting notes. Extract, review, and deliver with ActionPulse.
             </p>
-            <div className="mt-7 flex flex-wrap justify-center gap-3">
+            <div className="landing-actions mt-7 flex flex-wrap justify-center gap-3">
               <Button size="lg" asChild>
                 <Link to={user ? "/dashboard" : "/signup"}>{user ? "Go to Dashboard" : "Get started"} <ArrowRight/></Link>
               </Button>
@@ -389,5 +382,6 @@ export default function ActionPulseLanding() {
         </div>
       </footer>
     </div>
+    </MotionConfig>
   );
 }

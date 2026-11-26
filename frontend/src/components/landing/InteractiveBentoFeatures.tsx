@@ -1,7 +1,7 @@
 import { useState, Suspense } from "react";
 import { motion } from "framer-motion";
 import {
-  Sparkles,
+  Cpu,
   AlertTriangle,
   Check,
   Mail,
@@ -353,19 +353,19 @@ export default function InteractiveBentoFeatures() {
                 </div>
               </motion.div>
 
-              {/* Sub-Card 2: Gemini 3.1 Flash-Lite AI Engine */}
+              {/* Sub-Card 2: Amazon Nova Lite extraction */}
               <motion.div
                 whileHover={{ y: -3 }}
                 className="rounded-2xl border border-white/10 bg-[#121319] p-4 text-center shadow-xl relative backdrop-blur-sm flex flex-col items-center justify-center min-h-[110px]"
               >
                 <div className="relative mb-2">
                   <div className="size-9 rounded-xl border border-emerald-500/30 bg-emerald-500/15 grid place-items-center text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-                    <Sparkles size={18} />
+                    <Cpu size={18} />
                   </div>
                   <span className="absolute -top-1 -right-1 size-2 rounded-full bg-emerald-400 animate-ping" />
                 </div>
-                <span className="text-xs font-medium text-white">Gemini 3.1</span>
-                <span className="text-[10px] font-mono text-emerald-400">Flash-Lite AI</span>
+                <span className="text-xs font-medium text-white">Amazon Nova Lite</span>
+                <span className="text-[10px] font-mono text-emerald-400">Amazon Bedrock</span>
               </motion.div>
 
               {/* Sub-Card 3: 1-Tap Multi-Channel Dispatch */}
@@ -382,10 +382,7 @@ export default function InteractiveBentoFeatures() {
                   </div>
                 </div>
                 <span className="text-xs font-medium text-white">wa.me & SMTP</span>
-                <span className="text-[10px] text-emerald-300 font-mono flex items-center gap-1 justify-center">
-                  <span>dispatched in 1-tap</span>
-                  <span className="text-amber-300">✨</span>
-                </span>
+                <span className="text-[10px] text-emerald-300 font-mono">dispatched in 1-tap</span>
               </motion.div>
             </div>
           </div>

@@ -5,17 +5,15 @@ import {
   MoreHorizontal,
   Plus,
   Send,
-  Smile,
   AtSign,
   Mic,
   Video,
   FileCode2,
-  Sparkles,
   ArrowRight,
   BarChart2,
   GitBranch,
   CheckCircle2,
-  Zap,
+  AudioLines,
   Check,
   RotateCcw,
 } from "lucide-react";
@@ -122,7 +120,7 @@ const allIssues: IssueCardData[] = [
   {
     id: "act-924",
     code: "ACT-924",
-    title: "Benchmark Gemini 3.1 Flash-Lite extraction",
+    title: "Benchmark Amazon Nova Lite extraction",
     priority: "high",
     tag: "AI Engine",
     tagColor: "bg-purple-400",
@@ -513,7 +511,7 @@ export default function LinearWorkflowShowcase() {
                   <span className="font-mono text-[10px] text-neutral-500">4:31 PM</span>
                 </div>
                 <p className="mt-1 leading-relaxed text-neutral-300 font-normal">
-                  I will patch the Safari auth cookie refresh bug before Wednesday’s demo. Priya, let's wrap the transcript parser in XML delimiter guards so prompt injections can't hijack our Gemini model.
+                  I will patch the Safari auth cookie refresh bug before Wednesday’s demo. Priya, let's wrap the transcript parser in XML delimiter guards to keep transcript text separate from instructions.
                 </p>
               </div>
             </div>
@@ -539,7 +537,7 @@ export default function LinearWorkflowShowcase() {
             {/* Message 3: ActionPulse Bot Reply */}
             <div className="flex items-start gap-3">
               <div className="size-7 shrink-0 rounded-lg border border-white/20 bg-white text-black font-bold text-[10px] grid place-items-center shadow-md">
-                <Zap size={13} fill="currentColor" />
+                <AudioLines size={13} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
@@ -635,9 +633,6 @@ export default function LinearWorkflowShowcase() {
                 <button type="button" className="hover:text-white transition font-mono text-[11px]" aria-label="Format text">
                   Aa
                 </button>
-                <button type="button" className="hover:text-white transition" aria-label="Insert emoji">
-                  <Smile size={13} />
-                </button>
                 <button type="button" className="hover:text-white transition" aria-label="Mention teammate">
                   <AtSign size={13} />
                 </button>
@@ -668,7 +663,6 @@ export default function LinearWorkflowShowcase() {
                     onClick={handleSimulateNewIssue}
                     className="rounded bg-white/10 px-2 py-0.5 text-[10px] text-neutral-300 hover:bg-white/20 hover:text-white font-mono flex items-center gap-1"
                   >
-                    <Sparkles size={10} className="text-emerald-400" />
                     <span>Simulate</span>
                   </button>
                 )}
@@ -778,7 +772,7 @@ export default function LinearWorkflowShowcase() {
           >
             <span className="size-1.5 rounded-full bg-emerald-400" />
             <span>
-              {activeTab === "agent" && "Gemini 3.1 Flash-Lite grounds extraction with verbatim quotes and zero hallucinated owners."}
+              {activeTab === "agent" && "Amazon Nova Lite links suggestions to transcript quotes and flags unclear owners."}
               {activeTab === "triage" && "Organiser human review gate verifies owner assignments and uncertainty flags before syncing."}
               {activeTab === "intake" && "Universal intake parses Google Meet, Zoom, Teams, VTT, SRT, DOCX, and raw transcript audio."}
               {activeTab === "dispatch" && "1-tap WhatsApp wa.me action links and automated SMTP email digests notify assignees instantly."}

@@ -61,7 +61,7 @@ USING (
     id: "organiser",
     title: "Meeting Organiser",
     badge: "WORKFLOW GATEWAY",
-    summary: "Creates meetings, uploads raw transcripts, runs Gemini AI extractions, and serves as the human-in-the-loop review gate.",
+    summary: "Creates meetings, uploads raw transcripts, reviews suggestions from Amazon Nova Lite, and serves as the human-in-the-loop review gate.",
     icon: ClipboardCheck,
     accentColor: "border-emerald-500/30 text-emerald-400 bg-emerald-500/10",
     capabilities: [
