@@ -87,7 +87,6 @@ class MeetingResponse(BaseModel):
     timezone: str
     organiser_id: UUID
     ai_processing: bool
-    status: str = "draft"
     visibility: str = "workspace"
     lifecycle: str = "active"
     calendar_event_id: str | None = None

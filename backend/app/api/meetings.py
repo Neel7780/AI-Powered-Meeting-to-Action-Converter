@@ -211,8 +211,10 @@ def _create_meeting(
 def _check_private_meeting_access(db, meeting: dict, user: CurrentUser) -> None:
     """Match the meeting SELECT policy for service-role reads."""
     uid = str(user.id)
-    if meeting.get("visibility") != "private" or meeting["organiser_id"] == uid:
+    if meeting.get("visibility") != "private" or meeting.get("organiser_id") == uid:
         return
+    if db is None:
+        db = get_supabase_client()
     mid = str(meeting["id"])
     participants = db.table("meeting_participants").select("id").eq("meeting_id", mid) \
         .eq("user_id", uid).limit(1).execute()

@@ -45,8 +45,7 @@ def draft_followup(
     'executive' (brief), 'action_focused' (task grid), or 'chat' (Slack/WhatsApp).
     """
     meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
-    db = get_supabase_client()
-    _check_private_meeting_access(db, meeting, user)
+    _check_private_meeting_access(None, meeting, user)
 
     if not meeting.get("ai_processing", True):
         raise HTTPException(
@@ -148,8 +147,7 @@ def send_followup(
     Uses zero-budget Brevo HTTPS API or standard smtplib.
     """
     meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
-    db = get_supabase_client()
-    _check_private_meeting_access(db, meeting, user)
+    _check_private_meeting_access(None, meeting, user)
 
     if not meeting.get("ai_processing", True):
         raise HTTPException(

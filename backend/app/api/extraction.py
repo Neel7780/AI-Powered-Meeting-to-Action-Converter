@@ -36,8 +36,7 @@ def start_extraction(
     """
     meeting = require_meeting_role(meeting_id, ORGANISER_ROLES, user)
     mid = str(meeting_id)
-    db = get_supabase_client()
-    _check_private_meeting_access(db, meeting, user)
+    _check_private_meeting_access(None, meeting, user)
 
     # No-AI meetings never reach any provider. No fallback.
     if not meeting.get("ai_processing"):
