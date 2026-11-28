@@ -74,3 +74,117 @@ class CreateSessionRequest(BaseModel):
 class UpdateSessionRequest(BaseModel):
     title: str | None = None
     selected_meeting_id: UUID | None = None
+
+
+# ==============================================================================
+# Phase 1: Workspace Chat Channel & Membership Management Schemas
+# ==============================================================================
+
+class UpdateChannelRequest(BaseModel):
+    name: str | None = Field(default=None, max_length=80, description="New channel name (slugified)")
+    topic: str | None = Field(default=None, max_length=250, description="Channel topic")
+    description: str | None = Field(default=None, max_length=1000, description="Channel description")
+    is_private: bool | None = Field(default=None, description="Change channel privacy (public <-> private)")
+
+
+class ChannelResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    type: str
+    name: str
+    topic: str | None = None
+    description: str | None = None
+    is_private: bool
+    created_by: UUID | None = None
+    created_at: str
+    updated_at: str
+
+
+class ChannelDiscoveryItem(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    name: str
+    topic: str | None = None
+    description: str | None = None
+    is_private: bool
+    created_at: str
+    created_by: UUID | None = None
+    member_count: int = 0
+    is_member: bool = False
+
+
+class AddChannelMemberRequest(BaseModel):
+    user_id: UUID = Field(..., description="Target workspace user ID to add to channel")
+
+
+class ChannelMemberProfile(BaseModel):
+    id: UUID
+    display_name: str
+    email: str
+    avatar_url: str | None = None
+
+
+class ChannelMemberItem(BaseModel):
+    conversation_id: UUID
+    user_id: UUID
+    joined_at: str
+    last_read_at: str
+    is_creator: bool = False
+    profile: ChannelMemberProfile
+
+
+# ==============================================================================
+# Phases 2–4: Workspace Search, Group Conversations, and Pinning Schemas
+# ==============================================================================
+
+class ChatMessageSearchResult(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    conversation_name: str
+    conversation_type: str = "channel"
+    is_private: bool = False
+    sender_id: UUID
+    sender_name: str
+    sender_avatar: str | None = None
+    content: str
+    created_at: str
+
+
+class CreateGroupConversationRequest(BaseModel):
+    participant_ids: list[UUID] = Field(..., min_length=2, max_length=50, description="List of workspace user IDs (at least 2 others)")
+    name: str | None = Field(default=None, max_length=100, description="Optional custom display name for group chat")
+
+
+class GroupConversationResponse(BaseModel):
+    id: UUID
+    workspace_id: UUID
+    type: str = "dm"
+    name: str | None = None
+    is_private: bool = True
+    participant_ids: list[UUID]
+    created_by: UUID | None = None
+    created_at: str
+
+
+class PinMessageResponse(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    message_id: UUID
+    pinned_by: UUID
+    created_at: str
+
+
+class PinnedMessageItem(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    message_id: UUID
+    pinned_by: UUID
+    pinned_by_name: str | None = None
+    pinned_at: str
+    message_content: str
+    message_sender_id: UUID
+    message_sender_name: str
+    message_created_at: str
+    is_sticker: bool = False
+
+

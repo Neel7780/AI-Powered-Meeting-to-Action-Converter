@@ -18,6 +18,10 @@ import type {
   UserProfile,
   MessageAttachment,
   MessageReaction,
+  ChannelDiscoveryItem,
+  ChatMessageSearchResult,
+  PinnedMessageItem,
+  ChatNotificationItem,
 } from '../types/workspaceChat';
 import * as chatService from '../services/chatService';
 import { getStickerLabel } from '../components/chat/stickers';
@@ -62,6 +66,7 @@ interface ChatContextType {
       }>;
     }
   ) => Promise<void>;
+  retrySendMessage: (tempId: string) => Promise<void>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
   toggleReaction: (messageId: string, emoji: string) => Promise<void>;
@@ -71,9 +76,32 @@ interface ChatContextType {
     description?: string;
     isPrivate: boolean;
   }) => Promise<Conversation>;
+  createGroupConversation: (params: {
+    participantIds: string[];
+    name?: string;
+  }) => Promise<Conversation>;
   openDM: (targetUserId: string) => Promise<string>;
   joinChannel: (conversationId: string) => Promise<void>;
+  joinPublicChannel: (channelId: string) => Promise<void>;
   leaveChannel: (conversationId: string) => Promise<void>;
+  updateChannelDetails: (
+    channelId: string,
+    params: { name?: string; topic?: string; description?: string; isPrivate?: boolean }
+  ) => Promise<Conversation>;
+  addChannelMember: (channelId: string, userId: string) => Promise<void>;
+  removeChannelMember: (channelId: string, userId: string) => Promise<void>;
+  discoverPublicChannels: (query?: string) => Promise<ChannelDiscoveryItem[]>;
+  searchMessages: (query: string, conversationId?: string) => Promise<ChatMessageSearchResult[]>;
+  pinnedMessages: PinnedMessageItem[];
+  loadingPins: boolean;
+  pinMessage: (messageId: string) => Promise<void>;
+  unpinMessage: (messageId: string) => Promise<void>;
+  refreshPins: () => Promise<void>;
+  mutedConversationIds: Set<string>;
+  toggleMuteConversation: (conversationId: string) => void;
+  isConversationMuted: (conversationId: string) => boolean;
+  toastNotifications: ChatNotificationItem[];
+  dismissToast: (id: string) => void;
   sendTypingIndicator: () => void;
   refreshConversations: () => Promise<void>;
 }
@@ -98,6 +126,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [pinnedMessages, setPinnedMessages] = useState<PinnedMessageItem[]>([]);
+  const [loadingPins, setLoadingPins] = useState(false);
+  const [mutedConversationIds, setMutedConversationIds] = useState<Set<string>>(new Set());
+  const [toastNotifications, setToastNotifications] = useState<ChatNotificationItem[]>([]);
 
   // Refs for tracking active subscriptions and latest state without tearing down channels
   const typingTimeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -105,12 +137,37 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const workspacePresenceChannelRef = useRef<RealtimeChannel | null>(null);
   const typingBroadcastChannelRef = useRef<RealtimeChannel | null>(null);
   const workspaceMembersRef = useRef<UserProfile[]>([]);
+  const conversationsRef = useRef<Conversation[]>([]);
   const messagesRef = useRef<WorkspaceMessage[]>([]);
   const activeConversationIdRef = useRef<string | null>(null);
+  const mutedRef = useRef<Set<string>>(new Set());
+  const failedMessagesRef = useRef<
+    Record<
+      string,
+      {
+        content: string;
+        options?: {
+          parentId?: string | null;
+          isSticker?: boolean;
+          attachments?: Array<{
+            fileName: string;
+            fileUrl: string;
+            fileType: string;
+            fileSize: number;
+            storagePath: string;
+          }>;
+        };
+      }
+    >
+  >({});
 
   useEffect(() => {
     workspaceMembersRef.current = workspaceMembers;
   }, [workspaceMembers]);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -119,6 +176,60 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
   }, [activeConversationId]);
+
+  useEffect(() => {
+    mutedRef.current = mutedConversationIds;
+  }, [mutedConversationIds]);
+
+  // Load muted conversation IDs on workspace / user change
+  useEffect(() => {
+    const wsId = currentWorkspace?.id;
+    const userId = user?.id;
+    if (!wsId || !userId) {
+      setMutedConversationIds(new Set());
+      return;
+    }
+    const key = `actionpulse_chat_muted_${wsId}_${userId}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        setMutedConversationIds(new Set(JSON.parse(raw)));
+      } else {
+        setMutedConversationIds(new Set());
+      }
+    } catch {
+      setMutedConversationIds(new Set());
+    }
+  }, [currentWorkspace?.id, user?.id]);
+
+  const toggleMuteConversation = useCallback((convId: string) => {
+    const wsId = currentWorkspace?.id;
+    const userId = user?.id;
+    setMutedConversationIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(convId)) {
+        next.delete(convId);
+      } else {
+        next.add(convId);
+      }
+      if (wsId && userId) {
+        try {
+          localStorage.setItem(`actionpulse_chat_muted_${wsId}_${userId}`, JSON.stringify(Array.from(next)));
+        } catch (err) {
+          console.error('Failed to save muted conversations:', err);
+        }
+      }
+      return next;
+    });
+  }, [currentWorkspace?.id, user?.id]);
+
+  const isConversationMuted = useCallback((convId: string) => {
+    return mutedConversationIds.has(convId);
+  }, [mutedConversationIds]);
+
+  const dismissToast = useCallback((id: string) => {
+    setToastNotifications((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const selectActiveConversation = useCallback((id: string | null) => {
     activeConversationIdRef.current = id;
@@ -296,10 +407,45 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             const isCurrentlyViewing =
               incoming.conversation_id === activeConversationIdRef.current && !document.hidden;
             if (!isCurrentlyViewing) {
+              const cid = incoming.conversation_id!;
               setUnreadCounts((prev) => ({
                 ...prev,
-                [incoming.conversation_id!]: (prev[incoming.conversation_id!] || 0) + 1,
+                [cid]: (prev[cid] || 0) + 1,
               }));
+
+              // In-app Toast alert for non-muted conversations
+              if (!mutedRef.current.has(cid)) {
+                const incomingWithContent = payload.new as {
+                  conversation_id?: string;
+                  sender_id?: string;
+                  content?: string;
+                  is_sticker?: boolean;
+                };
+                const sender = workspaceMembersRef.current.find((m) => m.id === incoming.sender_id);
+                const conv = conversationsRef.current.find((c) => c.id === cid);
+                const senderName = sender?.display_name || sender?.email?.split('@')[0] || 'A member';
+                const convName = conv?.type === 'dm' ? senderName : `#${conv?.name || 'channel'}`;
+                const myName = user?.user_metadata?.display_name || user?.email?.split('@')[0] || '';
+                const isMention = myName && incomingWithContent.content
+                  ? incomingWithContent.content.toLowerCase().includes(`@${myName.toLowerCase()}`)
+                  : false;
+
+                const toastId = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+                const newToast: ChatNotificationItem = {
+                  id: toastId,
+                  conversation_id: cid,
+                  conversation_name: convName,
+                  sender_name: senderName,
+                  content: incomingWithContent.content || (incomingWithContent.is_sticker ? 'Sent a sticker' : 'Sent an attachment'),
+                  is_mention: Boolean(isMention),
+                  created_at: new Date().toISOString(),
+                };
+
+                setToastNotifications((prev) => [...prev.slice(-3), newToast]);
+                setTimeout(() => {
+                  setToastNotifications((prev) => prev.filter((t) => t.id !== toastId));
+                }, 5000);
+              }
             }
           }
         )
@@ -341,6 +487,43 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     }
   }, []);
+
+  const refreshPins = useCallback(async () => {
+    const activeId = activeConversationIdRef.current;
+    if (!activeId) {
+      setPinnedMessages([]);
+      return;
+    }
+    setLoadingPins(true);
+    try {
+      const pins = await chatService.fetchPinnedMessages(activeId);
+      if (activeConversationIdRef.current === activeId) {
+        setPinnedMessages(pins);
+      }
+    } catch (err) {
+      console.debug('Failed to fetch pinned messages:', err);
+    } finally {
+      if (activeConversationIdRef.current === activeId) {
+        setLoadingPins(false);
+      }
+    }
+  }, []);
+
+  const pinMessage = useCallback(
+    async (messageId: string) => {
+      await chatService.pinMessage(messageId);
+      await refreshPins();
+    },
+    [refreshPins]
+  );
+
+  const unpinMessage = useCallback(
+    async (messageId: string) => {
+      await chatService.unpinMessage(messageId);
+      await refreshPins();
+    },
+    [refreshPins]
+  );
 
   const retryLoadMessages = useCallback(async () => {
     if (!activeConversationId) return;
@@ -395,6 +578,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     setHasMoreMessages(false);
     void fetchLatestMessages(activeConversationId);
+    void refreshPins();
 
     // Mark as read
     void chatService.markConversationRead(activeConversationId);
@@ -577,6 +761,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             );
           }
         )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'conversation_pins',
+            filter: `conversation_id=eq.${activeConversationId}`,
+          },
+          () => {
+            void refreshPins();
+          }
+        )
         .subscribe();
 
       activeConversationChannelRef.current = convChannel;
@@ -646,7 +842,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     });
   }, [user]);
 
-  // Send message action
+  // Send message action with optimistic updates and failure recovery
   const sendMessage = async (
     content: string,
     options?: {
@@ -662,44 +858,138 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   ) => {
     if (!currentWorkspace || !activeConversationId || !user) return;
+    const targetConvId = activeConversationId;
+    const tempId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const currentUserProfile: UserProfile = {
+      id: user.id,
+      display_name:
+        user.user_metadata?.display_name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'You',
+      email: user.email || '',
+      avatar_url: user.user_metadata?.avatar_url || null,
+    };
 
-    const sent = await chatService.sendMessage({
-      workspaceId: currentWorkspace.id,
-      conversationId: activeConversationId,
-      senderId: user.id,
-      content,
-      parentId: options?.parentId,
-      isSticker: options?.isSticker,
-      attachments: options?.attachments,
-    });
-
-    if (sent && activeConversationIdRef.current === activeConversationId) {
-      let hydratedParent: WorkspaceMessage['parent'] = null;
-      if (sent.parent_id) {
-        const localParent = messagesRef.current.find((m) => m.id === sent.parent_id);
-        if (localParent) {
-          hydratedParent = buildParentPreview(
-            {
-              id: localParent.id,
-              content: localParent.content,
-              deleted_at: localParent.deleted_at,
-              is_sticker: localParent.is_sticker,
-              sender_name: localParent.sender?.display_name || 'Member',
-            },
-            getStickerLabel
-          );
-        }
+    let hydratedParent: WorkspaceMessage['parent'] = null;
+    if (options?.parentId) {
+      const localParent = messagesRef.current.find((m) => m.id === options.parentId);
+      if (localParent) {
+        hydratedParent = buildParentPreview(
+          {
+            id: localParent.id,
+            content: localParent.content,
+            deleted_at: localParent.deleted_at,
+            is_sticker: localParent.is_sticker,
+            sender_name: localParent.sender?.display_name || 'Member',
+          },
+          getStickerLabel
+        );
       }
-      const messageWithParent: WorkspaceMessage = {
-        ...sent,
-        parent: hydratedParent,
-      };
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === messageWithParent.id)) return prev;
-        return [...prev, messageWithParent];
+    }
+
+    const optimisticMsg: WorkspaceMessage = {
+      id: tempId,
+      conversation_id: targetConvId,
+      workspace_id: currentWorkspace.id,
+      sender_id: user.id,
+      parent_id: options?.parentId || null,
+      content,
+      is_sticker: Boolean(options?.isSticker),
+      edited_at: null,
+      deleted_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      sender: currentUserProfile,
+      attachments: (options?.attachments || []).map((att, idx) => ({
+        id: `temp-att-${idx}`,
+        message_id: tempId,
+        conversation_id: targetConvId,
+        workspace_id: currentWorkspace.id,
+        file_name: att.fileName,
+        file_url: att.fileUrl,
+        file_type: att.fileType,
+        file_size: att.fileSize,
+        storage_path: att.storagePath,
+        created_at: new Date().toISOString(),
+      })),
+      reactions: [],
+      parent: hydratedParent,
+      isOptimistic: true,
+      hasFailed: false,
+    };
+
+    // Optimistically show message immediately
+    setMessages((prev) => [...prev, optimisticMsg]);
+
+    try {
+      const sent = await chatService.sendMessage({
+        workspaceId: currentWorkspace.id,
+        conversationId: targetConvId,
+        senderId: user.id,
+        content,
+        parentId: options?.parentId,
+        isSticker: options?.isSticker,
+        attachments: options?.attachments,
       });
+
+      if (sent && activeConversationIdRef.current === targetConvId) {
+        const messageWithParent: WorkspaceMessage = {
+          ...sent,
+          parent: hydratedParent,
+          isOptimistic: false,
+          hasFailed: false,
+        };
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== tempId);
+          if (filtered.some((m) => m.id === messageWithParent.id)) return filtered;
+          return [...filtered, messageWithParent];
+        });
+        delete failedMessagesRef.current[tempId];
+      }
+    } catch (err) {
+      console.error('Failed to send message:', err);
+      failedMessagesRef.current[tempId] = { content, options };
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, isOptimistic: false, hasFailed: true } : m))
+      );
     }
   };
+
+  const retrySendMessage = useCallback(
+    async (tempId: string) => {
+      const item = failedMessagesRef.current[tempId];
+      if (!item || !currentWorkspace || !user) return;
+      const targetConvId = activeConversationIdRef.current;
+      if (!targetConvId) return;
+
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...m, isOptimistic: true, hasFailed: false } : m))
+      );
+
+      try {
+        const sent = await chatService.sendMessage({
+          workspaceId: currentWorkspace.id,
+          conversationId: targetConvId,
+          senderId: user.id,
+          content: item.content,
+          parentId: item.options?.parentId,
+          isSticker: item.options?.isSticker,
+          attachments: item.options?.attachments,
+        });
+
+        if (sent && activeConversationIdRef.current === targetConvId) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === tempId ? { ...sent, isOptimistic: false, hasFailed: false } : m))
+          );
+          delete failedMessagesRef.current[tempId];
+        }
+      } catch (err) {
+        console.error('Retry send message failed:', err);
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...m, isOptimistic: false, hasFailed: true } : m))
+        );
+      }
+    },
+    [currentWorkspace, user]
+  );
 
   const editMessage = async (messageId: string, newContent: string) => {
     await chatService.editMessage(messageId, newContent);
@@ -754,6 +1044,29 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     return newChan;
   };
 
+  const createGroupConversation = useCallback(
+    async (params: { participantIds: string[]; name?: string }) => {
+      if (!currentWorkspace) throw new Error('No active workspace');
+      const conv = await chatService.createGroupConversation({
+        workspaceId: currentWorkspace.id,
+        participantIds: params.participantIds,
+        name: params.name,
+      });
+      await loadWorkspaceData();
+      selectActiveConversation(conv.id);
+      return conv;
+    },
+    [currentWorkspace, loadWorkspaceData, selectActiveConversation]
+  );
+
+  const searchMessages = useCallback(
+    async (query: string, conversationId?: string) => {
+      if (!currentWorkspace) return [];
+      return chatService.searchWorkspaceMessages(currentWorkspace.id, query, conversationId);
+    },
+    [currentWorkspace]
+  );
+
   const openDM = async (targetUserId: string): Promise<string> => {
     if (!currentWorkspace || !user) throw new Error('No active workspace');
     const dmId = await chatService.getOrCreateDM(currentWorkspace.id, targetUserId);
@@ -768,13 +1081,57 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     await loadWorkspaceData();
   };
 
+  const joinPublicChannel = async (channelId: string) => {
+    await chatService.joinPublicChannel(channelId);
+    await loadWorkspaceData();
+    selectActiveConversation(channelId);
+  };
+
   const leaveChannel = async (conversationId: string) => {
     if (!user) return;
     await chatService.leaveChannel(conversationId, user.id);
     await loadWorkspaceData();
-    // Default to general
-    const general = conversations.find((c) => c.name === 'general');
-    if (general) selectActiveConversation(general.id);
+    const general = conversations.find((c) => c.name === 'general' && c.id !== conversationId);
+    if (general) {
+      selectActiveConversation(general.id);
+    } else {
+      const remaining = conversations.find((c) => c.id !== conversationId);
+      selectActiveConversation(remaining ? remaining.id : null);
+    }
+  };
+
+  const updateChannelDetails = async (
+    channelId: string,
+    params: { name?: string; topic?: string; description?: string; isPrivate?: boolean }
+  ) => {
+    const updated = await chatService.updateChannelDetails(channelId, params);
+    setConversations((prev) =>
+      prev.map((c) => (c.id === channelId ? { ...c, ...updated } : c))
+    );
+    return updated;
+  };
+
+  const addChannelMember = async (channelId: string, userId: string) => {
+    await chatService.addChannelMember(channelId, userId);
+  };
+
+  const removeChannelMember = async (channelId: string, userId: string) => {
+    await chatService.removeChannelMember(channelId, userId);
+    if (user && userId === user.id) {
+      await loadWorkspaceData();
+      const general = conversations.find((c) => c.name === 'general' && c.id !== channelId);
+      if (general) {
+        selectActiveConversation(general.id);
+      } else {
+        const remaining = conversations.find((c) => c.id !== channelId);
+        selectActiveConversation(remaining ? remaining.id : null);
+      }
+    }
+  };
+
+  const discoverPublicChannels = async (query?: string): Promise<ChannelDiscoveryItem[]> => {
+    if (!currentWorkspace) return [];
+    return chatService.discoverPublicChannels(currentWorkspace.id, query);
   };
 
   return (
@@ -800,13 +1157,31 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         loadOlderMessages,
         retryLoadMessages,
         sendMessage,
+        retrySendMessage,
         editMessage,
         deleteMessage,
         toggleReaction,
         createChannel,
+        createGroupConversation,
         openDM,
         joinChannel,
+        joinPublicChannel,
         leaveChannel,
+        updateChannelDetails,
+        addChannelMember,
+        removeChannelMember,
+        discoverPublicChannels,
+        searchMessages,
+        pinnedMessages,
+        loadingPins,
+        pinMessage,
+        unpinMessage,
+        refreshPins,
+        mutedConversationIds,
+        toggleMuteConversation,
+        isConversationMuted,
+        toastNotifications,
+        dismissToast,
         sendTypingIndicator,
         refreshConversations: loadWorkspaceData,
       }}

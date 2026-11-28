@@ -22,6 +22,7 @@ import { useWorkspace } from '../../context/WorkspaceContext';
 import { uploadChatAttachment } from '../../services/chatService';
 import EmojiPickerPopover from './EmojiPickerPopover';
 import StickerPickerPopover from './StickerPickerPopover';
+import MentionPicker from './MentionPicker';
 
 interface UploadingFile {
   file: File;
@@ -52,7 +53,7 @@ export default function MessageComposer({
   onCancelReply,
 }: MessageComposerProps) {
   const { currentWorkspace } = useWorkspace();
-  const { activeConversation, sendMessage, sendTypingIndicator } = useChat();
+  const { activeConversation, sendMessage, sendTypingIndicator, workspaceMembers } = useChat();
 
   const [text, setText] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -61,11 +62,19 @@ export default function MessageComposer({
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<UploadingFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionStartIndex, setMentionStartIndex] = useState<number>(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const typingThrottleRef = useRef<number>(0);
   const previewUrlsRef = useRef<Set<string>>(new Set());
+
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  const ALLOWED_EXTENSIONS = [
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+    'pdf', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'mp3', 'wav', 'mp4'
+  ];
 
   // Revoke any remaining object URLs on unmount to avoid memory leaks
   useEffect(() => {
@@ -85,8 +94,20 @@ export default function MessageComposer({
   }, [text]);
 
   const handleTextChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
+    const val = e.target.value;
+    const cursor = e.target.selectionStart;
+    setText(val);
     setErrorMessage('');
+
+    // Check for @mention trigger right before cursor
+    const beforeCursor = val.slice(0, cursor);
+    const mentionMatch = beforeCursor.match(/@([a-zA-Z0-9_\-\s]{0,20})$/);
+    if (mentionMatch) {
+      setMentionQuery(mentionMatch[1]);
+      setMentionStartIndex(cursor - mentionMatch[0].length);
+    } else {
+      setMentionQuery(null);
+    }
 
     // Trigger typing indicator with 1.5s throttle
     const now = Date.now();
@@ -97,6 +118,17 @@ export default function MessageComposer({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // If mention picker is active, don't submit on enter
+    if (mentionQuery !== null) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Enter' || e.key === 'Tab') {
+        return; // Handled by MentionPicker
+      }
+      if (e.key === 'Escape') {
+        setMentionQuery(null);
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -106,7 +138,25 @@ export default function MessageComposer({
   const handleFiles = async (files: FileList | File[] | null) => {
     if (!files || files.length === 0 || !currentWorkspace || !activeConversation) return;
 
-    const newUploads: UploadingFile[] = Array.from(files).map((f) => {
+    const fileList = Array.from(files);
+    const validFiles: File[] = [];
+
+    for (const f of fileList) {
+      if (f.size > MAX_FILE_SIZE) {
+        setErrorMessage(`File "${f.name}" exceeds the 10MB limit.`);
+        continue;
+      }
+      const ext = f.name.split('.').pop()?.toLowerCase();
+      if (ext && !ALLOWED_EXTENSIONS.includes(ext)) {
+        setErrorMessage(`File extension ".${ext}" is not supported.`);
+        continue;
+      }
+      validFiles.push(f);
+    }
+
+    if (validFiles.length === 0) return;
+
+    const newUploads: UploadingFile[] = validFiles.map((f) => {
       const previewUrl = f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined;
       if (previewUrl) {
         previewUrlsRef.current.add(previewUrl);
@@ -115,16 +165,20 @@ export default function MessageComposer({
         file: f,
         isImage: f.type.startsWith('image/'),
         previewUrl,
-        progress: 10,
+        progress: 15,
       };
     });
 
     setAttachedFiles((prev) => [...prev, ...newUploads]);
 
-    // Upload files sequentially or in parallel
+    // Upload files
     for (let i = 0; i < newUploads.length; i++) {
       const item = newUploads[i];
       try {
+        setAttachedFiles((prev) =>
+          prev.map((f) => (f.file === item.file ? { ...f, progress: 45 } : f))
+        );
+
         const uploaded = await uploadChatAttachment(
           currentWorkspace.id,
           activeConversation.id,
@@ -143,7 +197,7 @@ export default function MessageComposer({
         setAttachedFiles((prev) =>
           prev.map((f) =>
             f.file === item.file
-              ? { ...f, error: message }
+              ? { ...f, error: message, progress: 0 }
               : f
           )
         );
@@ -309,8 +363,16 @@ export default function MessageComposer({
                 {item.error ? (
                   <p className="text-[10px] text-red-600">{item.error}</p>
                 ) : !item.uploadedData ? (
-                  <div className="flex items-center gap-1 text-[10px] text-slate-500">
-                    <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading...
+                  <div className="w-full">
+                    <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                      <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading {item.progress}%
+                    </div>
+                    <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className="h-full rounded-full bg-indigo-600 transition-all duration-300"
+                        style={{ width: `${item.progress}%` }}
+                      />
+                    </div>
                   </div>
                 ) : (
                   <p className="text-[10px] text-slate-400">
@@ -337,6 +399,31 @@ export default function MessageComposer({
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           <span>{errorMessage}</span>
         </div>
+      )}
+
+      {/* Mention Picker Popover */}
+      {mentionQuery !== null && (
+        <MentionPicker
+          query={mentionQuery}
+          members={workspaceMembers}
+          onSelect={(member) => {
+            const displayName = member.display_name || member.email?.split('@')[0] || 'Member';
+            const before = text.slice(0, mentionStartIndex);
+            const after = text.slice(textareaRef.current?.selectionStart || text.length);
+            const newText = `${before}@${displayName} ${after}`;
+            setText(newText);
+            setMentionQuery(null);
+            setTimeout(() => {
+              if (textareaRef.current) {
+                const newCursorPos = before.length + displayName.length + 2;
+                textareaRef.current.selectionStart = newCursorPos;
+                textareaRef.current.selectionEnd = newCursorPos;
+                textareaRef.current.focus();
+              }
+            }, 0);
+          }}
+          onClose={() => setMentionQuery(null)}
+        />
       )}
 
       {/* Main Composer Box */}

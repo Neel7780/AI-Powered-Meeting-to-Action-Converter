@@ -21,6 +21,8 @@ export interface Conversation {
   updated_at: string;
   unread_count?: number;
   other_user?: UserProfile;
+  other_users?: UserProfile[];
+  is_muted?: boolean;
   last_message?: WorkspaceMessage;
 }
 
@@ -62,6 +64,9 @@ export interface WorkspaceMessage {
   sender?: UserProfile;
   attachments?: MessageAttachment[];
   reactions?: MessageReaction[];
+  is_pinned?: boolean;
+  isOptimistic?: boolean;
+  hasFailed?: boolean;
   parent?: {
     id: string;
     content: string;
@@ -84,4 +89,55 @@ export interface LinkPreviewData {
   image?: string;
   site_name?: string;
 }
+
+export interface ChannelDiscoveryItem {
+  id: string;
+  workspace_id: string;
+  name: string;
+  topic?: string | null;
+  description?: string | null;
+  is_private: boolean;
+  created_at: string;
+  created_by?: string | null;
+  member_count: number;
+  is_member: boolean;
+}
+
+export interface ChatMessageSearchResult {
+  id: string;
+  conversation_id: string;
+  conversation_name: string;
+  conversation_type: ConversationType;
+  is_private: boolean;
+  sender_id: string;
+  sender_name: string;
+  sender_avatar?: string | null;
+  content: string;
+  created_at: string;
+}
+
+export interface PinnedMessageItem {
+  id: string;
+  conversation_id: string;
+  message_id: string;
+  pinned_by: string;
+  pinned_by_name?: string | null;
+  pinned_at: string;
+  message_content: string;
+  message_sender_id: string;
+  message_sender_name: string;
+  message_created_at: string;
+  is_sticker?: boolean;
+}
+
+export interface ChatNotificationItem {
+  id: string;
+  conversation_id: string;
+  conversation_name: string;
+  sender_name: string;
+  content: string;
+  is_mention?: boolean;
+  created_at: string;
+}
+
 

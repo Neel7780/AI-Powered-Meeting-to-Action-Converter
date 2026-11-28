@@ -21,6 +21,9 @@ import type {
   ConversationMember,
   UserProfile,
   LinkPreviewData,
+  ChannelDiscoveryItem,
+  ChatMessageSearchResult,
+  PinnedMessageItem,
 } from '../types/workspaceChat';
 
 export { sanitizeAttachmentUrl };
@@ -170,7 +173,7 @@ export async function fetchWorkspaceConversations(
 
   // 2. Fetch all DM members for this workspace to resolve other user's identity
   const dmConvIds = conversations.filter((c) => c.type === 'dm').map((c) => c.id);
-  const dmMembersMap: Record<string, UserProfile> = {};
+  const dmMembersListMap: Record<string, UserProfile[]> = {};
 
   if (dmConvIds.length > 0) {
     const { data: memberData } = await supabase
@@ -191,24 +194,38 @@ export async function fetchWorkspaceConversations(
     ((memberData || []) as unknown as DmMemberQueryRow[]).forEach((row) => {
       if (row.user_id !== currentUserId) {
         const p = row.profiles;
-        dmMembersMap[row.conversation_id] = {
+        if (!dmMembersListMap[row.conversation_id]) {
+          dmMembersListMap[row.conversation_id] = [];
+        }
+        dmMembersListMap[row.conversation_id].push({
           id: row.user_id,
           display_name: p?.display_name || p?.email?.split('@')[0] || 'User',
           email: p?.email || '',
           avatar_url: p?.avatar_url || null,
-        };
+        });
       }
     });
   }
 
-  // 3. Attach other_user info to DMs
+  // 3. Attach other_user / other_users info to DMs
   return conversations.map((conv) => {
     if (conv.type === 'dm') {
-      const otherUser = dmMembersMap[conv.id];
+      const otherUsers = dmMembersListMap[conv.id] || [];
+      const otherUser = otherUsers[0];
+      const isGroup = otherUsers.length > 1;
+      let displayName = conv.topic || conv.name;
+      if (!displayName || displayName.startsWith('gdm:')) {
+        displayName = isGroup
+          ? otherUsers.map((u) => u.display_name).join(', ')
+          : otherUser
+          ? (otherUser.display_name || 'Direct Message')
+          : 'Direct Message';
+      }
       return {
         ...conv,
         other_user: otherUser,
-        name: otherUser ? otherUser.display_name : 'Direct Message',
+        other_users: otherUsers,
+        name: displayName,
       };
     }
     return conv;
@@ -678,13 +695,104 @@ export async function joinChannel(conversationId: string, userId: string): Promi
   if (error && error.code !== '23505') throw error;
 }
 
+export async function joinPublicChannel(channelId: string): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const res = await fetch(getApiUrl(`/api/chat/channels/${channelId}/join`), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to join channel`);
+  }
+}
+
+export async function discoverPublicChannels(workspaceId: string, query?: string): Promise<ChannelDiscoveryItem[]> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const url = getApiUrl(
+    `/api/chat/workspaces/${workspaceId}/channels/discover${query ? `?q=${encodeURIComponent(query)}` : ''}`
+  );
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to discover channels`);
+  }
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+export async function updateChannelDetails(
+  channelId: string,
+  params: { name?: string; topic?: string; description?: string; isPrivate?: boolean }
+): Promise<Conversation> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const res = await fetch(getApiUrl(`/api/chat/channels/${channelId}`), {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      name: params.name,
+      topic: params.topic,
+      description: params.description,
+      is_private: params.isPrivate,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to update channel`);
+  }
+  return data as Conversation;
+}
+
+export async function addChannelMember(channelId: string, userId: string): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const res = await fetch(getApiUrl(`/api/chat/channels/${channelId}/members`), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to add member`);
+  }
+}
+
+export async function removeChannelMember(channelId: string, userId: string): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  const res = await fetch(getApiUrl(`/api/chat/channels/${channelId}/members/${userId}`), {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Error ${res.status}: Failed to remove member`);
+  }
+}
+
 export async function leaveChannel(conversationId: string, userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('conversation_members')
-    .delete()
-    .eq('conversation_id', conversationId)
-    .eq('user_id', userId);
-  if (error) throw error;
+  return removeChannelMember(conversationId, userId);
 }
 
 export async function fetchConversationMembers(conversationId: string): Promise<ConversationMember[]> {
@@ -797,3 +905,99 @@ export async function getSignedAttachmentUrl(storagePath: string): Promise<strin
 export async function fetchLinkPreview(url: string, token?: string): Promise<LinkPreviewData | null> {
   return linkPreviewLoader.load(url, token);
 }
+
+export async function searchWorkspaceMessages(
+  workspaceId: string,
+  query: string,
+  conversationId?: string,
+  token?: string
+): Promise<ChatMessageSearchResult[]> {
+  const authToken = token || (await supabase.auth.getSession()).data.session?.access_token;
+  const params = new URLSearchParams({ q: query.trim() });
+  if (conversationId) {
+    params.append('conversation_id', conversationId);
+  }
+  const endpoint = getApiUrl(`/api/chat/workspaces/${workspaceId}/search?${params.toString()}`);
+  const res = await fetch(endpoint, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Search failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export async function createGroupConversation(params: {
+  workspaceId: string;
+  participantIds: string[];
+  name?: string;
+  token?: string;
+}): Promise<Conversation> {
+  const authToken = params.token || (await supabase.auth.getSession()).data.session?.access_token;
+  const endpoint = getApiUrl(`/api/chat/workspaces/${params.workspaceId}/group-conversations`);
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify({
+      participant_ids: params.participantIds,
+      name: params.name || null,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to create group conversation' }));
+    throw new Error(err.detail || 'Failed to create group conversation');
+  }
+  return res.json();
+}
+
+export async function pinMessage(messageId: string, token?: string): Promise<void> {
+  const authToken = token || (await supabase.auth.getSession()).data.session?.access_token;
+  const endpoint = getApiUrl(`/api/chat/messages/${encodeURIComponent(messageId)}/pin`);
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to pin message');
+  }
+}
+
+export async function unpinMessage(messageId: string, token?: string): Promise<void> {
+  const authToken = token || (await supabase.auth.getSession()).data.session?.access_token;
+  const endpoint = getApiUrl(`/api/chat/messages/${encodeURIComponent(messageId)}/pin`);
+  const res = await fetch(endpoint, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to unpin message');
+  }
+}
+
+export async function fetchPinnedMessages(conversationId: string, token?: string): Promise<PinnedMessageItem[]> {
+  const authToken = token || (await supabase.auth.getSession()).data.session?.access_token;
+  const endpoint = getApiUrl(`/api/chat/conversations/${encodeURIComponent(conversationId)}/pins`);
+  const res = await fetch(endpoint, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch pinned messages');
+  }
+  return res.json();
+}
+

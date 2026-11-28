@@ -15,12 +15,14 @@ interface ConversationHeaderProps {
   onToggleSidebar?: () => void;
   onToggleDetails?: () => void;
   isDetailsOpen?: boolean;
+  onOpenSearch?: () => void;
 }
 
 export default function ConversationHeader({
   onToggleSidebar,
   onToggleDetails,
   isDetailsOpen,
+  onOpenSearch,
 }: ConversationHeaderProps) {
   const { activeConversation, onlineUsers, searchQuery, setSearchQuery } = useChat();
   const [showSearch, setShowSearch] = useState(false);
@@ -77,9 +79,14 @@ export default function ConversationHeader({
 
           <div className="truncate">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-slate-900 truncate">
+              <button
+                type="button"
+                onClick={onToggleDetails}
+                className="text-left font-bold text-sm text-slate-900 truncate hover:text-indigo-600 transition"
+                title="View details"
+              >
                 {activeConversation.name}
-              </h2>
+              </button>
 
               {!isChannel && (
                 <span className="flex items-center gap-1 text-[11px] text-slate-400">
@@ -103,8 +110,21 @@ export default function ConversationHeader({
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-1">
-        {showSearch ? (
+      <div className="flex items-center gap-1.5">
+        {onOpenSearch ? (
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 py-1 text-xs text-slate-500 hover:border-indigo-300 hover:bg-white hover:text-slate-800 transition shadow-2xs"
+            title="Search messages (Ctrl+K)"
+          >
+            <Search className="h-3.5 w-3.5 text-slate-400" />
+            <span className="hidden sm:inline">Search...</span>
+            <kbd className="hidden md:inline-block rounded bg-slate-200/60 px-1 py-0.2 text-[9px] font-mono text-slate-500">
+              Ctrl+K
+            </kbd>
+          </button>
+        ) : showSearch ? (
           <div className="flex items-center rounded-xl border border-slate-300 bg-slate-50 px-2.5 py-1">
             <Search className="h-3.5 w-3.5 text-slate-400" />
             <input
