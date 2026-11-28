@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { Notice } from "../components/ui/notice";
 import { DotMatrixBackground } from "../components/ui/dot-matrix-background";
 import Brand from "../components/layout/Brand";
+import { signupConfirmationPath } from "../lib/authRedirects";
 import logoImg from "../assets/logo.png";
 
 export default function Signup() {
@@ -18,7 +19,7 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [confirmationEmail, setConfirmationEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -31,7 +32,6 @@ export default function Signup() {
     event.preventDefault();
 
     setError("");
-    setSuccess("");
 
     if (password.length < 6) {
       setError("Password must contain at least 6 characters.");
@@ -41,12 +41,11 @@ export default function Signup() {
     setLoading(true);
 
     try {
-      await signUp(email, password, displayName);
-      setSuccess("Account created successfully. Check your email if verification is required.");
-
-      setTimeout(() => {
-        navigate("/login");
-      }, 1500);
+      const session = await signUp(email, password, displayName);
+      if (!session) {
+        setConfirmationEmail(email.trim());
+        setPassword("");
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to create account";
       setError(message);
@@ -155,101 +154,111 @@ export default function Signup() {
             Set up your workspace credentials to get started.
           </p>
 
-          <form onSubmit={handleSubmit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
-            {/* Full Name */}
-            <div style={{ textAlign: "left", width: "100%" }}>
-              <label htmlFor="signup-name" style={labelStyle}>Full Name</label>
-              <input
-                id="signup-name"
-                className="auth-input"
-                style={inputStyle}
-                type="text"
-                placeholder="Alex Morgan"
-                required
-                autoComplete="name"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
+          {confirmationEmail ? (
+            <div className="space-y-3">
+              <Notice tone="success">
+                Check {confirmationEmail} for a link to confirm your email address.
+              </Notice>
+              <Link className="text-sm text-white underline" to={signupConfirmationPath} state={{ email: confirmationEmail }}>
+                Request a new confirmation email
+              </Link>
             </div>
-
-            {/* Work Email */}
-            <div style={{ textAlign: "left", width: "100%" }}>
-              <label htmlFor="signup-email" style={labelStyle}>Work Email</label>
-              <input
-                id="signup-email"
-                className="auth-input"
-                style={inputStyle}
-                type="email"
-                placeholder="name@work-email.com"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-
-            {/* Password */}
-            <div style={{ textAlign: "left", width: "100%" }}>
-              <label htmlFor="signup-password" style={labelStyle}>Password</label>
-              <div style={{ position: "relative", width: "100%" }}>
+          ) : (
+            <form onSubmit={handleSubmit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "0.65rem" }}>
+              {/* Full Name */}
+              <div style={{ textAlign: "left", width: "100%" }}>
+                <label htmlFor="signup-name" style={labelStyle}>Full Name</label>
                 <input
-                  id="signup-password"
+                  id="signup-name"
                   className="auth-input"
-                  style={{ ...inputStyle, paddingRight: "2.5rem" }}
-                  type={showPassword ? "text" : "password"}
-                  placeholder="At least 8 characters"
+                  style={inputStyle}
+                  type="text"
+                  placeholder="Alex Morgan"
                   required
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: "absolute",
-                    right: "0.75rem",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    color: "#888",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                  tabIndex={-1}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
               </div>
-            </div>
 
-            {error && <Notice tone="error">{error}</Notice>}
-            {success && <Notice tone="success">{success}</Notice>}
+              {/* Work Email */}
+              <div style={{ textAlign: "left", width: "100%" }}>
+                <label htmlFor="signup-email" style={labelStyle}>Work Email</label>
+                <input
+                  id="signup-email"
+                  className="auth-input"
+                  style={inputStyle}
+                  type="email"
+                  placeholder="name@work-email.com"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                width: "100%",
-                padding: "0.65rem",
-                borderRadius: 6,
-                border: "none",
-                background: "#ededed",
-                color: "#000",
-                fontWeight: 500,
-                fontSize: "0.875rem",
-                cursor: loading ? "not-allowed" : "pointer",
-                marginTop: "0.25rem",
-                transition: "background 0.2s",
-              }}
-            >
-              {loading ? "Creating account…" : "Create Account"}
-            </button>
-          </form>
+              {/* Password */}
+              <div style={{ textAlign: "left", width: "100%" }}>
+                <label htmlFor="signup-password" style={labelStyle}>Password</label>
+                <div style={{ position: "relative", width: "100%" }}>
+                  <input
+                    id="signup-password"
+                    className="auth-input"
+                    style={{ ...inputStyle, paddingRight: "2.5rem" }}
+                    type={showPassword ? "text" : "password"}
+                    placeholder="At least 8 characters"
+                    required
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: "absolute",
+                      right: "0.75rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      color: "#888",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                    tabIndex={-1}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              {error && <Notice tone="error">{error}</Notice>}
+
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: "100%",
+                  padding: "0.65rem",
+                  borderRadius: 6,
+                  border: "none",
+                  background: "#ededed",
+                  color: "#000",
+                  fontWeight: 500,
+                  fontSize: "0.875rem",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  marginTop: "0.25rem",
+                  transition: "background 0.2s",
+                }}
+              >
+                {loading ? "Creating account…" : "Create Account"}
+              </button>
+            </form>
+          )}
 
           <div style={{ marginTop: "1.25rem", fontSize: "0.875rem", color: "#888" }}>
             Already have an account?{" "}

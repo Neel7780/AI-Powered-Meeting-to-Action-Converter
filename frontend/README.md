@@ -34,7 +34,7 @@ Fill in your `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_BASE_U
 ```bash
 npm run dev
 ```
-Open `http://localhost:5173` in your browser.
+Open `http://localhost:3000` in your browser. For email confirmation, follow the [Supabase Auth configuration](../backend/README.md#3-supabase-auth-configuration-required).
 
 ---
 

@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
+import { signupConfirmationUrl } from "../lib/authRedirects";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 interface AuthContextType {
@@ -17,7 +18,7 @@ interface AuthContextType {
     email: string,
     password: string,
     displayName: string
-  ) => Promise<void>;
+  ) => Promise<Session | null>;
   signOut: () => Promise<void>;
 }
 
@@ -122,10 +123,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     password: string,
     displayName: string
   ) => {
-    const { error } = await supabase.auth.signUp({
-      email,
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
       password,
       options: {
+        emailRedirectTo: signupConfirmationUrl(),
         data: {
           full_name: displayName,
         },
@@ -135,6 +137,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (error) {
       throw error;
     }
+
+    return data.session;
   };
 
   const signOut = async () => {
