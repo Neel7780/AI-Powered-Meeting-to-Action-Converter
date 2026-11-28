@@ -5,6 +5,8 @@ import ActionPulseLanding from "./components/landing/ActionPulseLanding";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
+import ConfirmSignup from "./pages/ConfirmSignup";
+import { signupConfirmationPath } from "./lib/authRedirects";
 import Dashboard from "./pages/Dashboard";
 import AcceptInvite from "./pages/AcceptInvite";
 import CalendarCallback from "./pages/CalendarCallback";
@@ -46,6 +48,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/reset-password" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path={signupConfirmationPath} element={<ConfirmSignup />} />
         <Route path="/create-meeting" element={<Navigate to="/meetings?create=1" replace />} />
         <Route path="/meeting-review" element={<Navigate to="/meetings" replace />} />
         <Route path="/invite/:token" element={<ProtectedRoute><AcceptInvite /></ProtectedRoute>} />

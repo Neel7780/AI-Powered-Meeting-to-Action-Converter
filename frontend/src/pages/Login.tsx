@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { FormEvent, CSSProperties } from "react";
+import { isAuthApiError } from "@supabase/supabase-js";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -7,6 +8,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { signupConfirmationPath } from "../lib/authRedirects";
 import { supabase } from "../lib/supabase";
 import { requestApi } from "../lib/api";
 import { Notice } from "../components/ui/notice";
@@ -38,6 +40,7 @@ export default function Login() {
 
   // Status & feedback
   const [error, setError] = useState("");
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -122,6 +125,7 @@ export default function Login() {
   const handleLoginSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
+    setUnconfirmedEmail("");
     setSuccessMessage("");
     setLoading(true);
 
@@ -131,6 +135,9 @@ export default function Login() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to sign in";
       setError(message);
+      if (isAuthApiError(err) && err.code === "email_not_confirmed") {
+        setUnconfirmedEmail(email.trim());
+      }
     } finally {
       setLoading(false);
     }
@@ -423,6 +430,11 @@ export default function Login() {
                 </div>
 
                 {error && <Notice tone="error">{error}</Notice>}
+                {unconfirmedEmail && (
+                  <Link className="text-sm text-white underline" to={signupConfirmationPath} state={{ email: unconfirmedEmail }}>
+                    Request a new confirmation email
+                  </Link>
+                )}
                 {successMessage && <Notice tone="success">{successMessage}</Notice>}
 
                 {/* Sign In Button */}

@@ -2,14 +2,14 @@ import type { ReactNode } from "react";
 import Brand from "../layout/Brand";
 
 interface AuthShellProps {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
 }
 
-/** Centered card on the landing hero's grid backdrop; used by sign-in, sign-up and invite pages. */
+/** Centered card on the landing hero's grid backdrop. */
 export default function AuthShell({ eyebrow, title, subtitle, children, footer }: AuthShellProps) {
   return (
     <div className="relative isolate flex min-h-screen flex-col bg-black px-4 sm:px-6 lg:px-8">
@@ -22,7 +22,7 @@ export default function AuthShell({ eyebrow, title, subtitle, children, footer }
       <main className="flex flex-1 items-center justify-center py-12">
         <div className="w-full max-w-sm">
           <div className="mb-8 text-center">
-            <p className="eyebrow">{eyebrow}</p>
+            {eyebrow && <p className="eyebrow">{eyebrow}</p>}
             <h1 className="mt-3 text-3xl font-medium tracking-tight text-white">{title}</h1>
             {subtitle && <p className="mt-2 text-sm text-neutral-400">{subtitle}</p>}
           </div>

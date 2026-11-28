@@ -108,7 +108,10 @@ When setting up a new Supabase project for this backend, you must manually confi
 - **Custom SMTP MUST BE CONFIGURED** using the credentials from BE-2 (Supabase built-in is heavily rate-limited).
 - JWT Expiry: **900s (15 min)**.
 - Refresh-Token Rotation: **ON**.
-- Site URL & Redirect URLs: `http://localhost:5173` and the deployed Vercel URL.
+- Set **Authentication → URL Configuration → Site URL** to `https://ai-powered-meeting-to-action-conver.vercel.app`.
+- Add `https://ai-powered-meeting-to-action-conver.vercel.app/auth/confirm` to **Redirect URLs** for signup and resend. For local signup, also add `http://localhost:3000/auth/confirm` (Vite's default) and `http://localhost:5173/auth/confirm` if you use port 5173. Keep the existing redirect entries for other flows, including `/reset-password` on each origin that uses Supabase password reset emails.
+- In **Authentication → Email Templates → Confirm sign up**, use `{{ .ConfirmationURL }}` as the confirmation link. Supabase verifies the link before sending the browser to `/auth/confirm`.
+- If an older email points at the wrong host, request a fresh confirmation email from the signup screen or the sign-in screen after an unconfirmed-email error.
 
 ## GitHub App integration
 
