@@ -14,8 +14,8 @@ void chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
 
 async function getSettings() {
   const { settings } = await chrome.storage.local.get("settings");
-  return settings?.appUrlPinned === true ? { ...DEFAULT_CONNECTION, ...EMPTY_AUTH, ...settings }
-    : { ...DEFAULT_CONNECTION, ...EMPTY_AUTH };
+  const connection = settings?.appUrlPinned === true ? parseConnection(settings) : null;
+  return connection ? { ...EMPTY_AUTH, ...settings, ...connection } : { ...DEFAULT_CONNECTION, ...EMPTY_AUTH };
 }
 
 function updateSettings(update) {
@@ -78,6 +78,12 @@ function localOrHostedOrigin(value, hostingDomain) {
     if (url.protocol === "https:" && url.hostname.endsWith(hostingDomain)) return url.origin;
   } catch { /* Invalid URL */ }
   return null;
+}
+
+function parseConnection(settings) {
+  const appUrl = localOrHostedOrigin(settings.appUrl, ".vercel.app");
+  const apiUrl = localOrHostedOrigin(settings.apiUrl, ".onrender.com");
+  return appUrl && apiUrl ? { appUrl, apiUrl } : null;
 }
 
 async function api(path, settings, body) {
@@ -395,6 +401,12 @@ function isPopup(sender) {
   return sender.url === chrome.runtime.getURL("popup/popup.html");
 }
 
+async function openApp(openerTabId) {
+  const { appUrl } = await getSettings();
+  await chrome.tabs.create({ url: `${appUrl}/dashboard`, ...(openerTabId != null && { openerTabId }) });
+  return {};
+}
+
 async function handle(message, sender) {
   const data = message.data || {};
   if (message.type === "SYNC_AUTH_CONTEXT") {
@@ -422,7 +434,7 @@ async function handle(message, sender) {
           }
           return { cueCount: item.cues.length };
         });
-      case "OPEN_APP": return chrome.tabs.create({ url: (await getSettings()).appUrl + "/dashboard", openerTabId: tabId }).then(() => ({}));
+      case "OPEN_APP": return openApp(tabId);
     }
   }
   const platform = ActionPulseMeeting.platformAt(sender.url);
@@ -435,13 +447,16 @@ async function handle(message, sender) {
   }
   if (!isPopup(sender)) return {};
   switch (message.type) {
+    case "GET_CONNECTION": {
+      const { appUrl, apiUrl } = await getSettings();
+      return { appUrl, apiUrl };
+    }
     case "GET_STATE": {
       const settings = await getAuth();
       const captures = (await allCaptures()).filter((item) => !item.meetingId || sameAccount(item, settings))
         .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      return { connection: { appUrl: settings.appUrl, apiUrl: settings.apiUrl }, defaultConnection: DEFAULT_CONNECTION,
-        account: accountIsCurrent(settings) ? settings.userEmail : "", inMeetingTab: Boolean(ActionPulseMeeting.identify(tab?.url)),
+      return { account: accountIsCurrent(settings) ? settings.userEmail : "", inMeetingTab: Boolean(ActionPulseMeeting.identify(tab?.url)),
         captures: captures.map((item) => ({
           ...view(item, item.appUrl),
           preview: item.cues.slice(-5).map(({ speaker, text }) => ({ speaker, text })),
@@ -455,16 +470,16 @@ async function handle(message, sender) {
         throw new Error("Refresh the meeting tab to enable ActionPulse.");
       });
     }
+    case "USE_DEPLOYED_DEFAULTS":
     case "UPDATE_SETTINGS": {
-      const appUrl = localOrHostedOrigin(data.appUrl, ".vercel.app");
-      const apiUrl = localOrHostedOrigin(data.apiUrl, ".onrender.com");
-      if (!appUrl || !apiUrl) throw new Error("Use an HTTPS Vercel or Render address, or an HTTP localhost address.");
-      await updateSettings((current) => ({ ...current, ...(appUrl !== current.appUrl && EMPTY_AUTH), appUrl, apiUrl }));
-      await getAuth(true);
-      return {};
+      const connection = message.type === "USE_DEPLOYED_DEFAULTS" ? DEFAULT_CONNECTION : parseConnection(data);
+      if (!connection) throw new Error("Use an HTTPS Vercel or Render address, or an HTTP localhost address.");
+      await updateSettings((current) => ({
+        ...current, ...(connection.appUrl !== current.appUrl && EMPTY_AUTH), ...connection,
+      }));
+      return connection;
     }
-    case "OPEN_APP":
-      return chrome.tabs.create({ url: (await getSettings()).appUrl + "/dashboard" }).then(() => ({}));
+    case "OPEN_APP": return openApp();
     case "OPEN_CAPTURE":
       await openCapture(data.id);
       return {};

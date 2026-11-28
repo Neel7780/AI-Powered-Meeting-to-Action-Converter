@@ -2,11 +2,11 @@ const account = document.getElementById("account");
 const captures = document.getElementById("captures");
 const showOffer = document.getElementById("showOffer");
 const connection = document.getElementById("connection");
-const settingsPanel = document.getElementById("settings");
+const defaultsButton = document.getElementById("defaults");
+const saveButton = connection.querySelector('button[type="submit"]');
 const settingsStatus = document.getElementById("settingsStatus");
 const errorMessage = document.getElementById("error");
-let defaults;
-let currentConnection;
+let connectionEdited = false;
 let lastCaptureState;
 
 async function send(type, data) {
@@ -91,12 +91,6 @@ async function refresh() {
     account.textContent = state.account || "Sign in to ActionPulse in this browser";
     account.parentElement.dataset.connected = Boolean(state.account);
     showOffer.hidden = !state.inMeetingTab;
-    if (!currentConnection || !settingsPanel.open) {
-      connection.elements.appUrl.value = state.connection.appUrl;
-      connection.elements.apiUrl.value = state.connection.apiUrl;
-    }
-    currentConnection = state.connection;
-    defaults = state.defaultConnection;
     const signature = JSON.stringify([state.inMeetingTab, state.captures]);
     if (signature !== lastCaptureState) {
       lastCaptureState = signature;
@@ -110,27 +104,45 @@ async function refresh() {
   }
 }
 
-async function save(settings) {
+function showConnection(settings) {
+  connection.elements.appUrl.value = settings.appUrl;
+  connection.elements.apiUrl.value = settings.apiUrl;
+}
+
+async function loadConnection() {
+  const settings = await send("GET_CONNECTION");
+  if (!connectionEdited) showConnection(settings);
+}
+
+async function saveConnection(type, settings) {
+  if (saveButton.disabled) return;
+  connectionEdited = true;
+  defaultsButton.disabled = true;
+  saveButton.disabled = true;
   settingsStatus.textContent = "Saving…";
   try {
-    await send("UPDATE_SETTINGS", settings);
-    currentConnection = null;
-    await refresh();
-    settingsStatus.textContent = "Saved";
+    showConnection(await send(type, settings));
+    settingsStatus.textContent = type === "USE_DEPLOYED_DEFAULTS" ? "Deployed defaults saved" : "Saved";
+    void refresh().catch(() => {});
   } catch (error) {
     settingsStatus.textContent = error.message;
+  } finally {
+    defaultsButton.disabled = false;
+    saveButton.disabled = false;
   }
 }
 
 document.getElementById("openApp").addEventListener("click", () => handle(send("OPEN_APP")));
 showOffer.addEventListener("click", () => handle(send("SHOW_MEETING_PROMPT").then(() => window.close())));
-document.getElementById("defaults").addEventListener("click", () => {
-  if (defaults) void save(defaults);
+defaultsButton.addEventListener("click", () => { void saveConnection("USE_DEPLOYED_DEFAULTS"); });
+connection.addEventListener("input", () => {
+  connectionEdited = true;
+  settingsStatus.textContent = "";
 });
 connection.addEventListener("submit", (event) => {
   event.preventDefault();
-  void save(Object.fromEntries(new FormData(connection)));
+  void saveConnection("UPDATE_SETTINGS", Object.fromEntries(new FormData(connection)));
 });
 
-handle(refresh());
+handle(Promise.all([loadConnection(), refresh()]));
 setInterval(() => { void refresh().catch(() => {}); }, 2000);
